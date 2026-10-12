@@ -5,13 +5,16 @@ import { THEMES } from '../../domain/categories';
 import { navigate, useApp } from '../store';
 import { SAMPLE_PGN } from '../../fixtures/sampleGame';
 import { parsePgn } from '../../chess/pgn';
-import { deleteGame, exportBackup, importBackup, importGame } from '../actions';
+import { deleteGame, downloadFeedback, exportBackup, exportFeedback, importBackup, importGame } from '../actions';
+import { feedbackCount } from '../../coach/feedback';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
 export function Dashboard() {
   const { games, settings, llm, attempts, drills, refresh, updateSettings } = useApp();
   const [showSettings, setShowSettings] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
+  const flagged = feedbackCount(games);
   const analyzed = games.filter((g) => g.status === 'analyzed');
   const profile = useMemo(
     () =>
@@ -179,6 +182,24 @@ export function Dashboard() {
           })}
         </ul>
       </section>
+
+      {flagged > 0 && (
+        <section className="card feedback-card">
+          <h3>Coach feedback</h3>
+          <p className="muted small">
+            You've flagged {flagged} thing{flagged === 1 ? '' : 's'} the coach got wrong. Copy them (with the game PGNs) and paste them to Claude to improve the coach.
+          </p>
+          <div className="actions left inline">
+            <button className="btn primary small" onClick={async () => setFeedbackMsg((await exportFeedback()) === 'copied' ? 'Copied to the clipboard.' : 'Downloaded as a file.')}>
+              Copy feedback
+            </button>
+            <button className="btn ghost small" onClick={() => void downloadFeedback()}>
+              Download (.md)
+            </button>
+            {feedbackMsg && <span className="muted small">{feedbackMsg}</span>}
+          </div>
+        </section>
+      )}
 
       <section className="card settings">
         <button className="link" onClick={() => setShowSettings(!showSettings)}>

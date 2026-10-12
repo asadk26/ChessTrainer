@@ -8,6 +8,8 @@ import { CoachText, HoverProvider } from '../components/CoachText';
 import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/PositionDiagram';
 import { REPORT_VERSION } from '../../coach/report';
 import { repo } from '../../storage/repository';
+import { FlagButton } from '../components/FlagButton';
+import type { FeedbackWhere } from '../../domain/types';
 
 function useAnalysis(game: StoredGame | undefined) {
   const { refresh, settings, llm } = useApp();
@@ -61,10 +63,12 @@ function Items({
   kind,
   size = 200,
   shown,
+  where,
 }: {
   items: ReportItem[];
   game: StoredGame;
   kind: 'mistake' | 'good';
+  where: FeedbackWhere;
   size?: number;
   /** Plies already drawn earlier in the summary — each position is shown once. */
   shown?: ReadonlySet<number>;
@@ -87,6 +91,7 @@ function Items({
                 ))}
               </div>
             )}
+            <FlagButton game={game} where={where} quote={it.text} ply={itemPlies(it)[0]} />
           </li>
         );
       })}
@@ -108,32 +113,36 @@ function Summary({ game }: { game: StoredGame }) {
     <div className="summary">
       <section className="card headline-card">
         <p className="headline">{r.headline}</p>
+        <FlagButton game={game} where="headline" quote={r.headline} />
         {r.story && <p className="story muted">{r.story}</p>}
+        {r.story && <FlagButton game={game} where="story" quote={r.story} />}
       </section>
       <section className="card">
         <h3 className="good-h">What you did well</h3>
-        {r.didWell.length ? <Items items={r.didWell} game={game} kind="good" /> : <p className="muted">Nothing stood out this time.</p>}
+        {r.didWell.length ? <Items items={r.didWell} game={game} kind="good" where="did_well" /> : <p className="muted">Nothing stood out this time.</p>}
       </section>
       <section className="card">
         <h3 className="bad-h">What hurt you</h3>
         <p className="muted small diagram-key">
           <span className="key orange" /> your move <span className="key green" /> better move · tap a board to replay it
         </p>
-        {r.hurt.length ? <Items items={hurtItems} game={game} kind="mistake" /> : <p className="muted">No significant problems. Nice.</p>}
+        {r.hurt.length ? <Items items={hurtItems} game={game} kind="mistake" where="hurt" /> : <p className="muted">No significant problems. Nice.</p>}
       </section>
       <section className="card">
         <h3>Recurring pattern</h3>
         <p>{r.recurring}</p>
+        <FlagButton game={game} where="recurring" quote={r.recurring} />
       </section>
       <section className="card focus-card">
         <span className="eyebrow">Focus for next game</span>
         <h2>{r.focus.title}</h2>
         <p>{r.focus.detail}</p>
+        <FlagButton game={game} where="focus" quote={`${r.focus.title} ${r.focus.detail}`} />
       </section>
       {r.minorNotes.length > 0 && (
         <section className="card subtle-card">
           <h3>Smaller notes</h3>
-          <Items items={r.minorNotes} game={game} kind="mistake" size={160} shown={hurtShown} />
+          <Items items={r.minorNotes} game={game} kind="mistake" size={160} shown={hurtShown} where="note" />
         </section>
       )}
       <div className="actions">

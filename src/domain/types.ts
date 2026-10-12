@@ -390,6 +390,23 @@ export interface StoredGame {
   report?: GameReport;
   drillIds: string[];
   completedMomentIds: string[];
+  /** "This seems wrong" notes the player left on the coaching. */
+  feedback?: CoachFeedback[];
+}
+
+export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
+
+/** A player's flag on one piece of coaching, kept with the game so it survives re-coaching and export. */
+export interface CoachFeedback {
+  id: string;
+  where: FeedbackWhere;
+  /** The coaching text exactly as it was shown. */
+  quote: string;
+  /** The player's own words (optional). */
+  note: string;
+  ply?: number;
+  createdAt: number;
+  reportVersion?: number;
 }
 
 // --------------------------------------------------------------- profile ---

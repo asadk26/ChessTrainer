@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { Arrow, Drill } from '../../domain/types';
+import type { Arrow, Drill, StoredGame } from '../../domain/types';
+import { FlagButton } from '../components/FlagButton';
 import { Board } from '../components/Board';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { navigate, useApp } from '../store';
@@ -15,7 +16,7 @@ const TYPE_LABEL: Record<Drill['type'], string> = {
   choose_plan: 'Choose the plan',
 };
 
-function DrillRunner({ drill, onNext, hasNext }: { drill: Drill; onNext: () => void; hasNext: boolean }) {
+function DrillRunner({ drill, onNext, hasNext, game }: { drill: Drill; onNext: () => void; hasNext: boolean; game?: StoredGame }) {
   const { refresh } = useApp();
   const [answer, setAnswer] = useState<{ correct: boolean; uci?: string; san?: string; fen?: string; option?: number; checking?: boolean } | null>(null);
 
@@ -103,6 +104,7 @@ function DrillRunner({ drill, onNext, hasNext }: { drill: Drill; onNext: () => v
             />
           </div>
         )}
+        {done && game && <FlagButton game={game} where="drill" ply={drill.ply} quote={`${drill.prompt} | ${drill.explanation}`} />}
         <div className="actions">
           {done && !answer.correct && isMoveDrill && (
             <button className="btn ghost" onClick={() => setAnswer(null)}>
@@ -165,6 +167,7 @@ export function DrillList({ gameId }: { gameId?: string }) {
       <DrillRunner
         key={drill.id}
         drill={drill}
+        game={game}
         hasNext={idx < list.length - 1}
         onNext={() => (idx < list.length - 1 ? setIdx(idx + 1) : setFinished(true))}
       />

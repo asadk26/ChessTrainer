@@ -3,6 +3,7 @@
 // Suggested table mapping: games, drills, drill_attempts, player_settings
 // (findings/moments/report can live as JSONB columns on games).
 import type { Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
+import { mergeFeedback } from '../coach/feedback';
 
 export interface CoachRepository {
   listGames(): Promise<StoredGame[]>;
@@ -148,9 +149,16 @@ export class LocalStorageRepository implements CoachRepository {
         await this.saveGame(g);
         summary.gamesAdded++;
       } else if (freshness(g) > freshness(existing)) {
-        await this.saveGame({ ...g, completedMomentIds: [...new Set([...existing.completedMomentIds, ...g.completedMomentIds])] });
+        await this.saveGame({
+          ...g,
+          completedMomentIds: [...new Set([...existing.completedMomentIds, ...g.completedMomentIds])],
+          feedback: mergeFeedback(existing.feedback, g.feedback),
+        });
         summary.gamesUpdated++;
       } else {
+        // Keep this device's analysis, but never drop feedback notes from the other device.
+        const feedback = mergeFeedback(existing.feedback, g.feedback);
+        if ((feedback?.length ?? 0) > (existing.feedback?.length ?? 0)) await this.saveGame({ ...existing, feedback });
         summary.gamesKept++;
       }
     }

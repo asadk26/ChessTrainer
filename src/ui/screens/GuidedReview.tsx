@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Arrow, Finding, StoredGame, TeachingMoment } from '../../domain/types';
 import { Board, type BoardProps } from '../components/Board';
+import { FlagButton } from '../components/FlagButton';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
@@ -388,6 +389,20 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
               )}
             </dl>
           )}
+          <FlagButton
+            game={game}
+            where="moment"
+            ply={m.ply}
+            quote={[
+              t.title,
+              x?.intent && `What you were going for: ${m.playedSan} ${x.intent}.`,
+              x?.problem && `What went wrong: ${x.problem}.`,
+              t.why && `Why ${x?.betterSan ?? m.bestSan} is better: ${t.why}`,
+              `Lesson: ${t.lesson}`,
+            ]
+              .filter(Boolean)
+              .join(' | ')}
+          />
           <div className="actions">{btn('Continue the game →', next)}</div>
         </>
       );

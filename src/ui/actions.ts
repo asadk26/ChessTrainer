@@ -1,5 +1,7 @@
 // App-level operations that combine storage, engine and coaching.
-import type { Color, ParsedGame, StoredGame } from '../domain/types';
+import type { CoachFeedback, Color, ParsedGame, StoredGame } from '../domain/types';
+import { feedbackReport } from '../coach/feedback';
+import { REPORT_VERSION } from '../coach/report';
 import { repo, type ImportSummary } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames } from '../analysis/pipeline';
@@ -150,4 +152,40 @@ export async function exportBackup() {
 export async function deleteGame(id: string) {
   await repo.deleteGame(id);
   await syncFocus();
+}
+
+/** Save a "this seems wrong" note on a game. */
+export async function addFeedback(gameId: string, f: Omit<CoachFeedback, 'id' | 'createdAt' | 'reportVersion'>): Promise<void> {
+  const game = await repo.getGame(gameId);
+  if (!game) return;
+  const note: CoachFeedback = { ...f, id: newId(), createdAt: Date.now(), reportVersion: game.report?.version };
+  await repo.saveGame({ ...game, feedback: [...(game.feedback ?? []), note] });
+}
+
+export async function removeFeedback(gameId: string, id: string): Promise<void> {
+  const game = await repo.getGame(gameId);
+  if (!game?.feedback) return;
+  const feedback = game.feedback.filter((f) => f.id !== id);
+  await repo.saveGame({ ...game, feedback: feedback.length ? feedback : undefined });
+}
+
+/** All feedback as Markdown: copied to the clipboard when possible, otherwise downloaded. */
+export async function exportFeedback(): Promise<'copied' | 'downloaded'> {
+  const text = feedbackReport(await repo.listGames(), REPORT_VERSION);
+  try {
+    await navigator.clipboard.writeText(text);
+    return 'copied';
+  } catch {
+    downloadFeedback(text);
+    return 'downloaded';
+  }
+}
+
+export async function downloadFeedback(text?: string) {
+  const body = text ?? feedbackReport(await repo.listGames(), REPORT_VERSION);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([body], { type: 'text/markdown' }));
+  a.download = `chess-coach-feedback-${new Date().toISOString().slice(0, 10)}.md`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

@@ -381,3 +381,14 @@ p { margin: 0 0 0.75rem; }
 .three-part dt:first-child { margin-top: 0; }
 .three-part dd { margin: 0; }
 .three-part dd p { margin: 0; }
+
+/* "Seems wrong?" feedback flags */
+.flag { display: inline-block; font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; }
+.flag-btn { background: none; border: 0; padding: 0.15rem 0; cursor: pointer; font-family: inherit; opacity: 0.75; }
+.flag-btn:hover, .flag-btn:focus-visible { opacity: 1; color: var(--accent); }
+.flag.flagged { color: var(--warn, #b7791f); }
+.flag.flagged .link { font-size: 0.78rem; }
+.flag-form { margin-top: 0.4rem; display: grid; gap: 0.4rem; }
+.flag-form textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.9rem; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); resize: vertical; }
+.btn.small { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
+.feedback-card p { margin: 0.25rem 0 0.5rem; }
