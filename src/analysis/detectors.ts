@@ -900,16 +900,23 @@ function detectChasedPiece(ctx: DetectorContext): Finding[] {
     if (drop < 6 && !towardKing) continue;
     const name = PIECE_NAME[first.piece];
     const seq = chain.map((p) => moveLabel(p)).join(' ');
+    // Teach at the move that cost the most (often a retreat, not the first move).
+    const ours = chain.filter((p) => p.color === us);
+    const worst = ours.reduce((a, p) => (pd(ctx.evals[p.ply - 1]) > pd(ctx.evals[a.ply - 1]) + 3 ? p : a), first);
+    const we = ctx.evals[worst.ply - 1];
+    const bestFrom = we.bestUci?.slice(0, 2);
+    // The engine wanted to trade the chased piece off instead of moving it again.
+    const tradeInstead = worst !== first && bestFrom === worst.from && !!pieceAt(worst.fenBefore, we.bestUci!.slice(2, 4)) && pd(we) >= 5;
     return [
       {
         kind: 'weakness',
         category: 'inefficient_moves',
-        ply: first.ply,
+        ply: worst.ply,
         severity: 2,
         confidence: towardKing && drop >= 6 ? 'high' : 'medium',
-        relatedPlies: chain.slice(1).filter((p) => p.color === us).map((p) => p.ply),
-        evidence: `Your ${name} was chased by pawns (${seq}). Each pawn move gained space${towardKing ? ` toward your king` : ''} with tempo, and the ${name} ended up no better placed.`,
-        facts: { piece: name, chased: true, pushes: pushes.map((p) => p.san), towardKing, secondSan: chain[2]?.san },
+        relatedPlies: ours.filter((p) => p !== worst).map((p) => p.ply),
+        evidence: `Your ${name} was chased by pawns (${seq}). Each pawn move gained space${towardKing ? ` toward your king` : ''} with tempo, and the ${name} ended up no better placed.${tradeInstead ? ` On ${label(worst)}, ${we.bestSan} — trading the ${name} off — was better than retreating again.` : ''}`,
+        facts: { piece: name, chased: true, pushes: pushes.map((p) => p.san), towardKing, secondSan: chain[2]?.san, tradeInstead: tradeInstead ? we.bestSan : undefined },
       },
     ];
   }
@@ -1212,7 +1219,9 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
     if (p.captured && d <= 5) {
       const base = i > 0 ? materialBalance(ctx.plies[i - 1].fenBefore, user) : materialBalance(p.fenBefore, user);
       const now = materialBalance(p.fenAfter, user);
-      if (now - base >= 2 && e.materialAfterReply >= now - 1) free.push(p.ply);
+      const reply = ctx.plies[i + 1];
+      const keptInGame = !reply || materialBalance(reply.fenAfter, user) >= now - 1;
+      if (now - base >= 2 && e.materialAfterReply >= now - 1 && keptInGame) free.push(p.ply);
     }
 
     // Simplifying when ahead: pieces come off over the next two plies, the lead stays.

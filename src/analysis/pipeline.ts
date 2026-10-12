@@ -8,6 +8,7 @@ import { explainMove } from './explain';
 import type { MoveExplanation } from '../domain/types';
 import { buildMoments, type PriorGameFindings } from './moments';
 import { buildReport } from '../coach/report';
+import { endingNote } from '../coach/ending';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
@@ -53,7 +54,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
     explanations[f.ply] = explainMove({ plies: game.plies, evals: moves, positions, contexts, ply: f.ply, betterPly, findings });
   }
   const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
-  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts });
+  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions) });
   const drills = generateDrills(game.id, moments);
   return {
     game: {

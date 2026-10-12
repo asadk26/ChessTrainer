@@ -22,8 +22,9 @@ describe('pawn storm against a castled king', () => {
 
   it('notices the bishop being chased by pawns (7.Bg5 f6 8.Bh4 g5 9.Bg3)', () => {
     const f = game.findings.find((x) => x.facts.chased);
-    expect(f).toMatchObject({ ply: 13, category: 'inefficient_moves' });
-    expect(game.explanations![13].problem).toMatch(/pawns chased it \(f6, g5\)/);
+    expect(f).toMatchObject({ ply: 17, category: 'inefficient_moves' });
+    expect(game.explanations![17].problem).toMatch(/pawns chased it \(f6, g5\)/);
+    expect(game.explanations![17].better).toMatch(/Nxg5 removes the piece that was attacking your bishop/);
   });
 
   it('explains the real problem with 13.Bxf4 and 17.Ne6', () => {

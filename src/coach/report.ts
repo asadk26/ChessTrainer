@@ -12,6 +12,8 @@ export interface ReportInput {
   userColor: Color;
   prior: PriorGameFindings[];
   contexts?: Map<number, PlyContext>;
+  /** How the game ended, when it matters (won by resignation from a worse position, an early resignation). */
+  ending?: string;
 }
 
 export interface ThemeGroup {
@@ -24,7 +26,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 5;
+export const REPORT_VERSION = 6;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -252,12 +254,13 @@ function recurringText(groups: ThemeGroup[], plies: PlyRecord[], prior: PriorGam
   const recentPrior = recentOf(prior);
   const strong = groups.filter((g) => g.strong);
   const goodNews = (): string => {
-    const current = new Set(strong.map((g) => g.theme));
+    // "Gone" means no credible sign of it at all this game; "clear before" means strong evidence back then.
+    const current = new Set(groups.map((g) => g.theme));
     const counts = new Map<ThemeId, number>();
     for (const g of recentPrior) {
-      new Set(g.findings.filter(countsAsPattern).map((f) => themeOf(f.category)).filter(Boolean) as ThemeId[]).forEach((t) =>
-        counts.set(t, (counts.get(t) ?? 0) + 1),
-      );
+      groupByTheme(g.findings)
+        .filter((x) => x.strong)
+        .forEach((x) => counts.set(x.theme, (counts.get(x.theme) ?? 0) + 1));
     }
     const improved = [...counts.entries()].filter(([t, n]) => n >= 2 && !current.has(t)).sort((a, b) => b[1] - a[1])[0];
     return improved
@@ -291,9 +294,14 @@ function recurringText(groups: ThemeGroup[], plies: PlyRecord[], prior: PriorGam
   } else if (withTheme.length === 1) {
     text = `Possible tendency: something similar happened in your game ${withTheme[0].label}. ${inThisGame} That's 2 of your last ${total} games — worth watching.`;
   } else {
-    text = `This has now appeared in ${withTheme.length + 1} of your last ${total} games: you again ${THEMES[top.theme].clause.replace(/^you /, '')}. ${inThisGame} This is becoming more important than opening theory for you.`;
+    text = `This has now appeared in ${withTheme.length + 1} of your last ${total} games: ${again(THEMES[top.theme].clause)}. ${inThisGame} This is becoming more important than opening theory for you.`;
   }
   return text + goodNews();
+}
+
+/** "you made it harder…" → "you again made it harder…"; other clauses → "again, pieces were left…". */
+function again(clause: string): string {
+  return clause.startsWith('you ') ? `you again ${clause.slice(4)}` : `again, ${clause}`;
 }
 
 function capitalise(s: string) {
@@ -425,7 +433,7 @@ export function buildReport(input: ReportInput): GameReport {
     recurring: recurringText(groups, plies, prior),
     focus: { title: focusMeta.focusTitle, detail: focusMeta.focusDetail, theme: focusTheme },
     minorNotes,
-    story: gameStory(plies, contexts),
+    story: [input.ending, gameStory(plies, contexts)].filter(Boolean).join(' ') || undefined,
     voice: 'template',
     version: REPORT_VERSION,
   };
