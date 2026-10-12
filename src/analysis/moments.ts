@@ -125,11 +125,18 @@ export interface MomentInput {
   explanations?: Record<number, MoveExplanation>;
 }
 
+export function isStateFinding(f: Finding): boolean {
+  return ['development', 'passive_piece', 'time_management'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
+}
+
 export function buildMoments(input: MomentInput): TeachingMoment[] {
   const { plies, evals, positions, findings, userColor, prior } = input;
   const byPly = new Map<number, Finding[]>();
   for (const f of findings) {
     if (f.kind !== 'weakness' || f.ply <= 0) continue;
+    // About the game as a whole (castled late, slow development, a passive piece, the clock),
+    // not about the move it happens to be attached to: summary only, never a "find a better move" lesson.
+    if (isStateFinding(f)) continue;
     byPly.set(f.ply, [...(byPly.get(f.ply) ?? []), f]);
   }
 

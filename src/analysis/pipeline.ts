@@ -6,15 +6,13 @@ import { detectFindings } from './detectors';
 import { buildContexts } from './context';
 import { explainMove } from './explain';
 import type { MoveExplanation } from '../domain/types';
-import { buildMoments, type PriorGameFindings } from './moments';
+import { buildMoments, isStateFinding, type PriorGameFindings } from './moments';
 import { buildReport } from '../coach/report';
 import { endingNote } from '../coach/ending';
 import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
-
-const STATE_CATEGORIES = new Set(['development', 'passive_piece', 'time_management']);
 
 /** Chronological key: PGN date when available, import time otherwise. */
 export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'>): number {
@@ -49,7 +47,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
     if (f.kind !== 'weakness' || f.ply <= 0 || f.confidence === 'low' || explanations[f.ply]) continue;
     // Findings about the state of the game (development by move 10, a passive piece, the clock)
     // aren't about one move, so they don't get a move explanation.
-    if (STATE_CATEGORIES.has(f.category) || (f.category === 'king_safety' && f.facts.notCastled)) continue;
+    if (isStateFinding(f)) continue;
     if (game.plies[f.ply - 1]?.color !== game.userColor) continue;
     const betterPly = Number(f.facts.worsePly ?? f.ply);
     explanations[f.ply] = explainMove({ plies: game.plies, evals: moves, positions, contexts, ply: f.ply, betterPly, findings });

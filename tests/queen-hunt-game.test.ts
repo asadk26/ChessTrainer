@@ -50,3 +50,18 @@ describe('missed knight fork', () => {
     expect(detectMissedFork({ plies: [prev, ply({})], evals: [e, { ...e, isBest: true }], positions: [], userColor: 'b', result: '*' }, 1)).toEqual([]);
   });
 });
+
+describe('whole-game notes never become single-move lessons', () => {
+  it('"king still in the center at move 12" stays in the summary, not a Be4 lesson or drill', async () => {
+    const { buildMoments } = await import('../src/analysis/moments');
+    const { buildMoveEvals } = await import('../src/analysis/analyzeGame');
+    const { game: g, positions } = fixtureGame('queen-hunt-game');
+    const coached = coachFromPositions(g, positions, []).game;
+    // As the browser's engine run had it: full confidence.
+    const findings = coached.findings.map((f) => (f.facts.notCastled ? { ...f, confidence: 'high' as const, severity: 3 as const } : f));
+    expect(findings.find((f) => f.facts.notCastled)?.ply).toBe(24); // 12...Be4
+    const moments = buildMoments({ gameId: 'x', plies: g.plies, evals: buildMoveEvals(g.plies, positions), positions, findings, userColor: 'b', prior: [], explanations: coached.explanations });
+    expect(moments.some((m) => m.ply === 24)).toBe(false);
+    expect(coached.explanations?.[24]).toBeUndefined();
+  });
+});

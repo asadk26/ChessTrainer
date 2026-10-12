@@ -350,7 +350,10 @@ p { margin: 0 0 0.75rem; }
 .key.green { background: rgb(46, 140, 92); }
 
 @media (max-width: 860px) {
-  .rv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'prompt' 'board' 'banner' 'side'; grid-template-rows: none; row-gap: 0.45rem; }
+  /* Phones: the board stays pinned at the top; the text and buttons scroll underneath it. */
+  .rv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'board' 'prompt' 'banner' 'side'; grid-template-rows: none; row-gap: 0.45rem; }
+  .rv-board { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 0.3rem 0 0.35rem; box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.35); }
+  .rv-board .board-frame { max-width: min(100%, 48vh); }
   .topbar { position: static; }
   .rv { gap: 0.45rem; }
   .rv-prompt { padding: 0.55rem 0.75rem; font-size: 0.95rem; }
@@ -424,3 +427,10 @@ p { margin: 0 0 0.75rem; }
 .chesscom-sync .checks legend { font-size: 0.9rem; margin-bottom: 0.25rem; padding: 0; }
 .chesscom-sync label.check { display: inline-flex; align-items: center; gap: 0.35rem; }
 .chesscom-sync .feedback { margin-top: 0.5rem; }
+
+/* Stockfish line explorer */
+.best-move { font-size: 0.98rem; }
+.best-move b { color: var(--accent); }
+.line-moves { display: flex; flex-wrap: wrap; gap: 0.15rem; margin: 0.35rem 0; }
+.line-moves .ms-move.best:not(.on) { color: var(--accent); font-weight: 700; }
+.show-best { margin-top: 0.35rem; }
