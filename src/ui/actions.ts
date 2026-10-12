@@ -3,7 +3,7 @@ import type { Color, ParsedGame, StoredGame } from '../domain/types';
 import { repo } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames } from '../analysis/pipeline';
-import { rememberUsername } from '../profile/identify';
+import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
 import { buildCoachPrompt, COACH_SYSTEM_PROMPT, extractJson, mergeLlmOutput } from '../coach/llmCoach';
 import { getLlmStatus, llmComplete } from '../coach/llmClient';
@@ -36,7 +36,7 @@ export async function importGame(parsed: ParsedGame, userColor: Color): Promise<
   await repo.saveSettings({
     ...settings,
     usernames: rememberUsername(settings.usernames, userName),
-    displayName: settings.displayName ?? userName,
+    displayName: settings.displayName ?? (isPlaceholderName(userName) ? undefined : userName),
     rating: game.userRating ?? settings.rating,
   });
   return game;

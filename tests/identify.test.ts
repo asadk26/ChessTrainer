@@ -21,4 +21,10 @@ describe('player identification', () => {
     known = rememberUsername(known, 'friend');
     expect(identifyUser(h('friend', 'me'), known)).toMatchObject({ color: 'b', confident: false });
   });
+
+  it('never learns or matches placeholder names from PGNs without player tags', () => {
+    const known = rememberUsername({}, 'White');
+    expect(known).toEqual({});
+    expect(identifyUser(h('White', 'Black'), { white: 5 })).toBeNull();
+  });
 });
