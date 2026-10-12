@@ -16,8 +16,19 @@ export interface CoachRepository {
   getSettings(): Promise<PlayerSettings>;
   saveSettings(s: PlayerSettings): Promise<void>;
   exportAll(): Promise<string>;
-  importAll(json: string): Promise<void>;
+  /** Merge a backup into the current data (never deletes anything). */
+  importAll(json: string): Promise<ImportSummary>;
 }
+
+export interface ImportSummary {
+  gamesAdded: number;
+  gamesUpdated: number;
+  gamesKept: number;
+  drills: number;
+  attempts: number;
+}
+
+export class BackupError extends Error {}
 
 export const DEFAULT_SETTINGS: PlayerSettings = {
   usernames: {},
@@ -104,24 +115,91 @@ export class LocalStorageRepository implements CoachRepository {
   async exportAll() {
     return JSON.stringify(
       {
+        app: 'chess-coach',
         version: 1,
+        exportedAt: new Date().toISOString(),
         games: await this.listGames(),
         drills: await this.listDrills(),
         attempts: await this.listAttempts(),
-        settings: await this.getSettings(),
+        settings: { ...(await this.getSettings()), coachToken: undefined },
       },
       null,
       2,
     );
   }
-  async importAll(json: string) {
-    const data = JSON.parse(json);
-    if (data.version !== 1) throw new Error('Unsupported backup version');
-    for (const g of data.games ?? []) await this.saveGame(g);
-    this.write('drills', data.drills ?? []);
-    this.write('attempts', data.attempts ?? []);
-    if (data.settings) await this.saveSettings(data.settings);
+
+  async importAll(json: string): Promise<ImportSummary> {
+    let data: Partial<Backup>;
+    try {
+      data = JSON.parse(json);
+    } catch {
+      throw new BackupError("This file isn't valid JSON.");
+    }
+    if (!data || typeof data !== 'object' || data.version !== 1 || !Array.isArray(data.games)) {
+      throw new BackupError("This doesn't look like a Chess Coach backup (expected an export from this app).");
+    }
+    const summary: ImportSummary = { gamesAdded: 0, gamesUpdated: 0, gamesKept: 0, drills: 0, attempts: 0 };
+    const freshness = (g: StoredGame) => g.analysis?.analyzedAt ?? g.importedAt ?? 0;
+
+    for (const g of data.games) {
+      if (!g || typeof g.id !== 'string' || !Array.isArray(g.plies)) continue;
+      const existing = await this.getGame(g.id);
+      if (!existing) {
+        await this.saveGame(g);
+        summary.gamesAdded++;
+      } else if (freshness(g) > freshness(existing)) {
+        await this.saveGame({ ...g, completedMomentIds: [...new Set([...existing.completedMomentIds, ...g.completedMomentIds])] });
+        summary.gamesUpdated++;
+      } else {
+        summary.gamesKept++;
+      }
+    }
+
+    const drills = new Map((await this.listDrills()).map((d) => [d.id, d]));
+    for (const d of data.drills ?? []) {
+      if (d && typeof d.id === 'string' && !drills.has(d.id)) {
+        drills.set(d.id, d);
+        summary.drills++;
+      }
+    }
+    this.write('drills', [...drills.values()]);
+
+    const attempts = await this.listAttempts();
+    const seen = new Set(attempts.map((a) => `${a.drillId}@${a.at}`));
+    for (const a of data.attempts ?? []) {
+      if (a && !seen.has(`${a.drillId}@${a.at}`)) {
+        attempts.push(a);
+        seen.add(`${a.drillId}@${a.at}`);
+        summary.attempts++;
+      }
+    }
+    this.write('attempts', attempts);
+
+    if (data.settings) {
+      const local = await this.getSettings();
+      const incoming = { ...DEFAULT_SETTINGS, ...data.settings };
+      const usernames = { ...local.usernames };
+      for (const [k, n] of Object.entries(incoming.usernames ?? {})) usernames[k] = Math.max(usernames[k] ?? 0, n);
+      const hadData = summary.gamesKept + summary.gamesUpdated > 0 || (await this.listGames()).length > summary.gamesAdded;
+      await this.saveSettings({
+        ...(hadData ? local : incoming),
+        usernames,
+        displayName: local.displayName ?? incoming.displayName,
+        coachToken: local.coachToken,
+        focus: (incoming.focus?.setAt ?? 0) > (local.focus?.setAt ?? 0) ? incoming.focus : local.focus,
+      });
+    }
+    return summary;
   }
+}
+
+interface Backup {
+  app: string;
+  version: number;
+  games: StoredGame[];
+  drills: Drill[];
+  attempts: DrillAttempt[];
+  settings: PlayerSettings;
 }
 
 export const repo: CoachRepository = new LocalStorageRepository(

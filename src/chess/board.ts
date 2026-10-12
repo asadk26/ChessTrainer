@@ -212,3 +212,80 @@ export function squareName(type: PieceType, square: string): string {
 export function pieceLetter(type: PieceType): string {
   return type === 'p' ? '' : type.toUpperCase();
 }
+
+const FILES = 'abcdefgh';
+
+/** The king's square plus its neighbours. */
+export function kingZone(fen: string, color: Color): string[] {
+  const k = kingSquare(fen, color);
+  if (!k) return [];
+  const f = FILES.indexOf(k[0]);
+  const r = Number(k[1]);
+  const out: string[] = [];
+  for (let df = -1; df <= 1; df++)
+    for (let dr = -1; dr <= 1; dr++) {
+      const nf = f + df;
+      const nr = r + dr;
+      if (nf >= 0 && nf < 8 && nr >= 1 && nr <= 8) out.push(`${FILES[nf]}${nr}`);
+    }
+  return out;
+}
+
+/** Number of (enemy piece, king-zone square) attack pairs — a rough "heat" around the king. */
+export function kingZoneAttacks(fen: string, color: Color): number {
+  const c = new Chess(fen);
+  const enemy = other(color);
+  return kingZone(fen, color).reduce((n, sq) => n + c.attackers(sq as Square, enemy).length, 0);
+}
+
+/** Own pawns directly in front of / diagonal to the king (max 3). */
+export function pawnShield(fen: string, color: Color): number {
+  const k = kingSquare(fen, color);
+  if (!k) return 0;
+  const c = new Chess(fen);
+  const f = FILES.indexOf(k[0]);
+  const r = Number(k[1]) + (color === 'w' ? 1 : -1);
+  let n = 0;
+  for (let df = -1; df <= 1; df++) {
+    const nf = f + df;
+    if (nf < 0 || nf > 7 || r < 1 || r > 8) continue;
+    const p = c.get(`${FILES[nf]}${r}` as Square);
+    if (p && p.type === 'p' && p.color === color) n++;
+  }
+  return n;
+}
+
+export function hasQueen(fen: string, color: Color): boolean {
+  return fen.split(' ')[0].includes(color === 'w' ? 'Q' : 'q');
+}
+
+/** Passed pawns of `color`: no enemy pawn ahead on the same or adjacent files. Returns squares. */
+export function passedPawns(fen: string, color: Color): string[] {
+  const c = new Chess(fen);
+  const pawns: { f: number; r: number; color: Color }[] = [];
+  for (const row of c.board()) for (const p of row) if (p && p.type === 'p') pawns.push({ f: FILES.indexOf(p.square[0]), r: Number(p.square[1]), color: p.color });
+  return pawns
+    .filter((p) => p.color === color)
+    .filter((p) => !pawns.some((q) => q.color !== color && Math.abs(q.f - p.f) <= 1 && (color === 'w' ? q.r > p.r : q.r < p.r)))
+    .map((p) => `${FILES[p.f]}${p.r}`);
+}
+
+/** Rank from the pawn owner's point of view (1..8). */
+export function relativeRank(square: string, color: Color): number {
+  const r = Number(square[1]);
+  return color === 'w' ? r : 9 - r;
+}
+
+/** "a rook and a pawn" for 6, "a piece" for 3 — how a coach talks about material. */
+export function materialPhrase(n: number): string {
+  let left = Math.round(n);
+  const parts: string[] = [];
+  for (const [v, name] of [[9, 'queen'], [5, 'rook'], [3, 'piece']] as const) {
+    if (left >= v && parts.length === 0) {
+      parts.push(`a ${name}`);
+      left -= v;
+    }
+  }
+  if (left > 0) parts.push(left === 1 ? 'a pawn' : `${left} pawns`);
+  return parts.join(' and ') || 'nothing';
+}

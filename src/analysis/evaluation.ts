@@ -65,3 +65,41 @@ export function formatCp(cp: number): string {
   const v = cp / 100;
   return (v > 0 ? '+' : '') + v.toFixed(1);
 }
+
+const clampCp = (cp: number) => Math.max(-1000, Math.min(1000, cp));
+
+/**
+ * Practical cost of a move. Win% is the right lens in balanced positions, but
+ * once someone is clearly ahead it flattens out: +8 -> +5 barely changes the
+ * win%, yet giving back three pawns' worth is a real practical mistake. When
+ * the mover is ahead we therefore also measure the centipawn loss (20cp ≈ 1
+ * "win% point"), unless the position stays crushing without losing material
+ * (e.g. missing a mate-in-4 while a queen up — not instructive at this level).
+ */
+export function practicalDrop(m: {
+  cpBefore: number;
+  cpAfter: number;
+  winDrop: number;
+  materialBefore: number;
+  materialAfterReply: number;
+}): number {
+  const ahead = m.cpBefore >= 300 || m.materialBefore >= 3;
+  if (!ahead) return m.winDrop;
+  if (m.cpAfter >= 600 && m.materialAfterReply >= m.materialBefore - 1) return m.winDrop;
+  const cpLoss = Math.max(0, clampCp(m.cpBefore) - clampCp(m.cpAfter));
+  return Math.max(m.winDrop, Math.min(40, cpLoss / 20));
+}
+
+/** practicalDrop with a fallback for evaluations stored before it existed. */
+export const pd = (e: { practicalDrop?: number; winDrop: number }) => e.practicalDrop ?? e.winDrop;
+
+/**
+ * Is a tried move "good enough"? Within 7 win% of the best — and, when the
+ * best move keeps a clear advantage, within 120cp, because win% flattens out
+ * when you're far ahead.
+ */
+export function closeToBest(tried: { win: number; cp: number }, best: { win: number; cp: number }): boolean {
+  return tried.win >= best.win - 7 && (best.cp < 300 || tried.cp >= best.cp - CP_TOLERANCE);
+}
+
+export const CP_TOLERANCE = 120;

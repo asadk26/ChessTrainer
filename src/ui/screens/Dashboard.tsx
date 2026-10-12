@@ -5,8 +5,7 @@ import { THEMES } from '../../domain/categories';
 import { navigate, useApp } from '../store';
 import { SAMPLE_PGN } from '../../fixtures/sampleGame';
 import { parsePgn } from '../../chess/pgn';
-import { deleteGame, importGame } from '../actions';
-import { repo } from '../../storage/repository';
+import { deleteGame, exportBackup, importBackup, importGame } from '../actions';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
@@ -36,13 +35,26 @@ export function Dashboard() {
     navigate(`/game/${g.id}`);
   };
 
-  const exportData = async () => {
-    const blob = new Blob([await repo.exportAll()], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'chess-coach-backup.json';
-    a.click();
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const onImportFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const r = await importBackup(file);
+      await refresh();
+      setImportMsg({
+        ok: true,
+        text: `Imported ${r.gamesAdded} new game${r.gamesAdded === 1 ? '' : 's'}${r.gamesUpdated ? `, updated ${r.gamesUpdated}` : ''}${r.gamesKept ? `, kept ${r.gamesKept} you already had` : ''}, ${r.drills} drills and ${r.attempts} drill attempts.`,
+      });
+    } catch (e) {
+      setImportMsg({ ok: false, text: (e as Error).message });
+    }
   };
+  const importButton = (
+    <label className="btn ghost file-btn">
+      Import data (JSON)
+      <input type="file" accept="application/json,.json" onChange={(e) => (void onImportFile(e.target.files?.[0]), (e.target.value = ''))} />
+    </label>
+  );
 
   if (games.length === 0) {
     return (
@@ -60,6 +72,10 @@ export function Dashboard() {
             Try the sample game
           </button>
         </div>
+        <p className="muted small">
+          Moving from another device? Export your data there (Dashboard → Settings), then restore it here: {importButton}
+        </p>
+        {importMsg && <div className={`feedback ${importMsg.ok ? 'good' : 'bad'}`}>{importMsg.text}</div>}
         <p className="muted small">Stockfish runs in your browser. {llm.provider ? `AI coach voice: ${llm.provider} (${llm.model}).` : 'No AI key configured — coaching uses built-in explanations.'}</p>
       </div>
     );
@@ -67,6 +83,7 @@ export function Dashboard() {
 
   return (
     <div className="dashboard">
+      {importMsg && <div className={`feedback ${importMsg.ok ? 'good' : 'bad'}`}>{importMsg.text}</div>}
       <section className="card focus-card">
         <span className="eyebrow">Current focus</span>
         {settings.focus ? (
@@ -184,16 +201,33 @@ export function Dashboard() {
             </label>
             <label className="check">
               <input type="checkbox" checked={settings.useLlm} disabled={!llm.provider} onChange={(e) => updateSettings({ useLlm: e.target.checked })} />
-              AI coach voice {llm.provider ? `(${llm.provider} · ${llm.model})` : '(not configured — see .env.example)'}
+              AI coach voice {llm.provider ? `(${llm.provider} · ${llm.model})` : '(not configured — see README)'}
             </label>
+            {llm.reason && <div className="muted small">{llm.reason}</div>}
+            {llm.requiresToken && (
+              <label>
+                AI coach access code
+                <input
+                  type="password"
+                  autoComplete="off"
+                  defaultValue={settings.coachToken ?? ''}
+                  placeholder="COACH_ACCESS_TOKEN from your deployment"
+                  onBlur={(e) => updateSettings({ coachToken: e.target.value.trim() || undefined })}
+                />
+              </label>
+            )}
             <div className="muted small">
               Known usernames: {Object.keys(settings.usernames).join(', ') || '—'} · {profile.gamesAnalyzed} games analyzed
             </div>
             <div className="actions left">
-              <button className="btn ghost" onClick={exportData}>
+              <button className="btn ghost" onClick={exportBackup}>
                 Export data (JSON)
               </button>
+              {importButton}
             </div>
+            <p className="muted small">
+              Export on one device and import on another to move your games, drills and profile. Importing merges — it never deletes what's already here.
+            </p>
           </div>
         )}
       </section>

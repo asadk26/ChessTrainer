@@ -14,7 +14,8 @@ import type {
 import { CATEGORIES } from '../domain/categories';
 import { playLine } from '../chess/board';
 import { buildMomentText, goodIdeaText } from '../coach/templates';
-import { positionCp, scoreToCp, winPercent } from './evaluation';
+import { CP_TOLERANCE, pd, positionCp, scoreToCp, winPercent } from './evaluation';
+import { countsAsPattern } from '../coach/report';
 
 export interface PriorGameFindings {
   gameId: string;
@@ -24,21 +25,38 @@ export interface PriorGameFindings {
 }
 
 /** Categories with a natural "what will they reply?" question. */
-const PREDICT_FIRST: CategoryId[] = ['premature_attack', 'pointless_check', 'inefficient_moves', 'blunder', 'missed_threat', 'calculation'];
+const PREDICT_FIRST: CategoryId[] = [
+  'premature_attack',
+  'pointless_check',
+  'inefficient_moves',
+  'blunder',
+  'missed_threat',
+  'calculation',
+  'gave_back_material',
+  'allowed_counterplay',
+  'unnecessary_complications',
+];
+
+/** Categories where the instructive reply is the engine's punishing one, not what the opponent actually played. */
+export const ENGINE_REPLY_CATEGORIES: string[] = ['blunder', 'missed_threat', 'calculation', 'gave_back_material', 'allowed_counterplay', 'unnecessary_complications'];
 
 /** Priority when several findings share a move. */
 const PRIMARY_ORDER: CategoryId[] = [
   'blunder',
+  'allowed_counterplay',
+  'gave_back_material',
   'missed_threat',
   'tactical_blindness',
   'calculation',
   'premature_attack',
   'pointless_check',
   'inefficient_moves',
+  'hunting_material',
   'missed_king_attack',
   'early_queen',
   'king_safety',
   'failure_to_simplify',
+  'unnecessary_complications',
   'endgame',
   'poor_trade',
   'premature_capture',
@@ -51,7 +69,7 @@ export const MAX_MISTAKE_MOMENTS = 3;
 export const MIN_SIGNIFICANCE = 18;
 
 export function priorGamesWith(category: string, prior: PriorGameFindings[]): number {
-  return prior.filter((g) => g.findings.some((f) => f.category === category && f.kind === 'weakness')).length;
+  return prior.filter((g) => g.findings.some((f) => f.category === category && countsAsPattern(f))).length;
 }
 
 /**
@@ -59,21 +77,31 @@ export function priorGamesWith(category: string, prior: PriorGameFindings[]): nu
  * weight; evaluation loss adds to it; recurring categories get a boost.
  */
 export function significance(findings: Finding[], evals: MoveEval[], prior: PriorGameFindings[]): number {
-  const teachable = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2);
+  // Only credible findings can make a teaching moment; speculative ones never do.
+  const teachable = findings.filter(countsAsPattern);
   if (teachable.length === 0) return 0;
-  const patternScore = teachable.reduce((acc, f) => acc + CATEGORIES[f.category as CategoryId].weight * f.severity * 10, 0);
+  const patternScore = teachable.reduce(
+    (acc, f) => acc + CATEGORIES[f.category as CategoryId].weight * f.severity * 10 * (f.confidence === 'high' ? 1 : 0.75),
+    0,
+  );
   const plies = new Set(teachable.flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]));
-  const maxDrop = Math.max(0, ...evals.filter((e) => plies.has(e.ply)).map((e) => e.winDrop));
+  const maxDrop = Math.max(0, ...evals.filter((e) => plies.has(e.ply)).map((e) => pd(e)));
   const evalScore = maxDrop < 6 ? 0 : maxDrop * 0.8;
   const recurring = Math.max(...teachable.map((f) => Math.min(3, priorGamesWith(f.category, prior))));
   return Math.round(patternScore + evalScore + recurring * 5);
 }
 
-function acceptableMoves(pos: PositionEval, exclude: string | undefined, tolerance: number): string[] {
+/**
+ * Engine candidates close enough to the best move to count as "good". When the
+ * mover is clearly ahead, win% hides real differences, so a centipawn bound
+ * applies too.
+ */
+export function acceptableMoves(pos: PositionEval, exclude: string | undefined, tolerance: number): string[] {
   if (!pos.lines.length) return [];
-  const bestWin = winPercent(scoreToCp(pos.lines[0].score));
+  const bestCp = scoreToCp(pos.lines[0].score);
+  const bestWin = winPercent(bestCp);
   return pos.lines
-    .filter((l) => bestWin - winPercent(scoreToCp(l.score)) <= tolerance)
+    .filter((l) => bestWin - winPercent(scoreToCp(l.score)) <= tolerance && (bestCp < 300 || bestCp - scoreToCp(l.score) <= CP_TOLERANCE))
     .map((l) => l.pv[0])
     .filter((u) => u && u !== exclude);
 }
@@ -130,13 +158,13 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     const replyPos = positions[ply];
     const acceptableReplyUcis = Array.from(
       new Set([
-        ...(reply && primary.category !== 'blunder' && primary.category !== 'calculation' ? [reply.uci] : []),
-        ...acceptableMoves(replyPos, undefined, primary.category === 'blunder' || primary.category === 'missed_threat' ? 5 : 10),
+        ...(reply && !ENGINE_REPLY_CATEGORIES.includes(primary.category) ? [reply.uci] : []),
+        ...acceptableMoves(replyPos, undefined, ENGINE_REPLY_CATEGORIES.includes(primary.category) ? 5 : 10),
       ]),
     );
 
     const sequence =
-      primary.category === 'blunder' || primary.category === 'missed_threat' || primary.category === 'calculation'
+      ENGINE_REPLY_CATEGORIES.includes(primary.category)
         ? [{ fen: played.fenAfter, san: played.san, from: played.from, to: played.to, caption: '' }, ...playLine(played.fenAfter, replyPos.lines[0]?.pv ?? [], 4)]
         : framesFromGame(plies, ply, related);
 
@@ -191,6 +219,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
         cpAfter: evals[idx].cpAfter,
         betterBestWin: bestWin(betterPos),
         betterPlayedWin: evals[worsePly - 1]?.winAfter ?? evals[idx].winAfter,
+        betterBestCp: positionCp(betterPos),
       },
     } satisfies TeachingMoment;
   });
@@ -231,7 +260,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
       },
       text,
       choice,
-      numbers: { winBefore: e.winBefore, winAfter: e.winAfter, cpBefore: e.cpBefore, cpAfter: e.cpAfter, betterBestWin: e.winBefore, betterPlayedWin: e.winAfter },
+      numbers: { winBefore: e.winBefore, winAfter: e.winAfter, cpBefore: e.cpBefore, cpAfter: e.cpAfter, betterBestWin: e.winBefore, betterPlayedWin: e.winAfter, betterBestCp: e.cpBefore },
     });
   }
 

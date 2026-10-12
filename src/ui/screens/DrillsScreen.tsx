@@ -6,7 +6,7 @@ import { navigate, useApp } from '../store';
 import { repo } from '../../storage/repository';
 import { categoryLabel } from '../../domain/categories';
 import { playLine, sideToMove } from '../../chess/board';
-import { evaluateMoveWin } from '../actions';
+import { closeToBest, evaluateMove } from '../actions';
 
 const TYPE_LABEL: Record<Drill['type'], string> = {
   find_better: 'Find the better move',
@@ -35,8 +35,8 @@ function DrillRunner({ drill, onNext, hasNext }: { drill: Drill; onNext: () => v
       // Not in the stored list: let the engine judge it against the solution.
       setAnswer({ correct: false, uci, san, fen, checking: true });
       const solFen = playLine(drill.fen, [drill.solutionUci])[0]?.fen;
-      void Promise.all([evaluateMoveWin(fen), solFen ? evaluateMoveWin(solFen) : undefined]).then(([mine, best]) => {
-        const ok = mine !== undefined && best !== undefined && mine >= best - 7;
+      void Promise.all([evaluateMove(fen), solFen ? evaluateMove(solFen) : undefined]).then(([mine, best]) => {
+        const ok = !!mine && !!best && closeToBest(mine, best);
         setAnswer({ correct: ok, uci, san, fen });
         void record(ok);
       });

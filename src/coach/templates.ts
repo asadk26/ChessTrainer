@@ -2,7 +2,7 @@
 // is configured, and the fallback for any field an LLM response leaves out.
 // Tone: a calm human coach talking to a ~850 player. Engine numbers stay out.
 import type { Color, Finding, MomentText, PlyRecord } from '../domain/types';
-import { COLOR_NAME, PIECE_NAME, attackedEnemyPieces, isCheckMove, other, pieceAt, squareName, undevelopedMinors } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, attackedEnemyPieces, isCheckMove, materialPhrase, other, pieceAt, squareName, undevelopedMinors } from '../chess/board';
 
 type F = Finding['facts'];
 
@@ -64,6 +64,18 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
       return `${mv} — good idea: open the center`;
     case 'punished_mistake':
       return `${mv} — you took what was offered`;
+    case 'allowed_counterplay':
+      return `${mv} — letting your opponent back into the game`;
+    case 'gave_back_material':
+      return `${mv} — giving material back`;
+    case 'hunting_material':
+      return `${mv} — one pawn too many`;
+    case 'unnecessary_complications':
+      return `${mv} — keep it simple when ahead`;
+    case 'failure_to_simplify':
+      return `${mv} — trade when you're ahead`;
+    case 'endgame':
+      return f.facts.passedPawn ? `${mv} — help your passed pawn` : `${mv} — an endgame decision`;
     default:
       return mv;
   }
@@ -80,6 +92,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
     ? ` Since ${opp} was still behind in development${facts.oppKingInCenter ? ' with the king in the center' : ''}, those tempi were valuable.`
     : '';
   const betterIsSecond = betterPly.ply !== played.ply;
+  const lead = materialPhrase(Number(facts.material ?? facts.materialBefore ?? 0));
 
   const base: MomentText = {
     title,
@@ -236,14 +249,75 @@ export function buildMomentText(input: MomentTextInput): MomentText {
     case 'failure_to_simplify':
       return {
         ...base,
-        reveal: `You were ahead in material. ${bestSan} trades down and makes your extra material count.`,
-        lesson: 'When ahead, trade pieces (not pawns) and keep everything protected.',
+        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        betterPrompt: `You're well ahead. Is there a way to trade pieces — ideally queens — here?`,
+        betterCorrect: 'Yes — trades make a material lead easier to convert.',
+        reveal: Array.isArray(facts.tradeLine) && facts.tradeLine.length
+          ? `${list(facts.tradeLine)}: the queens come off and your extra material does the work.`
+          : `${bestSan} trades down and makes your extra material count.`,
+        lesson: 'When ahead, trade pieces (especially queens) and keep everything protected. Fewer pieces means fewer chances for counterplay.',
       };
     case 'endgame':
       return {
         ...base,
-        reveal: `${bestSan} was the key endgame move: ${list(facts.bestLine)}.`,
-        lesson: 'In the endgame, activate your king and push passed pawns.',
+        intent: facts.passedPawn
+          ? `This is an endgame where your passed pawn on ${s(facts.passedPawn)} is the most important thing on the board. You played ${played.san}.`
+          : base.intent,
+        betterPrompt: facts.passedPawn ? `How can you help your passed pawn here?` : base.betterPrompt,
+        betterCorrect: facts.passedPawn ? 'Yes — every move should help the passed pawn.' : base.betterCorrect,
+        reveal: `${bestSan} was the key move: ${list(facts.bestLine)}.`,
+        lesson: facts.passedPawn
+          ? 'In endgames, passed pawns must be pushed — and every piece should help them, by guarding the squares in front or blocking the opponent.'
+          : 'In the endgame, activate your king and push passed pawns.',
+      };
+    case 'allowed_counterplay': {
+      const line = Array.isArray(facts.replyLine) ? (facts.replyLine as string[]) : [];
+      return {
+        ...base,
+        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        question: `After ${played.san}, what is ${opp}'s most dangerous reply? Look for checks. Play it on the board.`,
+        predictCorrect: `Exactly — ${line[0] ?? 'that'} starts ${opp}'s counterplay.`,
+        predictOther: `Look for checks first: ${line[0] ?? ''} is the dangerous one.`,
+        reveal: facts.drawish
+          ? `${list(line.slice(0, 4))}: ${opp} can keep checking your king, and your extra material doesn't help — it's suddenly a draw.`
+          : `${list(line.slice(0, 4))}: ${opp}'s pieces become active around your king, and your lead starts to matter less.`,
+        betterPrompt: `What would keep everything under control here?`,
+        betterCorrect: 'Yes — that keeps your king safe and your lead intact.',
+        lesson:
+          "When you're well ahead, the main way to throw it away is counterplay. Before each move, check your opponent's checks and captures, keep your king covered, and trade off attacking pieces.",
+      };
+    }
+    case 'gave_back_material':
+      return {
+        ...base,
+        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        question: `After ${played.san}, what can ${opp} take? Play it on the board.`,
+        predictCorrect: `Exactly — ${s(facts.captureSan)} wins material.`,
+        predictOther: `Look again: ${s(facts.captureSan) || s(Array.isArray(facts.replyLine) ? facts.replyLine[0] : '')} wins material.`,
+        reveal: `${list(facts.replyLine)}: your lead shrinks${facts.victimPiece ? ` because the ${s(facts.victimPiece)} ${facts.victimSquare ? `on ${s(facts.victimSquare)} ` : ''}wasn't safe` : ''}.`,
+        betterPrompt: `Find a move that keeps all of your material.`,
+        betterCorrect: 'Good — nothing hangs and the lead stays.',
+        lesson: 'When ahead, every piece you keep makes the win easier. Blunder-check each move: what can now be taken?',
+      };
+    case 'hunting_material':
+      return {
+        ...base,
+        intent: `You were already up ${lead}, and ${played.san} grabs another pawn.`,
+        question: `What would consolidate your position instead?`,
+        betterPrompt: `What would consolidate your position instead?`,
+        betterCorrect: 'Yes — finishing development matters more than one more pawn.',
+        reveal: `${Array.isArray(facts.undeveloped) && facts.undeveloped.length ? `${list(facts.undeveloped)} were still at home` : 'Your pieces were not coordinated'}${facts.kingStuck ? ' and your king was still in the center' : ''}. Another pawn hardly matters when you're already up ${lead}; safety does.`,
+        lesson: "When you're far ahead, stop collecting material. Finish development, castle, and trade pieces — then the extra material wins by itself.",
+      };
+    case 'unnecessary_complications':
+      return {
+        ...base,
+        intent: `You were up ${lead}. ${played.san} gives material back to start an attack.`,
+        question: `After ${played.san}, what is ${opp}'s natural reply? Play it on the board.`,
+        reveal: `${list(facts.replyLine)}: you've given back part of your lead, and the position is messier than it needed to be.`,
+        betterPrompt: 'What is a simpler, safer move here?',
+        betterCorrect: 'Good — simple and safe.',
+        lesson: "When ahead, don't sacrifice material for complications. Simple, safe moves convert.",
       };
     default:
       return { ...base, lesson: base.lesson || 'Check the opponent\'s best reply before committing.' };

@@ -1,12 +1,14 @@
 // Turns teaching moments into short drills that reinforce the *concept*.
 import type { CategoryId, Color, Drill, DrillType, TeachingMoment } from '../domain/types';
-import { COLOR_NAME, other } from '../chess/board';
+import { COLOR_NAME, other, playLine } from '../chess/board';
+import { ENGINE_REPLY_CATEGORIES } from '../analysis/moments';
 
 export const PROBLEM_OPTIONS = [
   'It leaves a piece hanging',
-  'It wastes a tempo',
+  'It wastes time (a tempo, or development)',
   "It ignores the opponent's threat",
-  'It weakens the king',
+  'It weakens your king',
+  'It lets the opponent back into the game',
   "It's a good move",
 ];
 
@@ -19,6 +21,11 @@ const PROBLEM_INDEX: Partial<Record<CategoryId, number>> = {
   early_queen: 1,
   missed_threat: 2,
   king_safety: 3,
+  gave_back_material: 0,
+  hunting_material: 1,
+  allowed_counterplay: 4,
+  unnecessary_complications: 4,
+  failure_to_simplify: 4,
 };
 
 function drillFor(m: TeachingMoment, type: DrillType, gameId: string): Drill | undefined {
@@ -47,16 +54,20 @@ function drillFor(m: TeachingMoment, type: DrillType, gameId: string): Drill | u
     }
     case 'predict_response': {
       if (!m.acceptableReplyUcis.length) return undefined;
+      const punishing = ENGINE_REPLY_CATEGORIES.includes(m.category);
+      const solutionUci = punishing ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
       return {
         ...base,
         id: `${gameId}:${m.ply}:predict`,
         type,
         fen: m.fenAfter,
         orientation: mover,
-        prompt: `You played ${m.playedSan} (arrow). What is ${opp}'s most natural response? Play it for ${opp}.`,
+        prompt: punishing
+          ? `You played ${m.playedSan} (arrow). What is ${opp}'s most dangerous response? Play it for ${opp}.`
+          : `You played ${m.playedSan} (arrow). What is ${opp}'s most natural response? Play it for ${opp}.`,
         acceptableUcis: m.acceptableReplyUcis,
-        solutionUci: m.opponentReplyUci ?? m.acceptableReplyUcis[0],
-        solutionSan: m.opponentReplySan,
+        solutionUci,
+        solutionSan: playLine(m.fenAfter, [solutionUci])[0]?.san,
         questionArrow: { from: m.playedUci.slice(0, 2), to: m.playedUci.slice(2, 4), color: 'played' },
         explanation: m.text.reveal,
       };
@@ -108,7 +119,14 @@ function preferredTypes(m: TeachingMoment): DrillType[] {
     case 'blunder':
     case 'missed_threat':
     case 'calculation':
+    case 'gave_back_material':
       return ['identify_problem', 'predict_response', 'find_better'];
+    case 'allowed_counterplay':
+    case 'unnecessary_complications':
+      return ['predict_response', 'identify_problem', 'find_better'];
+    case 'hunting_material':
+    case 'failure_to_simplify':
+      return ['identify_problem', 'find_better'];
     default:
       return ['find_better', 'identify_problem'];
   }

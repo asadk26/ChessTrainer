@@ -37,7 +37,7 @@ function useAnalysis(game: StoredGame | undefined) {
       .then(async (g) => {
         setProgress(null);
         await refresh();
-        if (llm.provider && settings.useLlm) void enrich(g.id);
+        if (llm.provider && settings.useLlm && (!llm.requiresToken || settings.coachToken)) void enrich(g.id);
       })
       .catch(async (e) => {
         setProgress(null);
@@ -77,6 +77,7 @@ function Summary({ game }: { game: StoredGame }) {
     <div className="summary">
       <section className="card headline-card">
         <p className="headline">{r.headline}</p>
+        {r.story && <p className="story muted">{r.story}</p>}
       </section>
       <div className="grid-2">
         <section className="card">

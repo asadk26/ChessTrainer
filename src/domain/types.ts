@@ -83,7 +83,11 @@ export type CategoryId =
   | 'failure_to_simplify'
   | 'time_management'
   | 'endgame'
-  | 'calculation';
+  | 'calculation'
+  | 'gave_back_material'
+  | 'unnecessary_complications'
+  | 'hunting_material'
+  | 'allowed_counterplay';
 
 export type StrengthId =
   | 'castled_early'
@@ -92,7 +96,35 @@ export type StrengthId =
   | 'no_hanging'
   | 'opened_vs_king'
   | 'punished_mistake'
-  | 'converted_advantage';
+  | 'converted_advantage'
+  | 'won_free_material'
+  | 'simplified_when_ahead'
+  | 'defensive_resource'
+  | 'passed_pawn'
+  | 'neutralized_counterplay';
+
+/**
+ * How sure the coach is that a finding is real and instructive. Low-confidence
+ * findings are kept for transparency but never reach the main summary,
+ * teaching moments, focus, or cross-game pattern counts.
+ */
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** Practical situation before a move, from the user's point of view. */
+export interface PlyContext {
+  ply: number;
+  /** Material balance in pawns (user POV). */
+  material: number;
+  /** Engine evaluation in centipawns (user POV). */
+  cp: number;
+  ahead: boolean;
+  farAhead: boolean;
+  behind: boolean;
+  kingPressure: boolean;
+  attackingKing: boolean;
+  endgame: boolean;
+  race: boolean;
+}
 
 /** Engine facts about one half-move, from the mover's point of view. */
 export interface MoveEval {
@@ -108,6 +140,12 @@ export interface MoveEval {
   winAfter: number;
   /** winBefore - winAfter, never negative. */
   winDrop: number;
+  /**
+   * How much the move actually cost in practical terms. Equals winDrop, except
+   * when already clearly ahead: then win% barely moves (+8 -> +5 is still
+   * "winning"), so the centipawn/material loss is used instead.
+   */
+  practicalDrop?: number;
   bestUci?: string;
   bestSan?: string;
   /** Engine's best line from the position before the move (SAN). */
@@ -134,6 +172,8 @@ export interface Finding {
   severity: 1 | 2 | 3;
   /** Short deterministic description, safe to show as-is. */
   evidence: string;
+  /** Defaults to 'medium' for data saved before confidence existed. */
+  confidence?: Confidence;
   /** Other plies that belong to the same episode (e.g. the retreat). */
   relatedPlies?: number[];
   /** Structured facts used by templates and the LLM prompt. */
@@ -201,6 +241,8 @@ export interface TeachingMoment {
     /** Win% (mover) of the best move / the move played, in the find-better position. */
     betterBestWin: number;
     betterPlayedWin: number;
+    /** Centipawns (mover) of the best move in that position; optional for older saves. */
+    betterBestCp?: number;
   };
   /** For good_idea moments: multiple choice "why is this good?" */
   choice?: { prompt: string; options: string[]; correct: number; explanation: string };
@@ -234,6 +276,8 @@ export interface GameReport {
   recurring: string;
   focus: { title: string; detail: string; theme: ThemeId };
   minorNotes: ReportItem[];
+  /** One or two sentences on the shape of the game (ahead from move X, endgame, race...). */
+  story?: string;
   voice: 'template' | 'llm';
 }
 
@@ -323,6 +367,8 @@ export interface PlayerSettings {
   analysisDepth: number;
   focus?: { title: string; detail: string; theme: ThemeId; setAt: number; gameId: string };
   useLlm: boolean;
+  /** Access code for a hosted AI coach (COACH_ACCESS_TOKEN). Never included in exports. */
+  coachToken?: string;
 }
 
 export type Trend = 'improving' | 'stable' | 'worsening' | 'new' | 'insufficient';

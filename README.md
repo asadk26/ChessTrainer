@@ -24,12 +24,67 @@ Other scripts:
 | `npm test` | Unit + integration tests (Vitest) |
 | `npm run analyze-sample [-- file.pgn b]` | Run the full pipeline in Node with real Stockfish and print the coaching |
 
-Requirements: Node 18+ (tested on Node 22) and a modern browser with WebAssembly + Web Workers.
+Requirements: Node 20+ (tested on Node 22) and a modern browser with WebAssembly + Web Workers.
 
 ### First run
 
 Click **Try the sample game** (or Import → *Load sample game*). Analysis takes ~5–15 seconds.
 Then: Summary → **Start guided review** → Drills. The dashboard fills in as you add games.
+
+## Deploy it (use it from your iPhone without your computer)
+
+The app is a normal static Vite site plus two optional serverless functions for the AI coach. It is set
+up for **[Vercel](https://vercel.com)** (free Hobby plan, which is for personal use): it auto-detects
+Vite, and its functions can hold an LLM key server-side with a 60-second timeout (Netlify's 10-second
+default is too short for LLM calls).
+
+**One-time setup (about 3 minutes):**
+
+1. Push this repo to GitHub (already done if you're reading it there).
+2. Go to [vercel.com/new](https://vercel.com/new), sign in with GitHub, and **Import** the repository.
+   Vercel reads `vercel.json`: install `npm install`, build `npm run build`, output `dist/`. Don't change
+   anything; click **Deploy**.
+3. You get a URL like `https://chess-trainer-yourname.vercel.app`. Every push to the production branch
+   redeploys automatically. Other branches get preview URLs.
+
+That's all you need for the full app: Stockfish runs in the phone's browser, so no server does any
+chess work.
+
+**Optional, for the AI coach voice when hosted:** in Vercel → Project → Settings → Environment
+Variables, add `ANTHROPIC_API_KEY` (or the `OPENAI_*` variables) **and** `COACH_ACCESS_TOKEN` (a long
+random string), then redeploy. In the app, open Dashboard → Settings and enter the same access code
+once. Without `COACH_ACCESS_TOKEN` the hosted AI coach stays disabled on purpose, so your deployment
+can't be used as an open proxy to your API key.
+
+**Add it to your iPhone Home Screen:** open the URL in **Safari** → Share → **Add to Home Screen**. It
+launches full-screen with its own icon, like an app. (On Android/Chrome: menu → *Install app*.)
+
+**Moving your history to the phone:** on your computer, Dashboard → Settings → **Export data
+(JSON)**. AirDrop or email the file to yourself, then on the phone choose **Import data (JSON)** (on
+the first screen, or in Settings). Import *merges*: it adds games you don't have, keeps the newer
+analysis of games you have on both, never deletes anything, and never imports the AI access code.
+
+> **iOS note:** the Home Screen app and Safari keep *separate* storage. Import your backup into the one
+> you'll actually use (the Home Screen app is best, since iOS can clear Safari website data after weeks
+> of not visiting, but doesn't do that to Home Screen apps). Export a backup now and then.
+
+**What makes it production-safe:**
+
+* **Stockfish:** the WASM engine is copied into `public/stockfish/` at install/build time and shipped
+  as plain static files. It's the single-threaded build, so no special cross-origin isolation headers
+  are needed, and any static host serves it. `vercel.json` caches it for a day. A small service worker
+  (`public/sw.js`) keeps a copy so later analyses start instantly on mobile.
+* **Refresh and direct links:** routes are hash-based (`/#/game/<id>/review`), so refreshing any screen
+  works on any static host. `vercel.json` also rewrites unknown paths to `index.html`, and the app
+  converts path-style URLs (`/game/...`) to hash routes.
+* **Secrets:** browser code never reads API keys or `process.env`, and a test enforces that. Keys
+  live only in Vercel environment variables (or your local `.env`). The coaching system prompt is fixed
+  server-side; the browser only sends game facts.
+* **PWA:** `manifest.webmanifest`, icons, `apple-touch-icon`, standalone display, safe-area padding
+  for the iPhone notch. There's no offline mode beyond the cached engine yet.
+
+**Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
+domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
 ## User flow
 
@@ -57,18 +112,23 @@ src/
   domain/        types.ts (all persisted shapes), categories.ts (categories, themes, focus texts)
   chess/         pgn.ts (parsing/normalising), board.ts (material, attacks, loose pieces, lines)
   engine/        uci.ts (UCI protocol, queueing), browserEngine.ts (Web Worker), types.ts (Engine interface)
-  analysis/      evaluation.ts   cp/mate → win%, eval change from the mover's POV
+  analysis/      evaluation.ts   cp/mate → win%, eval change, practical drop (cp-based when ahead)
                  analyzeGame.ts  engine over every position → MoveEval facts
+                 context.ts      per-move context: ahead/behind, king pressure, endgame, pawn race
                  detectors.ts    deterministic pattern detectors → Findings
                  moments.ts      significance layer → TeachingMoments
                  pipeline.ts     orchestration + history (prior games)
-  coach/         templates.ts (built-in coaching voice), report.ts (summary), llmCoach.ts + llmClient.ts
+  coach/         templates.ts (built-in voice), report.ts (summary, story, recurrence), llmCoach.ts,
+                 llmClient.ts, systemPrompt.ts
   drills/        generate.ts
   profile/       identify.ts (who is "me"), profile.ts (cross-game aggregation)
   storage/       repository.ts (CoachRepository interface + localStorage implementation)
   ui/            React screens/components
-server/          llm.ts (providers), coachPlugin.ts (Vite middleware), nodeEngine.ts (Stockfish for tests/CLI)
-tests/           Vitest suites + recorded Stockfish output for the sample game
+server/          llm.ts (providers), coachApi.ts (shared proxy logic + access token), coachPlugin.ts (Vite
+                 middleware for dev/preview), nodeEngine.ts (Stockfish for tests/CLI)
+api/coach/       status.ts, complete.ts — Vercel Functions wrapping server/coachApi.ts
+public/          manifest.webmanifest, sw.js, icons/ (Stockfish is copied in at install time)
+tests/           Vitest suites + recorded Stockfish output (Node and browser) for the test games
 ```
 
 The data flow is a straight pipeline:
@@ -76,8 +136,9 @@ The data flow is a straight pipeline:
 ```
 PGN → plies (FEN before/after each move)
     → Stockfish: every position, MultiPV 3            (objective facts)
-    → MoveEval: eval before/after, win% drop, best line, reply line, material after lines
-    → detectors: Findings (category, severity, evidence, structured facts)
+    → MoveEval: eval before/after, win% drop, practical drop, best line, reply line, material after lines
+    → context: far ahead? behind? king under pressure? attacking? endgame? pawn race?
+    → detectors: Findings (category, severity, confidence, evidence, structured facts)
     → significance layer: ≤3 mistake moments + 1 "good idea" moment
     → report (template voice) + drills
     → optional LLM rewrite of the *language only*, validated against the facts
@@ -102,8 +163,24 @@ tactics), mate threats. **What it is not used for:** deciding what's worth teach
 ## How coaching patterns are classified
 
 Detectors (`src/analysis/detectors.ts`) are small, conservative rules over board geometry + engine
-facts. Each produces a `Finding` with a severity (1 = soft note, 2 = notable, 3 = serious), plain-English
-evidence and structured facts for the templates/LLM. Examples:
+facts. Each produces a `Finding` with a severity (1 = soft note, 2 = notable, 3 = serious), a
+**confidence** (high / medium / low), plain-English evidence, and structured facts for the templates
+and the LLM.
+
+**Practical drop, not just win%.** In balanced positions the cost of a move is measured by the drop in
+win probability. But once you're clearly ahead (+3 or more, or 3+ points of material up), win% flattens:
+going from +8 to +5 barely changes it, even though you've given back three pawns' worth. In those
+positions the coach also measures centipawn loss (20cp ≈ 1 point), and losing a whole piece counts as
+serious whatever the eval says. The exception: if the position stays crushing and no material is
+lost (e.g. missing a mate-in-4 while a queen up), it isn't treated as a lesson.
+
+**Context.** For every one of your moves the coach knows whether you were materially far ahead, behind,
+under king pressure, attacking an exposed king, in an endgame, or in a pawn race. It uses settled
+material, not the mid-exchange count. Context decides what's instructive: when far ahead, giving
+material back and allowing counterplay matter much more than a lost tempo, and a bishop going there
+and back is not the lesson.
+
+Examples:
 
 | Category | Rule (simplified) |
 | --- | --- |
@@ -117,19 +194,43 @@ evidence and structured facts for the templates/LLM. Examples:
 | Releasing central tension | Pawn takes pawn in the centre, immediately recaptured — soft note unless costly |
 | Opening the centre vs. uncastled king *(strength)* | A central pawn break while their king is still in the centre and yours is castled |
 | Missed chance vs. exposed king | Their king is in the centre and the best move was a check or a central break |
-| King safety, development, trades, failure to simplify, endgame slips, clock usage | See source |
+| Giving material back when ahead | Ahead by 3+, your move loses ≥2 points of material (serious if the practical drop is ≥8 or a whole piece goes) |
+| Unnecessary complications | Ahead, and you hand back more than you take (e.g. an exchange sacrifice) when a simple move kept everything |
+| Hunting material instead of consolidating | Ahead, grabbing pawns with the queen or a lone piece while pieces are undeveloped and/or the king is in the centre |
+| Allowing avoidable counterplay | Ahead, and your move lets the opponent start checking your king or activate pieces against it (flags forced-draw situations) |
+| Not trading down when ahead | Ahead with queens on, a near-best engine line trades queens (or captures a piece) and you kept everything on |
+| Endgame / pawn race | A practical drop of ≥12 in an endgame; if a passed pawn exists and the better move supports it, the lesson is about the pawn |
+| King safety, development, trades, clock usage | See source. Development and king safety are framed differently when you were already ahead |
 
-**Significance layer** (`src/analysis/moments.ts`): `score = Σ category weight × severity × 10 +
-0.8 × win% drop (ignored below 6) + 5 × prior games with the same category (max 3)`. Moments need a
+**Credits** (strengths) include: castling early, development, central control, no hanging pieces,
+opening lines against an uncastled king, **winning genuinely free material** (net gain compared with
+before the opponent's last move, so recaptures don't count), **simplifying when ahead**, **finding a
+forcing defensive resource** (the only move that holds, under pressure), **creating a dangerous passed
+pawn** (and promoting it), and **neutralising counterplay** (e.g. trading queens to end an attack).
+
+**Confidence.** *High* means engine-backed and concrete (material lost, a perpetual allowed, a missed
+tactic). *Medium* means credible but softer. *Low* means a speculative pattern match: a round trip while
+far ahead, a check that merely wasn't the best move, a "missed attack" with a small drop. Low-confidence
+findings are stored but **never** appear in the summary, teaching moments, focus, or cross-game
+pattern counts.
+
+**Significance layer** (`src/analysis/moments.ts`): `score = Σ category weight × severity × 10 ×
+(1 for high confidence, 0.75 for medium) + 0.8 × practical drop (ignored below 6) + 5 × prior games with
+the same category (max 3)`, counting only credible findings. Moments need a
 score ≥18; the top 3 are kept plus one positive "good idea". So 11.Nb5 in the sample (engine drop ≈1%)
 becomes a moment because of the round trip, while tiny engine preferences never do.
 
 **Themes and focus**: categories roll up into themes (e.g. *active-looking moves without a follow-up*,
-*loose pieces*, *opponent threats*). The next-game focus is the theme with the highest
-weight in this game plus recurrence in your last games, mapped to one concrete behaviour.
+*converting when ahead*, *loose pieces*). A theme has **strong evidence** in a game when it has one
+high-confidence finding or two credible ones. The next-game focus is chosen only from strongly evidenced
+themes in *this* game. History can tip the balance between them, but can never promote a weak match.
 
-**Honesty about patterns**: one game = "possible tendency"; the report and dashboard only say
-"appeared in N of your last M games" when the data says so. Severity-1 notes never form a pattern.
+**Honesty about patterns**: one game = "possible tendency". The report and dashboard say "appeared in
+N of your last M games" only when the current game has strong evidence and earlier games had credible
+findings of the same theme. If an old pattern only faintly resembles something in a new game, it is
+left out, and the report notes that it "didn't clearly show up this time". Severity-1 notes never form a
+pattern. The summary also opens with a short **story** of the game (e.g. "You were up a rook from move
+9, but the lead shrank to a pawn by move 35…").
 
 ## LLM provider setup (optional)
 
@@ -147,14 +248,17 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-Keys are read only by the local Vite dev/preview server (`server/coachPlugin.ts` exposes
-`/api/coach/status` and `/api/coach/complete`); they are never bundled into browser code. The Anthropic
-provider uses the official SDK with low effort and server-side refusal fallbacks enabled.
+Keys are read only server-side: by the local Vite dev/preview server (`server/coachPlugin.ts`) or, when
+hosted, by the Vercel Functions in `api/coach/` (see *Deploy it*). Both use `server/coachApi.ts`, which
+exposes `/api/coach/status` and `/api/coach/complete`, fixes the system prompt server-side, caps prompt
+size, and (when hosted) requires `COACH_ACCESS_TOKEN`. Keys are never bundled into browser code. The
+Anthropic provider uses the official SDK with low effort and server-side refusal fallbacks enabled.
 
 The LLM is **not** the chess engine. It receives structured, verified context — rating, PGN, FENs,
 played/best moves, lines, evals, material changes, findings, the current weakness profile — and is asked
 only to phrase the coaching. Its JSON response is validated: any text that mentions a piece move or
-capture not present in the game/engine lines is discarded and the template text is kept. Board arrows
+capture not present in the game/engine lines is discarded and the template text is kept. Low-confidence
+findings are not sent to the LLM at all, and the prompt includes the per-move context. Board arrows
 and highlights always come from the deterministic layer.
 
 ## Where data is stored
@@ -171,14 +275,19 @@ Browser `localStorage`, keys prefixed `chesscoach:v1:`:
 The player profile is *derived* (recomputed from stored findings), so it never drifts. All access goes
 through the async `CoachRepository` interface; moving to IndexedDB or Supabase/Postgres means writing one
 class (games → table with JSONB for findings/moments/report; drills; drill_attempts; player_settings).
-Dashboard → Settings → *Export data* downloads a JSON backup.
+Dashboard → Settings → *Export data* downloads a JSON backup; *Import data* merges one back in (see *Deploy
+it* for moving between devices). The AI access code is stored locally and excluded from exports.
 
 ## Tests
 
 `npm test` covers PGN parsing, board-state reconstruction, evaluation-change maths, UCI parsing,
 player identification, recurring-pattern aggregation, the coaching pipeline on the sample game
 (using recorded Stockfish output, so it's deterministic), LLM output validation/merging, storage
-round-trips, and one integration test that runs real Stockfish over the sample game.
+round-trips and backup merging, practical drop and position context, coaching a game where you're far
+ahead (from recorded Node *and* browser Stockfish output, so the conclusions are checked for engine
+variance), recurring patterns not being forced onto new games, the hosted LLM proxy and Vercel
+functions (access token, fixed system prompt, size limits), a check that browser code never touches
+secrets, and one integration test that runs real Stockfish over the sample game.
 
 ## Known limitations
 
@@ -191,13 +300,17 @@ round-trips, and one integration test that runs real Stockfish over the sample g
   replies are marked as "possible, but…".
 * localStorage is per-browser and limited to ~5 MB (roughly a few hundred analyzed games).
 * Clock analysis only works when the PGN includes `%clk` comments.
-* The LLM endpoint exists only when running via `npm run dev`/`npm run preview`; a static deploy of
-  `dist/` falls back to built-in coaching.
+* The hosted AI coach needs Vercel (or the local dev/preview server). Other static hosts fall back to
+  built-in coaching.
+* Data lives per browser. Moving between devices is manual (Export → Import), and on iOS the Home
+  Screen app and Safari have separate storage.
+* "Context" heuristics (king pressure, race) are approximations; they steer what's highlighted, not the
+  engine facts.
 
 ## Recommended next improvements
 
 1. Import directly from Chess.com/Lichess usernames (public APIs) and batch-analyze recent games.
-2. IndexedDB or Supabase storage; sync across devices.
+2. IndexedDB or Supabase storage; automatic sync across devices (replacing manual export/import).
 3. Spaced repetition for drills (schedule misses sooner) and drills pulled from *recurring* categories.
 4. More detectors: overloaded defenders, pins/forks taxonomy, pawn-structure basics, rook activity.
 5. Per-moment "ask the coach" follow-up questions via the LLM, grounded on the same facts.

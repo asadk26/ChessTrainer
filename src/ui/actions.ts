@@ -1,11 +1,11 @@
 // App-level operations that combine storage, engine and coaching.
 import type { Color, ParsedGame, StoredGame } from '../domain/types';
-import { repo } from '../storage/repository';
+import { repo, type ImportSummary } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames } from '../analysis/pipeline';
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
-import { buildCoachPrompt, COACH_SYSTEM_PROMPT, extractJson, mergeLlmOutput } from '../coach/llmCoach';
+import { buildCoachPrompt, extractJson, mergeLlmOutput } from '../coach/llmCoach';
 import { getLlmStatus, llmComplete } from '../coach/llmClient';
 import { positionCp, winPercent } from '../analysis/evaluation';
 
@@ -106,7 +106,7 @@ export async function enrichWithLlm(gameId: string): Promise<StoredGame> {
   const prior = priorGames(game, all);
   const profile = aggregateProfile(prior.map((p) => ({ gameId: p.gameId, playedAt: p.playedAt, findings: p.findings })));
   const settings = await repo.getSettings();
-  const text = await llmComplete(COACH_SYSTEM_PROMPT, buildCoachPrompt(game, profile, settings.rating));
+  const text = await llmComplete(buildCoachPrompt(game, profile, settings.rating), settings.coachToken);
   const { report, moments } = mergeLlmOutput(game, extractJson(text));
   const updated = { ...game, report, moments };
   await repo.saveGame(updated);
@@ -120,12 +120,31 @@ export async function markMomentDone(gameId: string, momentId: string) {
   await repo.saveGame({ ...game, completedMomentIds: [...game.completedMomentIds, momentId] });
 }
 
-/** Win% for the mover after a candidate move, using the live engine. Undefined if unavailable. */
-export async function evaluateMoveWin(fenAfter: string, depth = 12): Promise<number | undefined> {
+/** Mover's view of a candidate move (win% and centipawns), from the live engine. Undefined if unavailable. */
+export async function evaluateMove(fenAfter: string, depth = 12): Promise<{ win: number; cp: number } | undefined> {
   const engine = await getBrowserEngine();
   if (!engine) return undefined;
   const pos = await engine.analyse(fenAfter, { depth, multiPv: 1 });
-  return 100 - winPercent(positionCp(pos));
+  const cp = -positionCp(pos);
+  return { win: winPercent(cp), cp };
+}
+
+export { closeToBest } from '../analysis/evaluation';
+
+/** Merge a backup file (from Export) into this device's data. */
+export async function importBackup(file: File): Promise<ImportSummary> {
+  const summary = await repo.importAll(await file.text());
+  await syncFocus();
+  return summary;
+}
+
+export async function exportBackup() {
+  const blob = new Blob([await repo.exportAll()], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `chess-coach-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 export async function deleteGame(id: string) {

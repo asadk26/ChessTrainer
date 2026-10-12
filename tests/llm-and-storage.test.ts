@@ -77,3 +77,46 @@ describe('local storage repository', () => {
     expect(await r2.listDrills()).toHaveLength(0);
   });
 });
+
+describe('backup import (moving between devices)', () => {
+  const drill = (id: string) => ({ id, gameId: game.id, ply: 1, type: 'choose_plan' as const, category: 'opened_vs_king' as const, fen: 'x', orientation: 'w' as const, prompt: 'p', explanation: 'e', createdAt: 1 });
+
+  it('merges instead of replacing, and reports what changed', async () => {
+    const laptop = new LocalStorageRepository(memoryStore());
+    await laptop.saveGame(game);
+    await laptop.saveGame({ ...game, id: 'only-on-laptop' });
+    await laptop.replaceDrillsForGame(game.id, [drill('d1')]);
+    await laptop.addAttempt({ drillId: 'd1', at: 5, correct: false });
+    await laptop.saveSettings({ ...(await laptop.getSettings()), usernames: { chunkmonkey420: 2 } });
+
+    const phone = new LocalStorageRepository(memoryStore());
+    await phone.saveGame({ ...game, id: 'only-on-phone' });
+    await phone.addAttempt({ drillId: 'd1', at: 5, correct: false });
+    await phone.saveSettings({ ...(await phone.getSettings()), usernames: { chunkmonkey420: 1, other: 1 } });
+
+    const summary = await phone.importAll(await laptop.exportAll());
+    expect(summary).toMatchObject({ gamesAdded: 2, gamesUpdated: 0, gamesKept: 0, drills: 1, attempts: 0 });
+    expect((await phone.listGames()).map((g) => g.id).sort()).toEqual([game.id, 'only-on-laptop', 'only-on-phone']);
+    expect(await phone.listAttempts()).toHaveLength(1); // duplicate attempt not doubled
+    expect((await phone.getSettings()).usernames).toEqual({ chunkmonkey420: 2, other: 1 });
+
+    // Importing the same backup again changes nothing.
+    expect(await phone.importAll(await laptop.exportAll())).toMatchObject({ gamesAdded: 0, gamesKept: 2, drills: 0, attempts: 0 });
+  });
+
+  it('keeps the newer analysis of a game that exists on both devices', async () => {
+    const a = new LocalStorageRepository(memoryStore());
+    const b = new LocalStorageRepository(memoryStore());
+    const newer = { ...game, analysis: { ...game.analysis!, analyzedAt: 2000 }, report: { ...game.report!, headline: 'newer' } };
+    await a.saveGame({ ...game, analysis: { ...game.analysis!, analyzedAt: 1000 } });
+    await b.saveGame(newer);
+    expect((await a.importAll(await b.exportAll())).gamesUpdated).toBe(1);
+    expect((await a.getGame(game.id))?.report?.headline).toBe('newer');
+  });
+
+  it('rejects files that are not backups', async () => {
+    const r = new LocalStorageRepository(memoryStore());
+    await expect(r.importAll('not json')).rejects.toThrow(/valid JSON/);
+    await expect(r.importAll('{"hello":1}')).rejects.toThrow(/Chess Coach backup/);
+  });
+});

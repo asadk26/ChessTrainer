@@ -3,6 +3,7 @@ import type { Drill, PositionEval, StoredGame } from '../domain/types';
 import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
+import { buildContexts } from './context';
 import { buildMoments, type PriorGameFindings } from './moments';
 import { buildReport } from '../coach/report';
 import { generateDrills } from '../drills/generate';
@@ -31,12 +32,13 @@ export function priorGames(game: StoredGame, all: StoredGame[]): PriorGameFindin
 /** Deterministic coaching from stored engine output (no engine needed). */
 export function coachFromPositions(game: StoredGame, positions: PositionEval[], prior: PriorGameFindings[]): { game: StoredGame; drills: Drill[] } {
   const moves = buildMoveEvals(game.plies, positions);
+  const contexts = buildContexts(game.plies, moves, game.userColor);
   const findings = detectFindings(
-    { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: game.headers.result },
+    { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: game.headers.result, contexts },
     game.headers.timeControl,
   );
   const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior });
-  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior });
+  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts });
   const drills = generateDrills(game.id, moments);
   return {
     game: {

@@ -1,7 +1,7 @@
 import type { MoveEval, PlyRecord, PositionEval } from '../domain/types';
 import { lineToSan, materialAfterLine, materialBalance } from '../chess/board';
 import type { Engine } from '../engine/types';
-import { MATE_CP, evalChange } from './evaluation';
+import { MATE_CP, evalChange, practicalDrop } from './evaluation';
 
 export interface EngineAnalysisResult {
   positions: PositionEval[];
@@ -36,6 +36,7 @@ export function buildMoveEvals(plies: PlyRecord[], positions: PositionEval[]): M
     const replyLineUci = reply ? reply.pv.slice(0, 8) : [];
     const replyLineSan = reply ? lineToSan(p.fenAfter, reply.pv, 6) : [];
     const materialBefore = materialBalance(p.fenBefore, p.color);
+    const materialAfterReply = reply ? materialAfterLine(p.fenAfter, reply.pv, p.color) : materialBalance(p.fenAfter, p.color);
     return {
       ply: p.ply,
       color: p.color,
@@ -49,7 +50,8 @@ export function buildMoveEvals(plies: PlyRecord[], positions: PositionEval[]): M
       replyLineUci,
       isBest: !!bestUci && bestUci === p.uci,
       materialBefore,
-      materialAfterReply: reply ? materialAfterLine(p.fenAfter, reply.pv, p.color) : materialBalance(p.fenAfter, p.color),
+      materialAfterReply,
+      practicalDrop: practicalDrop({ ...change, materialBefore, materialAfterReply }),
       materialAfterBest: best ? materialAfterLine(p.fenBefore, best.pv, p.color) : materialBefore,
       mateThreatAgainst: change.cpAfter <= -(MATE_CP - 100),
     } satisfies MoveEval;

@@ -8,22 +8,7 @@ import type { ProfileSummary } from '../domain/types';
 import { describeFrequency } from '../profile/profile';
 import { moveLabel } from '../chess/pgn';
 
-export const COACH_SYSTEM_PROMPT = `You are a warm, practical chess coach reviewing a game with an adult improver rated around the rating given (typically 700–1100).
-
-Your job is to turn verified chess facts into short, human coaching. You are NOT the chess engine:
-- Every chess fact you need (moves, best moves, lines, material, threats) is in the input. Never invent moves, variations, or tactics that are not in the input.
-- Refer to moves exactly as written in the input (SAN like Nb5, Bb5+, exd6).
-- Do not quote engine numbers or centipawns. Do not say "inaccuracy", "mistake according to the engine", or "Stockfish prefers".
-- Ignore tiny engine preferences; focus on the patterns and moments given.
-
-Coaching style:
-1. Give the understandable reason the player probably made the move.
-2. Explain the concrete consequence in plain English.
-3. State a reusable lesson.
-4. Turn it into one behaviour for the next game.
-Be concise and conversational. Use "you". Prefer short sentences. Do not call something a pattern unless the history says it appeared in multiple games; use wording like "possible tendency" or "this has now appeared in 3 of your last 5 games" exactly as supported by the data.
-
-Respond with a single JSON object and nothing else.`;
+export { COACH_SYSTEM_PROMPT } from './systemPrompt';
 
 export interface LlmCoachOutput {
   headline?: string;
@@ -40,12 +25,16 @@ export function buildCoachPrompt(game: StoredGame, profile: ProfileSummary, rati
     player: { rating, color: game.userColor === 'w' ? 'White' : 'Black', name: game.userName },
     game: { white: game.headers.white, black: game.headers.black, result: game.headers.result, pgn: game.plies.map((p) => moveLabel(p)).join(' ') },
     profile_before_this_game: profile.categories.slice(0, 6).map((c) => ({ category: c.label, frequency: describeFrequency(c), trend: c.trend })),
-    findings: game.findings.map((f) => ({
+    game_story: game.report?.story,
+    // Speculative (low-confidence) findings are deliberately left out.
+    findings: game.findings.filter((f) => f.confidence !== 'low').map((f) => ({
       kind: f.kind,
       category: categoryLabel(f.category),
       move: f.ply > 0 ? moveLabel(game.plies[f.ply - 1]) : 'whole game',
       severity: f.severity === 1 ? 'soft observation' : f.severity === 2 ? 'notable' : 'serious',
       evidence: f.evidence,
+      confidence: f.confidence ?? 'medium',
+      context: f.facts.context,
       follow_up_moves: f.relatedPlies?.map((p) => moveLabel(game.plies[p - 1])),
     })),
     teaching_moments: game.moments.map((m) => {

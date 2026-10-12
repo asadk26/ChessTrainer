@@ -7,7 +7,8 @@ import { categoryLabel } from '../../domain/categories';
 import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
-import { evaluateMoveWin, markMomentDone } from '../actions';
+import { closeToBest, evaluateMove, markMomentDone } from '../actions';
+import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
 import { navigate } from '../store';
 
 const uciArrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
@@ -27,7 +28,7 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
   const step = m.steps[stepIdx];
   const mover = m.moverColor;
   const opp = other(mover);
-  const engineReplyFirst = m.category === 'blunder' || m.category === 'missed_threat' || m.category === 'calculation';
+  const engineReplyFirst = ENGINE_REPLY_CATEGORIES.includes(m.category);
   const expectedReply = engineReplyFirst ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
   const expectedReplySan = expectedReply ? playLine(m.fenAfter, [expectedReply])[0]?.san : undefined;
   const betterPlayed = game.plies[m.betterPly - 1];
@@ -87,13 +88,13 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
       return true;
     }
     setBetter({ uci, san, fen, verdict: 'checking' });
-    void evaluateMoveWin(fen).then((win) => {
-      const { betterBestWin: bestW, betterPlayedWin: playedW } = m.numbers;
+    void evaluateMove(fen).then((res) => {
+      const { betterBestWin: bestW, betterPlayedWin: playedW, betterBestCp } = m.numbers;
       let verdict: BetterVerdict = 'wrong';
       let note: string | undefined;
-      if (win === undefined) note = "The engine isn't available to check this move.";
-      else if (win >= bestW - 7) verdict = 'correct';
-      else if (win >= playedW + 8) verdict = 'ok';
+      if (!res) note = "The engine isn't available to check this move.";
+      else if (closeToBest(res, { win: bestW, cp: betterBestCp ?? -10000 })) verdict = 'correct';
+      else if (res.win >= playedW + 8) verdict = 'ok';
       setBetter({ uci, san, fen, verdict, note });
     });
     return true;

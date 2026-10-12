@@ -1,24 +1,36 @@
 // Builds the concise post-game coaching report from findings + history.
-import type { CategoryId, Color, Finding, GameReport, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
+import type { CategoryId, Color, Finding, GameReport, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
-import { COLOR_NAME, other } from '../chess/board';
+import { COLOR_NAME, materialPhrase, other } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import type { PriorGameFindings } from '../analysis/moments';
+import { summarizePhases } from '../analysis/context';
 
 export interface ReportInput {
   plies: PlyRecord[];
   findings: Finding[];
   userColor: Color;
   prior: PriorGameFindings[];
+  contexts?: Map<number, PlyContext>;
 }
 
-interface ThemeGroup {
+export interface ThemeGroup {
   theme: ThemeId;
   findings: Finding[];
+  /** Weight × severity × confidence. */
   score: number;
+  /** Enough evidence to make claims about it: one high-confidence finding, or two medium ones. */
+  strong: boolean;
 }
 
 const RECENT = 5;
+
+/** Low-confidence findings are speculative: kept in storage, never used for coaching claims. */
+export const isCredible = (f: Finding) => f.confidence !== 'low';
+const confWeight = (f: Finding) => (f.confidence === 'high' ? 1 : f.confidence === 'low' ? 0 : 0.6);
+
+/** A finding that can count toward a pattern (in this game or as history). */
+export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f);
 
 function plyLabel(plies: PlyRecord[], ply: number): string {
   const p = plies[ply - 1];
@@ -32,7 +44,7 @@ export function themeOf(category: string): ThemeId | undefined {
 export function groupByTheme(findings: Finding[]): ThemeGroup[] {
   const groups = new Map<ThemeId, Finding[]>();
   for (const f of findings) {
-    if (f.kind !== 'weakness' || f.severity < 2) continue;
+    if (!countsAsPattern(f)) continue;
     const t = themeOf(f.category);
     if (!t) continue;
     groups.set(t, [...(groups.get(t) ?? []), f]);
@@ -41,7 +53,8 @@ export function groupByTheme(findings: Finding[]): ThemeGroup[] {
     .map(([theme, fs]) => ({
       theme,
       findings: fs,
-      score: fs.reduce((a, f) => a + CATEGORIES[f.category as CategoryId].weight * f.severity, 0),
+      score: fs.reduce((a, f) => a + CATEGORIES[f.category as CategoryId].weight * f.severity * confWeight(f), 0),
+      strong: fs.some((f) => f.confidence === 'high') || fs.length >= 2,
     }))
     .sort((a, b) => b.score - a.score);
 }
@@ -68,6 +81,25 @@ function joinList(items: string[]): string {
   return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
 }
 
+/** Short clause per conversion finding, for "you made it harder: …" sentences. */
+function conversionClause(f: Finding, plies: PlyRecord[], opp: string): string {
+  const mv = plyLabel(plies, f.ply);
+  switch (f.category) {
+    case 'hunting_material':
+      return `${mv} grabbed another pawn before finishing development`;
+    case 'gave_back_material':
+      return `${mv} gave back ${f.facts.victimPiece ? `your ${f.facts.victimPiece}` : 'material'}`;
+    case 'unnecessary_complications':
+      return `${mv} returned material for complications`;
+    case 'allowed_counterplay':
+      return f.facts.drawish ? `${mv} let ${opp} start checking your king with a draw in hand` : `${mv} let ${opp}'s pieces come alive against your king`;
+    case 'failure_to_simplify':
+      return `${mv} kept the queens on when a trade was there`;
+    default:
+      return `${mv}: ${lowerFirst(f.evidence)}`;
+  }
+}
+
 function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): string {
   const eps = episodes(group, plies);
   const opp = COLOR_NAME[other(userColor)];
@@ -77,6 +109,12 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
       const n = eps.length;
       return `${n > 1 ? 'Several moves looked active' : 'A move looked active'} but had no follow-up: ${joinList(labels)}. ${n > 1 ? 'Each time' : 'There'}, ${opp}'s simplest reply left your piece with nothing to do, so you spent tempi without improving your position.`;
     }
+    case 'conversion': {
+      const lead = Math.max(...group.findings.map((f) => Number(f.facts.material ?? f.facts.materialBefore ?? 0)));
+      const top = [...eps].sort((a, b) => b.finding.severity - a.finding.severity || a.finding.ply - b.finding.ply).slice(0, 4);
+      const clauses = top.sort((a, b) => a.finding.ply - b.finding.ply).map((e) => conversionClause(e.finding, plies, opp));
+      return `${lead >= 3 ? `You were up ${materialPhrase(lead)}, but you` : 'When ahead, you'} made the win harder than it needed to be: ${joinList(clauses)}.`;
+    }
     case 'tactics':
       return [...eps]
         .sort((a, b) => b.finding.severity - a.finding.severity)
@@ -84,6 +122,9 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
         .join(' ');
     case 'loose_pieces':
     case 'opponent_threats':
+    case 'endgame':
+    case 'opening_development':
+    case 'king_safety':
       return eps.map((e) => e.finding.evidence).join(' ');
     default:
       return `${THEMES[group.theme].label}: ${eps.map((e) => lowerFirst(e.finding.evidence)).join(' ')}`;
@@ -91,10 +132,14 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
 }
 
 function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color): ReportItem[] {
-  const strengths = findings.filter((f) => f.kind === 'strength');
+  const strengths = findings.filter((f) => f.kind === 'strength' && isCredible(f));
   const has = (id: StrengthId) => strengths.find((f) => f.category === id);
   const items: ReportItem[] = [];
   const opp = COLOR_NAME[other(userColor)];
+  const plyList = (f: Finding) => [f.ply, ...(f.relatedPlies ?? [])].filter((p) => p > 0);
+  const push = (f: Finding | undefined, text: (f: Finding) => string) => {
+    if (f) items.push({ text: text(f), category: f.category as StrengthId, plies: plyList(f) });
+  };
 
   const opening = [has('center_control'), has('developed_pieces'), has('castled_early')].filter(Boolean) as Finding[];
   if (opening.length >= 2) {
@@ -105,21 +150,17 @@ function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color)
     const k = has('castled_early');
     if (k) parts.push(`castled on move ${k.facts.move}`);
     items.push({ text: `Your opening fundamentals were solid: you ${joinList(parts)}.`, category: opening[0].category as StrengthId, plies: opening.map((f) => f.ply).filter((p) => p > 0) });
-  } else if (opening.length === 1) {
-    items.push({ text: STRENGTHS[opening[0].category as StrengthId].phrase, category: opening[0].category as StrengthId });
   }
 
-  const brk = has('opened_vs_king');
-  if (brk) {
-    items.push({
-      text: `${plyLabel(plies, brk.ply)} was a good idea: ${opp}'s king was still on ${brk.facts.oppKing}, and you started opening lines toward it.`,
-      category: 'opened_vs_king',
-      plies: [brk.ply],
-    });
-  }
-  const pun = has('punished_mistake');
-  if (pun) items.push({ text: `${pun.evidence} When your opponent slipped, you noticed.`, category: 'punished_mistake', plies: [pun.ply] });
+  push(has('won_free_material'), (f) => `${f.evidence} When your opponent left something hanging, you noticed.`);
+  push(has('passed_pawn'), (f) => `${f.evidence} In the endgame that pawn was worth more than any piece.`);
+  push(has('neutralized_counterplay'), (f) => `${f.evidence} Trading off the attackers was exactly right.`);
+  push(has('opened_vs_king'), (f) => `${plyLabel(plies, f.ply)} was a good idea: ${opp}'s king was still on ${f.facts.oppKing}, and you started opening lines toward it.`);
+  push(has('defensive_resource'), (f) => f.evidence);
+  push(has('simplified_when_ahead'), (f) => `${f.evidence} Trades make a material lead easier to convert.`);
+  push(has('punished_mistake'), (f) => `${f.evidence} When your opponent slipped, you noticed.`);
   if (has('no_hanging')) items.push({ text: "You didn't leave any pieces hanging — that's the most important habit at this level.", category: 'no_hanging' });
+  if (items.length < 2 && opening.length === 1) items.push({ text: STRENGTHS[opening[0].category as StrengthId].phrase, category: opening[0].category as StrengthId });
   if (items.length < 2 && has('converted_advantage')) items.push({ text: STRENGTHS.converted_advantage.phrase, category: 'converted_advantage' });
   return items.slice(0, 3);
 }
@@ -130,70 +171,129 @@ const SOFT_NOTES: Partial<Record<CategoryId, (f: Finding) => string>> = {
   premature_capture: (f) => `${f.evidence} Not a big deal, but worth noticing.`,
   time_management: (f) => f.evidence,
   early_queen: (f) => f.evidence,
+  failure_to_simplify: (f) => `${f.evidence} Not costly this time, but a good habit when ahead.`,
+  unnecessary_complications: (f) => `${f.evidence} It didn't cost much, but simple is safer.`,
+  hunting_material: (f) => f.evidence,
+  gave_back_material: (f) => f.evidence,
 };
 
+function recentOf(prior: PriorGameFindings[]) {
+  return [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, RECENT - 1);
+}
+
+function priorHasTheme(g: PriorGameFindings, theme: ThemeId) {
+  return g.findings.some((f) => countsAsPattern(f) && themeOf(f.category) === theme);
+}
+
 function recurringText(groups: ThemeGroup[], plies: PlyRecord[], prior: PriorGameFindings[]): string {
-  const recentPrior = [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, RECENT - 1);
-  if (groups.length === 0) {
-    return recentPrior.length
-      ? 'No recurring weakness showed up in this game. Keep doing what you did.'
-      : "This is your first analyzed game, so there's no pattern to compare against yet.";
+  const recentPrior = recentOf(prior);
+  const strong = groups.filter((g) => g.strong);
+  const goodNews = (): string => {
+    const current = new Set(strong.map((g) => g.theme));
+    const counts = new Map<ThemeId, number>();
+    for (const g of recentPrior) {
+      new Set(g.findings.filter(countsAsPattern).map((f) => themeOf(f.category)).filter(Boolean) as ThemeId[]).forEach((t) =>
+        counts.set(t, (counts.get(t) ?? 0) + 1),
+      );
+    }
+    const improved = [...counts.entries()].filter(([t, n]) => n >= 2 && !current.has(t)).sort((a, b) => b[1] - a[1])[0];
+    return improved
+      ? ` Good sign: ${THEMES[improved[0]].label.toLowerCase()} (clear in ${improved[1]} of your previous ${recentPrior.length} games) didn't clearly show up this time.`
+      : '';
+  };
+
+  if (strong.length === 0) {
+    if (!recentPrior.length) return "This is your first analyzed game, so there's no pattern to compare against yet.";
+    return `Nothing in this game clearly repeats an earlier pattern.${goodNews()}`;
   }
-  const top = groups[0];
+  // Prefer a strong theme that actually has history; otherwise the strongest one.
+  const withHistory = strong.find((g) => recentPrior.some((p) => priorHasTheme(p, g.theme)));
+  const top = withHistory ?? strong[0];
   const themeLabel = THEMES[top.theme].label.toLowerCase();
   const eps = episodes(top, plies);
   const inThisGame = eps.length > 1 ? `In this game, ${joinList(eps.map((e) => e.label))} all fit that pattern.` : `In this game, ${eps[0].label} fits it.`;
   if (recentPrior.length === 0) {
     return `This is your first analyzed game, so nothing counts as a pattern yet. ${inThisGame} I'll watch whether this shows up again — one game isn't a trend.`;
   }
-  const withTheme = recentPrior.filter((g) => g.findings.some((f) => f.kind === 'weakness' && f.severity >= 2 && themeOf(f.category) === top.theme));
+  const withTheme = recentPrior.filter((g) => priorHasTheme(g, top.theme));
   const total = recentPrior.length + 1;
   let text: string;
   if (withTheme.length === 0) {
     text = `${capitalise(themeLabel)} didn't show up in your previous ${recentPrior.length === 1 ? 'game' : `${recentPrior.length} games`}, so treat this as a possible tendency, not a pattern. ${inThisGame}`;
   } else if (withTheme.length === 1) {
-    const ex = withTheme[0];
-    text = `Possible tendency: something similar happened in your game ${ex.label}. ${inThisGame} That's 2 of your last ${total} games — worth watching.`;
+    text = `Possible tendency: something similar happened in your game ${withTheme[0].label}. ${inThisGame} That's 2 of your last ${total} games — worth watching.`;
   } else {
-    text = `This has now appeared in ${withTheme.length + 1} of your last ${total} games: you again ${THEMES[top.theme].clause}. ${inThisGame} This is becoming more important than opening theory for you.`;
+    text = `This has now appeared in ${withTheme.length + 1} of your last ${total} games: you again ${THEMES[top.theme].clause.replace(/^you /, '')}. ${inThisGame} This is becoming more important than opening theory for you.`;
   }
-  // Good news: something common before that didn't appear this time.
-  const currentThemes = new Set(groups.map((g) => g.theme));
-  const priorCounts = new Map<ThemeId, number>();
-  for (const g of recentPrior) {
-    const ts = new Set(g.findings.filter((f) => f.kind === 'weakness' && f.severity >= 2).map((f) => themeOf(f.category)).filter(Boolean) as ThemeId[]);
-    ts.forEach((t) => priorCounts.set(t, (priorCounts.get(t) ?? 0) + 1));
-  }
-  const improved = [...priorCounts.entries()].filter(([t, n]) => n >= 2 && !currentThemes.has(t)).sort((a, b) => b[1] - a[1])[0];
-  if (improved) {
-    text += ` Good sign: ${THEMES[improved[0]].label.toLowerCase()} (seen in ${improved[1]} of your previous ${recentPrior.length} games) didn't show up this time.`;
-  }
-  return text;
+  return text + goodNews();
 }
 
 function capitalise(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * The focus comes from this game's strong evidence. History can tip the
+ * balance between strong themes, but can never promote a weak match.
+ */
 export function chooseFocus(groups: ThemeGroup[], prior: PriorGameFindings[]): ThemeId | undefined {
-  if (!groups.length) return undefined;
-  const recentPrior = [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, RECENT - 1);
-  const scoreOf = (g: ThemeGroup) =>
-    g.score + recentPrior.filter((p) => p.findings.some((f) => f.kind === 'weakness' && f.severity >= 2 && themeOf(f.category) === g.theme)).length;
-  return [...groups].sort((a, b) => scoreOf(b) - scoreOf(a))[0].theme;
+  const eligible = groups.filter((g) => g.strong);
+  if (!eligible.length) return undefined;
+  const recentPrior = recentOf(prior);
+  const scoreOf = (g: ThemeGroup) => g.score + 0.5 * Math.min(3, recentPrior.filter((p) => priorHasTheme(p, g.theme)).length);
+  return [...eligible].sort((a, b) => scoreOf(b) - scoreOf(a))[0].theme;
+}
+
+/** One or two sentences on the shape of the game, from the per-move context. */
+export function gameStory(plies: PlyRecord[], contexts: Map<number, PlyContext> | undefined): string | undefined {
+  if (!contexts || contexts.size < 8) return undefined;
+  const list = [...contexts.values()].sort((a, b) => a.ply - b.ply);
+  const phases = summarizePhases(contexts);
+  const mv = (ply: number) => plies[ply - 1]?.moveNumber ?? Math.ceil(ply / 2);
+  const parts: string[] = [];
+  const firstAhead = list.find((c, i) => c.ahead && list.slice(i, i + 4).every((x) => x.ahead));
+  if (firstAhead && phases.aheadShare >= 0.3) {
+    // The first stretch of being ahead, its peak, and how low the lead fell afterwards.
+    const start = list.indexOf(firstAhead);
+    let end = start;
+    while (end + 1 < list.length && list[end + 1].ahead) end++;
+    const stretch = list.slice(start, end + 1);
+    const peak = stretch.reduce((a, c) => (c.material > a.material ? c : a), firstAhead);
+    const low = list.slice(end + 1).reduce<PlyContext | undefined>((a, c) => (!a || c.material < a.material ? c : a), undefined);
+    let s =
+      mv(peak.ply) === mv(firstAhead.ply)
+        ? `You were up ${materialPhrase(peak.material)} from move ${mv(firstAhead.ply)}`
+        : `You were materially ahead from move ${mv(firstAhead.ply)} (up to ${materialPhrase(peak.material)} by move ${mv(peak.ply)})`;
+    if (low && low.material <= 1) {
+      s += `, but the lead shrank to ${low.material <= 0 ? 'nothing' : materialPhrase(low.material)} by move ${mv(low.ply)}`;
+      const regained = list.slice(list.indexOf(low)).find((c) => c.ahead);
+      if (regained) s += ` before you pulled ahead again`;
+    }
+    parts.push(s + '.');
+  } else if (phases.behindShare >= 0.3) {
+    const firstBehind = list.find((c) => c.behind)!;
+    parts.push(`You were behind in material from move ${mv(firstBehind.ply)}, so this game was about finding resources.`);
+  }
+  if (phases.kingPressurePlies.length >= 3) parts.push(`Your king came under pressure around move ${mv(phases.kingPressurePlies[0])}.`);
+  if (phases.raceFrom) parts.push(`From move ${mv(phases.raceFrom)} it was a race between passed pawns.`);
+  else if (phases.endgameFrom && phases.endgameFrom < plies.length - 6) parts.push(`The game reached an endgame around move ${mv(phases.endgameFrom)}.`);
+  return parts.length ? parts.join(' ') : undefined;
 }
 
 export function buildReport(input: ReportInput): GameReport {
-  const { plies, findings, userColor, prior } = input;
+  const { plies, findings, userColor, prior, contexts } = input;
   const groups = groupByTheme(findings);
+  const strongGroups = groups.filter((g) => g.strong);
   const didWell = didWellItems(findings, plies, userColor);
-  const hurt: ReportItem[] = groups.slice(0, 3).map((g) => ({
+  // Main summary: themes with strong evidence first; a weaker (but credible) theme only fills remaining space.
+  const shown = [...strongGroups, ...groups.filter((g) => !g.strong)].slice(0, 3);
+  const hurt: ReportItem[] = shown.map((g) => ({
     text: hurtText(g, plies, userColor),
     plies: g.findings.flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]),
     category: g.findings[0].category,
   }));
   const minorNotes: ReportItem[] = findings
-    .filter((f) => f.kind === 'weakness' && f.severity === 1 && SOFT_NOTES[f.category as CategoryId])
+    .filter((f) => f.kind === 'weakness' && f.severity === 1 && isCredible(f) && SOFT_NOTES[f.category as CategoryId])
     .slice(0, 2)
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
@@ -202,15 +302,19 @@ export function buildReport(input: ReportInput): GameReport {
 
   let headline: string;
   const openingStrengths = findings.filter((f) => f.kind === 'strength' && ['center_control', 'developed_pieces', 'castled_early'].includes(f.category));
-  const openingWeak = findings.some((f) => f.kind === 'weakness' && f.severity >= 2 && (f.category === 'development' || (f.category === 'king_safety' && f.facts.notCastled)));
+  const openingWeak = findings.some((f) => countsAsPattern(f) && (f.category === 'development' || (f.category === 'king_safety' && f.facts.notCastled)));
   const solidOpening = openingStrengths.length >= 2 && !openingWeak;
-  if (groups.length === 0) {
+  const lead = strongGroups[0];
+  if (!lead) {
     headline = solidOpening
       ? 'A clean game: solid opening fundamentals and no serious mistakes for me to flag. Keep the same habits next game.'
       : 'No serious mistakes for me to flag in this game. Keep the same habits next game.';
+  } else if (lead.theme === 'conversion') {
+    const wonMaterial = findings.some((f) => f.category === 'won_free_material');
+    headline = `${wonMaterial ? 'You picked up free material early and built a winning position' : 'You built a winning position'}, but ${THEMES.conversion.clause}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else {
     const opener = solidOpening ? 'Your opening fundamentals were mostly solid, but ' : '';
-    const clause = THEMES[groups[0].theme].clause;
+    const clause = THEMES[lead.theme].clause;
     headline = `${opener}${opener ? clause : capitalise(clause)}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   }
 
@@ -221,6 +325,7 @@ export function buildReport(input: ReportInput): GameReport {
     recurring: recurringText(groups, plies, prior),
     focus: { title: focusMeta.focusTitle, detail: focusMeta.focusDetail, theme: focusTheme },
     minorNotes,
+    story: gameStory(plies, contexts),
     voice: 'template',
   };
 }

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
-import { providerFromEnv, type Env } from './llm.ts';
+import type { Env } from './llm';
+import { coachComplete, coachStatus, type ApiResult } from './coachApi';
 
 type Next = (err?: unknown) => void;
 
@@ -16,31 +17,27 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function json(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status;
+function send(res: ServerResponse, r: ApiResult) {
+  res.statusCode = r.status;
   res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(r.body));
 }
 
-/** Adds /api/coach/status and /api/coach/complete to the dev and preview servers. */
+/** Adds /api/coach/status and /api/coach/complete to the local dev and preview servers. */
 export function coachApiPlugin(env: Env): Plugin {
-  const provider = providerFromEnv(env);
+  // Locally there's no open-proxy risk, so an access token is optional.
+  const opts = { env, hosted: false };
   const handler = async (req: IncomingMessage, res: ServerResponse, next: Next) => {
     if (!req.url?.startsWith('/api/coach/')) return next();
     try {
-      if (req.url.startsWith('/api/coach/status')) {
-        return json(res, 200, provider ? { provider: provider.name, model: provider.model } : { provider: null });
-      }
+      if (req.url.startsWith('/api/coach/status')) return send(res, coachStatus(opts));
       if (req.url.startsWith('/api/coach/complete') && req.method === 'POST') {
-        if (!provider) return json(res, 503, { error: 'No LLM configured' });
-        const body = JSON.parse(await readBody(req));
-        if (typeof body.system !== 'string' || typeof body.prompt !== 'string') return json(res, 400, { error: 'Bad request' });
-        const text = await provider.complete({ system: body.system, prompt: body.prompt, maxTokens: body.maxTokens });
-        return json(res, 200, { text });
+        const token = req.headers['x-coach-token'];
+        return send(res, await coachComplete(opts, Array.isArray(token) ? token[0] : token, JSON.parse(await readBody(req))));
       }
-      return json(res, 404, { error: 'Not found' });
+      return send(res, { status: 404, body: { error: 'Not found' } });
     } catch (e) {
-      return json(res, 502, { error: (e as Error).message });
+      return send(res, { status: 400, body: { error: (e as Error).message } });
     }
   };
   return {

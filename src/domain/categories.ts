@@ -22,7 +22,11 @@ export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   premature_capture: { label: 'Premature captures', weight: 0.45, theme: 'trades' },
   poor_trade: { label: 'Poor trades', weight: 0.45, theme: 'trades' },
   missed_king_attack: { label: 'Missed chances against an exposed king', weight: 0.6, theme: 'tactics' },
-  failure_to_simplify: { label: 'Not simplifying when ahead', weight: 0.5, theme: 'conversion' },
+  failure_to_simplify: { label: 'Not trading down when ahead', weight: 0.6, theme: 'conversion' },
+  gave_back_material: { label: 'Giving material back when ahead', weight: 0.85, theme: 'conversion' },
+  unnecessary_complications: { label: 'Unnecessary complications when ahead', weight: 0.6, theme: 'conversion' },
+  hunting_material: { label: 'Hunting material instead of consolidating', weight: 0.6, theme: 'conversion' },
+  allowed_counterplay: { label: 'Allowing avoidable counterplay', weight: 0.85, theme: 'conversion' },
   time_management: { label: 'Time management', weight: 0.5, theme: 'clock' },
   endgame: { label: 'Endgame technique', weight: 0.5, theme: 'endgame' },
 };
@@ -34,6 +38,11 @@ export const STRENGTHS: Record<StrengthId, { label: string; phrase: string }> = 
   no_hanging: { label: 'No hanging pieces', phrase: 'You did not leave pieces hanging.' },
   opened_vs_king: { label: 'Attacking the uncastled king', phrase: 'You tried to open lines while the enemy king was stuck in the center.' },
   punished_mistake: { label: 'Punishing mistakes', phrase: 'When your opponent slipped, you took what was offered.' },
+  won_free_material: { label: 'Winning free material', phrase: 'You noticed and took material that was genuinely free.' },
+  simplified_when_ahead: { label: 'Simplifying when ahead', phrase: 'You traded pieces when ahead, which makes a lead easier to convert.' },
+  defensive_resource: { label: 'Finding defensive resources', phrase: 'Under pressure, you found the forcing move that held.' },
+  passed_pawn: { label: 'Creating passed pawns', phrase: 'You created a dangerous passed pawn and used it.' },
+  neutralized_counterplay: { label: "Neutralising counterplay", phrase: "You took the sting out of your opponent's counterplay." },
   converted_advantage: { label: 'Converting advantages', phrase: 'You converted your advantage into a win.' },
 };
 
@@ -102,9 +111,10 @@ export const THEMES: Record<ThemeId, ThemeMeta> = {
   },
   conversion: {
     label: 'Converting when ahead',
-    focusTitle: 'When you are ahead in material, trade pieces and keep everything protected.',
-    focusDetail: 'Simplify into an easy position. Every trade makes your extra material count for more.',
-    clause: 'you did not simplify when you were ahead',
+    focusTitle: "When you're ahead, ask \"what is my opponent's counterplay?\" before every move — then trade pieces and keep everything protected.",
+    focusDetail:
+      "A big lead is won by safety, not by more grabbing. Finish development, tuck your king away, offer trades (especially queens), and check your opponent's checks and captures before each move.",
+    clause: 'you made it harder than it needed to be by giving material and counterplay back',
   },
   clock: {
     label: 'Time management',

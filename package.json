@@ -1,6 +1,9 @@
 {
   "name": "chess-coach",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "version": "0.1.0",
   "type": "module",
   "description": "Local-first personal chess coach: Stockfish for facts, a coaching layer for patterns and lessons.",

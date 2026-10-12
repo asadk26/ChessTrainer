@@ -2,6 +2,7 @@
 // derived data: it can always be recomputed from stored games.
 import type { CategoryId, CategoryStats, Finding, ProfileSummary, StrengthId, StrengthStats, Trend } from '../domain/types';
 import { CATEGORIES, STRENGTHS } from '../domain/categories';
+import { countsAsPattern } from '../coach/report';
 
 export interface ProfileGame {
   gameId: string;
@@ -14,7 +15,7 @@ export interface ProfileGame {
 export const RECENT_WINDOW = 5;
 
 function trendFor(gamesNewestFirst: ProfileGame[], cat: string): Trend {
-  const hit = (g: ProfileGame) => g.findings.some((f) => f.kind === 'weakness' && f.category === cat && f.severity >= 2);
+  const hit = (g: ProfileGame) => g.findings.some((f) => f.category === cat && countsAsPattern(f));
   const total = gamesNewestFirst.filter(hit).length;
   if (gamesNewestFirst.length < 4) return total > 0 && hit(gamesNewestFirst[0]) && total === 1 ? 'new' : 'insufficient';
   const recent = gamesNewestFirst.slice(0, 3);
@@ -34,7 +35,10 @@ export function aggregateProfile(games: ProfileGame[]): ProfileSummary {
 
   for (const cat of Object.keys(CATEGORIES) as CategoryId[]) {
     // Severity-1 findings are soft observations; they're tracked but don't make a pattern on their own.
-    const occ = newestFirst.flatMap((g) => g.findings.filter((f) => f.kind === 'weakness' && f.category === cat).map((f) => ({ g, f })));
+    // Low-confidence (speculative) findings never count toward a pattern.
+    const occ = newestFirst.flatMap((g) =>
+      g.findings.filter((f) => f.kind === 'weakness' && f.category === cat && f.confidence !== 'low').map((f) => ({ g, f })),
+    );
     if (occ.length === 0) continue;
     const gamesWith = new Set(occ.filter((o) => o.f.severity >= 2).map((o) => o.g.gameId));
     const recentGames = recent.filter((g) => gamesWith.has(g.gameId)).length;
@@ -66,7 +70,7 @@ export function aggregateProfile(games: ProfileGame[]): ProfileSummary {
     .map((id) => ({
       id,
       label: STRENGTHS[id].label,
-      recentGames: recent.filter((g) => g.findings.some((f) => f.kind === 'strength' && f.category === id)).length,
+      recentGames: recent.filter((g) => g.findings.some((f) => f.kind === 'strength' && f.category === id && f.confidence !== 'low')).length,
       recentWindow: recent.length,
     }))
     .filter((s) => s.recentGames > 0)
