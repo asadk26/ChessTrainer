@@ -64,6 +64,8 @@ export function explainMove(inp: ExplainInput): MoveExplanation {
   else if (cap) problems.push(`it lets ${opp} win your ${PIECE_NAME[cap.type]} (${cap.san})`);
   else if (lost >= 2) problems.push(`it lets ${opp} win material (${e.replyLineSan.slice(0, 2).join(' ')})`);
   const replySan = e.replyLineSan[0];
+  const fork = here.find((f) => f.facts.forkSan && f.ply === ply);
+  if (fork && !problems.length) problems.push(`it doesn't stop ${fork.facts.forkSan}, which forks your king and your ${fork.facts.forkTarget} on ${fork.facts.forkSquare}`);
   const stranded = here.find((f) => f.category === 'stranded_piece' && f.ply === ply);
   if (stranded && !problems.length)
     problems.push(`after ${stranded.facts.grabSan} your ${stranded.facts.piece} is stuck ${stranded.facts.where} with no way back, and ${opp} wins it later (${stranded.facts.lostSan})`);

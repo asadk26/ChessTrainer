@@ -12,6 +12,8 @@ export interface ReportInput {
   userColor: Color;
   prior: PriorGameFindings[];
   contexts?: Map<number, PlyContext>;
+  /** The player won (as confirmed or per the PGN). */
+  won?: boolean;
   /** How the game ended, when it matters (won by resignation from a worse position, an early resignation). */
   ending?: string;
 }
@@ -26,7 +28,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 7;
+export const REPORT_VERSION = 8;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -380,9 +382,14 @@ export function gameStory(plies: PlyRecord[], contexts: Map<number, PlyContext> 
     const steps = swings.slice(0, 5).map((w, k) => `${w.side === 'win' ? 'winning' : 'worse'} ${k === 0 ? 'around' : 'by'} move ${mv(w.ply)}`);
     parts.unshift(`This game swung back and forth: you were ${joinList(steps)}.`);
   }
+  const last = plies.at(-1);
+  const userColor = list[0] ? plies[list[0].ply - 1]?.color : undefined;
+  const mated = last?.san.endsWith('#') ? last : undefined;
+  if (mated && mated.color === userColor) parts.push(`You finished it with checkmate: ${moveLabel(mated)}.`);
   if (phases.kingPressurePlies.length >= 3) parts.push(`Your king came under pressure around move ${mv(phases.kingPressurePlies[0])}.`);
-  if (phases.raceFrom) parts.push(`From move ${mv(phases.raceFrom)} it was a race between passed pawns.`);
-  else if (phases.endgameFrom && phases.endgameFrom < plies.length - 6) parts.push(`The game reached an endgame around move ${mv(phases.endgameFrom)}.`);
+  const raceCtx = phases.raceFrom ? list.find((c) => c.ply >= phases.raceFrom!) : undefined;
+  if (phases.raceFrom && raceCtx && Math.abs(raceCtx.material) < 5) parts.push(`From move ${mv(phases.raceFrom)} it was a race between passed pawns.`);
+  else if (!phases.raceFrom && phases.endgameFrom && phases.endgameFrom < plies.length - 6) parts.push(`The game reached an endgame around move ${mv(phases.endgameFrom)}.`);
   return parts.length ? parts.join(' ') : undefined;
 }
 
@@ -404,7 +411,8 @@ export function buildReport(input: ReportInput): GameReport {
     .slice(0, 2)
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
-  const focusTheme = chooseFocus(groups, prior) ?? 'opponent_threats';
+  // With no strong theme, a credible weaker one (the one we'll mention) still beats a generic default.
+  const focusTheme = chooseFocus(groups, prior) ?? groups[0]?.theme ?? 'opponent_threats';
   const focusMeta = focusFor(focusTheme, findings);
 
   let headline: string;
@@ -413,9 +421,12 @@ export function buildReport(input: ReportInput): GameReport {
   const solidOpening = openingStrengths.length >= 2 && !openingWeak;
   const lead = strongGroups[0];
   if (!lead) {
+    const start = input.won ? 'A strong win' : 'A clean game';
     headline = solidOpening
-      ? 'A clean game: solid opening fundamentals and no serious mistakes for me to flag. Keep the same habits next game.'
-      : 'No serious mistakes for me to flag in this game. Keep the same habits next game.';
+      ? `${start}: solid opening fundamentals and no serious mistakes for me to flag. Keep the same habits next game.`
+      : input.won
+        ? 'A strong win with no serious mistakes for me to flag. Keep the same habits next game.'
+        : 'No serious mistakes for me to flag in this game. Keep the same habits next game.';
   } else if (lead.theme === 'conversion') {
     const wonMaterial = findings.some((f) => f.category === 'won_free_material');
     headline = `${wonMaterial ? 'You picked up free material early and built a winning position' : 'You built a winning position'}, but ${THEMES.conversion.clause}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;

@@ -279,6 +279,7 @@ export function relativeRank(square: string, color: Color): number {
 /** "a rook and a pawn" for 6, "a piece" for 3 — how a coach talks about material. */
 export function materialPhrase(n: number): string {
   let left = Math.round(n);
+  if (left >= 12) return `more than a queen (${left} points)`;
   const parts: string[] = [];
   for (const [v, name] of [[9, 'queen'], [5, 'rook'], [3, 'piece']] as const) {
     if (left >= v && parts.length === 0) {

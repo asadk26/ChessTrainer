@@ -2,7 +2,7 @@
 // into coaching findings. Each detector is small and conservative: it is
 // better to miss a pattern than to invent one.
 import { Chess } from 'chess.js';
-import type { Color, Confidence, Finding, MoveEval, PlyContext, PlyRecord, PositionEval } from '../domain/types';
+import type { Color, Confidence, PieceType, Finding, MoveEval, PlyContext, PlyRecord, PositionEval } from '../domain/types';
 import {
   PIECE_NAME,
   PIECE_VALUE,
@@ -475,6 +475,63 @@ function detectHuntingMaterial(ctx: DetectorContext, i: number): Finding[] {
 }
 
 /** Ahead, but the move lets the opponent's pieces become active against your king or force a draw. */
+/** Checking moves for the opponent in `fen` (opponent to move) that also hit a rook or queen: forks. */
+function forkMoves(fen: string): { uci: string; san: string; target: { square: string; type: PieceType } }[] {
+  const c = new Chess(fen);
+  const out: { uci: string; san: string; target: { square: string; type: PieceType } }[] = [];
+  for (const m of c.moves({ verbose: true })) {
+    if (!m.san.includes('+')) continue;
+    const after = new Chess(fen);
+    after.move(m);
+    const hit = attackedEnemyPieces(after.fen(), m.to).filter((t) => PIECE_VALUE[t.type] >= 5 && PIECE_VALUE[t.type] > PIECE_VALUE[m.piece as PieceType]);
+    // A fork only works if the forking piece can't simply be taken.
+    if (hit.length && attackersOf(after.fen(), m.to, after.turn()).length === 0) out.push({ uci: m.from + m.to + (m.promotion ?? ''), san: m.san, target: hit[0] });
+  }
+  return out;
+}
+
+/**
+ * The engine's refutation is a forking check (e.g. Nxc7+ hitting king and rook),
+ * right away or after a forced exchange, and the better move kept it off the board.
+ */
+export function detectMissedFork(ctx: DetectorContext, i: number): Finding[] {
+  const p = ctx.plies[i];
+  const e = ctx.evals[i];
+  if (pd(e) < 8 || e.isBest) return [];
+  const frames = playLine(p.fenAfter, e.replyLineUci, 3);
+  let fork: ReturnType<typeof forkMoves>[number] | undefined;
+  let at = -1;
+  for (const k of [0, 2]) {
+    const fen = k === 0 ? p.fenAfter : frames[k - 1]?.fen;
+    const uci = e.replyLineUci[k];
+    if (!fen || !uci) continue;
+    fork = forkMoves(fen).find((f) => f.uci === uci);
+    if (fork) {
+      at = k;
+      break;
+    }
+  }
+  if (!fork) return [];
+  const opp = COLOR_NAME[other(ctx.userColor)];
+  const prev = ctx.plies[i - 1];
+  const from = fork.uci.slice(0, 2);
+  const aiming = prev && prev.to === from ? `${label(prev)} brought the ${PIECE_NAME[prev.piece]} to ${from}, aiming at ${fork.uci.slice(2, 4)}. ` : '';
+  const how = at === 0 ? `${label(p)} allowed ${fork.san}` : `after ${label(p)} ${e.replyLineSan[0]}, ${opp} had ${fork.san}`;
+  const taken = ctx.plies.slice(i + 1, i + 6).some((q) => q.color !== ctx.userColor && q.uci === fork!.uci);
+  const target = `your king and your ${PIECE_NAME[fork.target.type]} on ${fork.target.square}`;
+  return [
+    {
+      kind: 'weakness',
+      category: 'missed_threat',
+      ply: p.ply,
+      severity: sev(pd(e)),
+      confidence: 'high',
+      evidence: `${aiming}${how.charAt(0).toUpperCase()}${how.slice(1)} — a fork of ${target}. ${e.bestSan} kept that square covered.${taken ? '' : ` ${opp} never played it, but next time someone will.`}`,
+      facts: { bestSan: e.bestSan, threatMove: prev?.san, forkSan: fork.san, forkTarget: PIECE_NAME[fork.target.type], forkSquare: fork.target.square, opponentMissed: !taken, replyLine: e.replyLineSan.slice(0, 4) },
+    },
+  ];
+}
+
 /** From a winning position, the move lets the opponent check forever and force a draw. */
 function detectPerpetual(ctx: DetectorContext, i: number): Finding[] {
   const p = ctx.plies[i];
@@ -1136,12 +1193,17 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
     const at12 = mine.find((p) => p.moveNumber === 12);
     if (at12 && kingInCenter(at12.fenBefore, user) && /[Qq]/.test(at12.fenBefore.split(' ')[0])) {
       const ahead = aheadAt(at12);
+      // Did the central king actually cost something before castling (a checking tactic for the opponent)?
+      const until = castle?.ply ?? Infinity;
+      const costly = ctx.plies.some(
+        (p, k) => p.color === user && p.ply < until && pd(ctx.evals[k]) >= 12 && [0, 2].some((j) => isCheckMove(ctx.evals[k].replyLineSan[j] ?? '')),
+      );
       out.push({
         kind: 'weakness',
         category: 'king_safety',
         ply: at12.ply,
         severity: 2,
-        confidence: 'high',
+        confidence: !castle || costly ? 'high' : 'medium',
         evidence: ahead
           ? 'Your king was still in the center at move 12 with queens on the board — even though you were already ahead, which is exactly when getting safe matters most.'
           : 'Your king was still in the center at move 12 with queens on the board.',
@@ -1332,6 +1394,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     const seen = () => [...inherited, ...here];
     here.push(...detectPerpetual(ctx, i));
     if (!here.length) here.push(...detectMaterialLoss(ctx, i));
+    if (!here.length) here.push(...detectMissedFork(ctx, i));
     here.push(...detectMissedTactic(ctx, i));
     here.push(...detectAllowedCounterplay(ctx, i, here));
     here.push(...detectHuntingMaterial(ctx, i));
