@@ -90,14 +90,20 @@ domain). You only lose the hosted AI coach, and the app falls back to built-in c
 
 1. **Import** – paste a PGN. Players, colours, ratings, result, date and moves are parsed (smart quotes,
    `0-0`, `%clk` comments handled). The app remembers your usernames and pre-selects "me" next time.
-2. **Summary** – headline, ≤3 *did well*, ≤3 *hurt you*, recurring pattern, one focus, plus optional
-   "smaller notes" for soft observations (e.g. releasing central tension). Move references are clickable.
-3. **Guided review** – board on the left, coach on the right (stacked on mobile). Each teaching moment
-   runs through steps such as: position before the move → what you were probably trying to do →
-   *predict the opponent's reply* or *find a better move* on the board → feedback → the actual
-   continuation animated with arrows → the lesson. Moves and squares in the coaching text are
-   hover targets that light up on the board. A move list with ‹ › controls (and arrow keys) lets you
-   browse the whole game.
+2. **Summary** – a headline and a one-line story of the game, ≤3 *did well*, ≤3 *hurt you*, recurring
+   pattern, one focus, plus optional "smaller notes". Each point comes with **board diagrams** of the key
+   positions (orange arrow = your move, green = the better move, with a caption). Tap a diagram to
+   replay that moment.
+3. **Guided review** – play through the game move by move with a horizontal move strip on top
+   (swipe it, tap any move, or use ‹ › / arrow keys). The review **stops before each critical move**
+   and turns it into a Guided Moment, so you meet it in the flow of the game. The question sits
+   directly above the board and a clear ✓ / ✗ verdict directly below it. On phones the strip, question,
+   board and verdict stay in one screen, so you never have to scroll to find out whether you were right.
+   Steps: what you were probably trying to do → *predict the opponent's reply* or *find a better move*
+   on the board (retry allowed) → the actual continuation animated with arrows → the lesson → continue
+   the game. If you made the same kind of mistake in an earlier game, a "You've seen this before" note
+   links to that position. Moves and squares in the coaching text light up on the board when you hover
+   or touch them.
 4. **Drills** – 2–3 per game, varied: *find the better move*, *predict the response*, *identify the
    problem* (multiple choice), *choose the plan*. Attempts are stored; the global Drills page puts
    unsolved ones first.

@@ -4,8 +4,9 @@ import { enrichWithLlm, recoach, runAnalysis } from '../actions';
 import { navigate, useApp } from '../store';
 import { GuidedReview } from './GuidedReview';
 import { DrillList } from './DrillsScreen';
-import { moveLabel } from '../../chess/pgn';
-import { HoverProvider } from '../components/CoachText';
+import { CoachText, HoverProvider } from '../components/CoachText';
+import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/PositionDiagram';
+import { REPORT_VERSION } from '../../coach/report';
 import { repo } from '../../storage/repository';
 
 function useAnalysis(game: StoredGame | undefined) {
@@ -50,23 +51,28 @@ function useAnalysis(game: StoredGame | undefined) {
   return { progress, error, llmState, enrich };
 }
 
-function Items({ items, gameId, game }: { items: ReportItem[]; gameId: string; game: StoredGame }) {
+function Items({ items, game, kind, size = 200 }: { items: ReportItem[]; game: StoredGame; kind: 'mistake' | 'good'; size?: number }) {
+  const momentPlies = new Set(game.moments.map((m) => m.ply));
+  // Open the review just before the move (or straight into its guided moment).
+  const open = (ply: number) => navigate(`/game/${game.id}/review?ply=${momentPlies.has(ply) || kind === 'good' ? ply : Math.max(0, ply - 1)}`);
   return (
     <ul className="report-list">
-      {items.map((it, i) => (
-        <li key={i}>
-          <p>{it.text}</p>
-          {it.plies && it.plies.length > 0 && (
-            <div className="ply-links">
-              {[...new Set(it.plies)].sort((a, b) => a - b).slice(0, 6).map((p) => (
-                <button key={p} className="chip small" onClick={() => navigate(`/game/${gameId}/review?ply=${p}`)}>
-                  {moveLabel(game.plies[p - 1])}
-                </button>
-              ))}
-            </div>
-          )}
-        </li>
-      ))}
+      {items.map((it, i) => {
+        const plies = (it.keyPlies ?? [...new Set(it.plies ?? [])].sort((a, b) => a - b)).filter((p) => p > 0).slice(0, 4);
+        const specs = plies.map((p) => diagramFor(game, p, kind)).filter((d): d is DiagramSpec => !!d);
+        return (
+          <li key={i}>
+            <CoachText text={it.text} />
+            {specs.length > 0 && (
+              <div className="diagram-row">
+                {specs.map((d) => (
+                  <PositionDiagram key={d.ply} spec={d} orientation={game.userColor} size={size} onOpen={() => open(d.ply)} />
+                ))}
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -79,16 +85,17 @@ function Summary({ game }: { game: StoredGame }) {
         <p className="headline">{r.headline}</p>
         {r.story && <p className="story muted">{r.story}</p>}
       </section>
-      <div className="grid-2">
-        <section className="card">
-          <h3 className="good-h">What you did well</h3>
-          {r.didWell.length ? <Items items={r.didWell} gameId={game.id} game={game} /> : <p className="muted">Nothing stood out this time.</p>}
-        </section>
-        <section className="card">
-          <h3 className="bad-h">What hurt you</h3>
-          {r.hurt.length ? <Items items={r.hurt} gameId={game.id} game={game} /> : <p className="muted">No significant problems. Nice.</p>}
-        </section>
-      </div>
+      <section className="card">
+        <h3 className="good-h">What you did well</h3>
+        {r.didWell.length ? <Items items={r.didWell} game={game} kind="good" /> : <p className="muted">Nothing stood out this time.</p>}
+      </section>
+      <section className="card">
+        <h3 className="bad-h">What hurt you</h3>
+        <p className="muted small diagram-key">
+          <span className="key orange" /> your move <span className="key green" /> better move · tap a board to replay it
+        </p>
+        {r.hurt.length ? <Items items={r.hurt} game={game} kind="mistake" /> : <p className="muted">No significant problems. Nice.</p>}
+      </section>
       <section className="card">
         <h3>Recurring pattern</h3>
         <p>{r.recurring}</p>
@@ -101,13 +108,13 @@ function Summary({ game }: { game: StoredGame }) {
       {r.minorNotes.length > 0 && (
         <section className="card subtle-card">
           <h3>Smaller notes</h3>
-          <Items items={r.minorNotes} gameId={game.id} game={game} />
+          <Items items={r.minorNotes} game={game} kind="mistake" size={160} />
         </section>
       )}
       <div className="actions">
         {game.moments.length > 0 && (
           <button className="btn primary" onClick={() => navigate(`/game/${game.id}/review`)}>
-            Start guided review ({game.moments.length} moment{game.moments.length > 1 ? 's' : ''})
+            Replay the game ({game.moments.length} guided moment{game.moments.length > 1 ? 's' : ''})
           </button>
         )}
         <button className="btn ghost" onClick={() => navigate(`/game/${game.id}/drills`)}>
@@ -123,10 +130,20 @@ export function GameScreen({ id, tab, ply }: { id: string; tab: 'summary' | 'rev
   const game = games.find((g) => g.id === id);
   const { progress, error, llmState, enrich } = useAnalysis(game);
 
+  // Reports from an older app version get re-coached from the stored engine
+  // output (seconds, no engine run) so they pick up diagrams and new findings.
+  const upgraded = useRef<string | null>(null);
+  useEffect(() => {
+    if (!game || game.status !== 'analyzed' || !game.report || upgraded.current === game.id) return;
+    if ((game.report.version ?? 1) >= REPORT_VERSION || game.report.voice !== 'template') return;
+    upgraded.current = game.id;
+    void recoach(game.id).then(() => refresh());
+  }, [game, refresh]);
+
   if (!game) return <div className="narrow"><p className="muted">Game not found.</p></div>;
 
   const header = (
-    <div className="game-header">
+    <div className={`game-header ${tab === 'review' ? 'compact' : ''}`}>
       <div>
         <h1>
           {game.headers.white} <span className="muted">vs</span> {game.headers.black}

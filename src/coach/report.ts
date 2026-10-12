@@ -24,6 +24,20 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
+export const REPORT_VERSION = 2;
+
+/** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
+function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
+  const out: number[] = [];
+  const roundTrip = new Set(['inefficient_moves', 'premature_attack', 'pointless_check']);
+  for (const e of episodes(group, plies)) {
+    if (e.finding.ply <= 0) continue;
+    out.push(e.finding.ply);
+    const rel = e.finding.relatedPlies?.[0];
+    if (rel && roundTrip.has(e.finding.category)) out.push(rel);
+  }
+  return [...new Set(out)].slice(0, 4);
+}
 
 /** Low-confidence findings are speculative: kept in storage, never used for coaching claims. */
 export const isCredible = (f: Finding) => f.confidence !== 'low';
@@ -290,6 +304,7 @@ export function buildReport(input: ReportInput): GameReport {
   const hurt: ReportItem[] = shown.map((g) => ({
     text: hurtText(g, plies, userColor),
     plies: g.findings.flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]),
+    keyPlies: keyPliesOf(g, plies),
     category: g.findings[0].category,
   }));
   const minorNotes: ReportItem[] = findings
@@ -327,6 +342,7 @@ export function buildReport(input: ReportInput): GameReport {
     minorNotes,
     story: gameStory(plies, contexts),
     voice: 'template',
+    version: REPORT_VERSION,
   };
 }
 

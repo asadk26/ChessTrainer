@@ -266,6 +266,8 @@ export interface MomentText {
 export interface ReportItem {
   text: string;
   plies?: number[];
+  /** The positions worth a board diagram, in order (≤4). Falls back to `plies` for older reports. */
+  keyPlies?: number[];
   category?: CategoryId | StrengthId;
 }
 
@@ -279,6 +281,8 @@ export interface GameReport {
   /** One or two sentences on the shape of the game (ahead from move X, endgame, race...). */
   story?: string;
   voice: 'template' | 'llm';
+  /** Report format version; older reports are re-coached (no engine needed) to pick up new fields. */
+  version?: number;
 }
 
 export type ThemeId =

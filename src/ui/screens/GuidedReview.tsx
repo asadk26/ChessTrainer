@@ -1,21 +1,56 @@
+// Guided review: play through the game move by move; the review pauses
+// *before* each critical move and turns it into a guided moment. The question
+// sits right above the board, the verdict right below it, so you always know
+// whether your answer was right without scrolling.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Arrow, StoredGame, TeachingMoment } from '../../domain/types';
+import type { Arrow, Finding, StoredGame, TeachingMoment } from '../../domain/types';
 import { Board, type BoardProps } from '../components/Board';
 import { CoachText, HoverProvider } from '../components/CoachText';
-import { MoveList } from '../components/MoveList';
+import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
 import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
-import { navigate } from '../store';
+import { gamePlayedAt } from '../../analysis/pipeline';
+import { themeOf } from '../../coach/report';
+import { navigate, useApp } from '../store';
 
 const uciArrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
+const toSquares = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4) });
 
 type BetterVerdict = 'correct' | 'ok' | 'wrong' | 'same' | 'checking' | 'shown';
 
-function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void, isLast: boolean) {
+/** A big, unmissable answer verdict shown directly under the board. */
+function Verdict({ tone, title, text }: { tone: 'good' | 'bad' | 'neutral'; title: string; text?: string }) {
+  const icon = tone === 'good' ? '✓' : tone === 'bad' ? '✗' : '•';
+  return (
+    <div className={`verdict ${tone}`} role="status">
+      <span className="verdict-icon" aria-hidden>
+        {icon}
+      </span>
+      <div>
+        <div className="verdict-title">{title}</div>
+        {text && <CoachText text={text} className="verdict-text" />}
+      </div>
+    </div>
+  );
+}
+
+interface Panels {
+  board: BoardProps;
+  /** Short instruction/explanation shown above the board. */
+  prompt: ReactNode;
+  /** Verdict + actions shown directly below the board. */
+  banner: ReactNode;
+  /** Secondary detail (engine numbers etc.). */
+  details: ReactNode;
+  /** Changes whenever the question/verdict changes, so the layout can keep it in view. */
+  stateKey: string;
+}
+
+function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone: () => void, onSkip: () => void): Panels | null {
   const [stepIdx, setStepIdx] = useState(0);
   const [guess, setGuess] = useState<{ uci: string; san: string; fen: string; ok: boolean; shown?: boolean } | null>(null);
   const [better, setBetter] = useState<{ uci: string; san: string; fen: string; verdict: BetterVerdict; note?: string } | null>(null);
@@ -25,15 +60,6 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
   const [showEngine, setShowEngine] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
-  const step = m.steps[stepIdx];
-  const mover = m.moverColor;
-  const opp = other(mover);
-  const engineReplyFirst = ENGINE_REPLY_CATEGORIES.includes(m.category);
-  const expectedReply = engineReplyFirst ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
-  const expectedReplySan = expectedReply ? playLine(m.fenAfter, [expectedReply])[0]?.san : undefined;
-  const betterPlayed = game.plies[m.betterPly - 1];
-
-  // Reset when the moment changes.
   useEffect(() => {
     setStepIdx(0);
     setGuess(null);
@@ -42,12 +68,12 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
     setBetterFrame(-1);
     setChoice(null);
     setShowEngine(false);
-  }, [m.id]);
-
-  // Auto-play the sequence when entering the reveal step.
-  const play = (len: number, set: (n: number) => void, start = 0) => {
     window.clearInterval(timer.current);
-    let i = start;
+  }, [m?.id]);
+
+  const play = (len: number, set: (n: number) => void) => {
+    window.clearInterval(timer.current);
+    let i = 0;
     set(i);
     timer.current = window.setInterval(() => {
       i += 1;
@@ -55,18 +81,31 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
       set(i);
     }, 1100);
   };
+  const step = m?.steps[stepIdx];
   useEffect(() => {
-    if (step === 'reveal' && m.sequence.length) play(m.sequence.length, setFrame);
+    if (m && step === 'reveal' && m.sequence.length) play(m.sequence.length, setFrame);
     return () => window.clearInterval(timer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, m.id]);
+  }, [step, m?.id]);
+
+  if (!m || !step) return null;
+
+  const mover = m.moverColor;
+  const opp = other(mover);
+  const oppName = COLOR_NAME[opp];
+  const engineReplyFirst = ENGINE_REPLY_CATEGORIES.includes(m.category);
+  const expectedReply = engineReplyFirst ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
+  const expectedReplySan = expectedReply ? playLine(m.fenAfter, [expectedReply])[0]?.san : undefined;
+  const betterPlayed = game.plies[m.betterPly - 1];
+  const t = m.text;
+  const isLastStep = stepIdx === m.steps.length - 1;
 
   const next = () => {
     window.clearInterval(timer.current);
-    if (stepIdx < m.steps.length - 1) setStepIdx(stepIdx + 1);
+    if (!isLastStep) setStepIdx(stepIdx + 1);
     else {
       void markMomentDone(game.id, m.id);
-      onNext();
+      onDone();
     }
   };
 
@@ -100,167 +139,169 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
     return true;
   };
 
-  // ------------------------------------------------------------ board
-  let board: BoardProps = { fen: m.fenBefore, orientation: mover };
-  const playedArrow = uciArrow(m.playedUci, 'played');
-  switch (step) {
-    case 'intro':
-      board = { fen: m.fenBefore, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights };
-      break;
-    case 'predict': {
-      if (!guess) {
-        board = { fen: m.fenAfter, orientation: mover, arrows: [playedArrow], highlights: m.introMarkup.highlights, movable: opp, onMove: onPredict };
-      } else {
-        const arrows: Arrow[] = [uciArrow(guess.uci, 'guess')];
-        if (expectedReply && expectedReply !== guess.uci) arrows.push(uciArrow(expectedReply, 'reply'));
-        const arrowsShown: Arrow[] = guess.shown ? [uciArrow(guess.uci, 'reply')] : arrows;
-        board = { fen: guess.ok ? guess.fen : m.fenAfter, orientation: mover, arrows: arrowsShown, lastMove: guess.ok ? { from: guess.uci.slice(0, 2), to: guess.uci.slice(2, 4) } : undefined };
-      }
-      break;
-    }
-    case 'reveal': {
-      const f = m.sequence[Math.min(frame, m.sequence.length - 1)];
-      if (f) {
-        const byMe = (Math.min(frame, m.sequence.length - 1) % 2 === 0) === true;
-        board = { fen: f.fen, orientation: mover, lastMove: { from: f.from, to: f.to }, arrows: [{ from: f.from, to: f.to, color: byMe ? 'played' : 'reply' }] };
-      }
-      break;
-    }
-    case 'find_better': {
-      if (betterFrame >= 0 && m.betterSequence[betterFrame]) {
-        const f = m.betterSequence[betterFrame];
-        board = { fen: f.fen, orientation: mover, lastMove: { from: f.from, to: f.to }, arrows: [{ from: f.from, to: f.to, color: betterFrame % 2 === 0 ? 'best' : 'reply' }] };
-      } else if (!better || better.verdict === 'wrong' || better.verdict === 'same') {
-        const arrows: Arrow[] = better ? [uciArrow(better.uci, 'guess')] : [];
-        board = { fen: m.betterFen, orientation: mover, arrows, movable: mover, onMove: onBetter };
-      } else {
-        const arrows: Arrow[] = better.verdict === 'shown' ? [] : [uciArrow(better.uci, 'guess')];
-        if (better.verdict !== 'correct' && m.bestUci) arrows.push(uciArrow(m.bestUci, 'best'));
-        board = { fen: better.fen, orientation: mover, arrows, lastMove: { from: better.uci.slice(0, 2), to: better.uci.slice(2, 4) } };
-      }
-      break;
-    }
-    case 'why_good':
-      board = { fen: m.fenAfter, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights };
-      break;
-    case 'lesson':
-      board =
-        m.kind === 'good_idea'
-          ? { fen: m.fenAfter, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights }
-          : { fen: m.betterFen, orientation: mover, arrows: [...(m.betterPly === m.ply ? [playedArrow] : []), ...(m.bestUci ? [uciArrow(m.bestUci, 'best')] : [])] };
-      break;
-  }
-
-  // ------------------------------------------------------------ panel
-  const t = m.text;
   const btn = (label: string, onClick: () => void, kind: 'primary' | 'ghost' = 'primary') => (
-    <button className={`btn ${kind}`} onClick={onClick}>
+    <button key={label} className={`btn ${kind}`} onClick={onClick}>
       {label}
     </button>
   );
-  let body: ReactNode = null;
+  const continueLabel = isLastStep ? 'Continue the game →' : 'Continue';
+  const skip = btn('Skip moment', () => (window.clearInterval(timer.current), onSkip()), 'ghost');
+
+  let board: BoardProps = { fen: m.fenBefore, orientation: mover };
+  let prompt: ReactNode = null;
+  let banner: ReactNode = null;
+
   switch (step) {
-    case 'intro':
-      body = (
-        <>
-          <CoachText text={t.intent} />
-          <div className="actions">{btn('Continue', next)}</div>
-        </>
-      );
+    case 'intro': {
+      board = { fen: m.fenBefore, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights };
+      prompt = <CoachText text={m.kind === 'good_idea' ? t.intent : `Let's stop here. ${t.intent}`} />;
+      banner = <div className="actions">{[skip, btn(continueLabel, next)]}</div>;
       break;
-    case 'predict':
-      body = (
-        <>
-          <CoachText text={t.question} className="prompt" />
-          {!guess && <p className="hint">Move one of {COLOR_NAME[opp]}'s pieces on the board.</p>}
-          {guess && (
-            <div className={`feedback ${guess.ok ? 'good' : 'neutral'}`}>
-              <CoachText
-                text={
-                  guess.shown
-                    ? `${COLOR_NAME[opp]}'s most natural answer is ${expectedReplySan}. Keep it in mind for the next step.`
-                    : guess.ok
-                      ? guess.uci === expectedReply
-                        ? t.predictCorrect
-                        : `${guess.san} works too. ${t.predictCorrect}`
-                      : `You picked ${guess.san}. ${t.predictOther}`
-                }
-              />
+    }
+    case 'predict': {
+      if (!guess) {
+        board = {
+          fen: m.fenAfter,
+          orientation: mover,
+          arrows: [uciArrow(m.playedUci, 'played')],
+          highlights: m.introMarkup.highlights,
+          movable: opp,
+          onMove: onPredict,
+        };
+        banner = (
+          <>
+            <Verdict tone="neutral" title={`Your turn: move a ${oppName.toLowerCase()} piece`} text="Drag it, or tap the piece and then the square." />
+            <div className="actions">
+              {expectedReply &&
+                btn(
+                  'Show me',
+                  () => setGuess({ uci: expectedReply, san: expectedReplySan ?? '', fen: playLine(m.fenAfter, [expectedReply])[0]?.fen ?? m.fenAfter, ok: true, shown: true }),
+                  'ghost',
+                )}
             </div>
-          )}
-          <div className="actions">
-            {!guess && expectedReply && btn('Show me', () => setGuess({ uci: expectedReply, san: expectedReplySan ?? '', fen: playLine(m.fenAfter, [expectedReply])[0]?.fen ?? m.fenAfter, ok: true, shown: true }), 'ghost')}
-            {guess && btn('See what happened', next)}
-          </div>
-        </>
-      );
+          </>
+        );
+      } else {
+        const sq = toSquares(guess.uci);
+        const arrows: Arrow[] = guess.shown ? [uciArrow(guess.uci, 'reply')] : [uciArrow(guess.uci, 'guess')];
+        if (!guess.shown && expectedReply && expectedReply !== guess.uci) arrows.push(uciArrow(expectedReply, 'reply'));
+        board = {
+          fen: guess.ok ? guess.fen : m.fenAfter,
+          orientation: mover,
+          arrows,
+          lastMove: guess.ok ? sq : undefined,
+          highlights: guess.shown ? [] : [{ square: sq.to, tone: guess.ok ? 'good' : 'danger' }],
+        };
+        const verdict = guess.shown ? (
+          <Verdict tone="neutral" title={`${oppName}'s answer: ${expectedReplySan}`} text={engineReplyFirst ? t.predictCorrect : undefined} />
+        ) : guess.ok ? (
+          <Verdict tone="good" title={`Correct — ${guess.san}`} text={guess.uci === expectedReply ? t.predictCorrect : `${guess.san} works too. ${t.predictCorrect}`} />
+        ) : (
+          <Verdict tone="bad" title={`Not quite — you picked ${guess.san}`} text={`${t.predictOther} (red arrow)`} />
+        );
+        banner = (
+          <>
+            {verdict}
+            <div className="actions">{btn('See what happened', next)}</div>
+          </>
+        );
+      }
+      prompt = <CoachText text={t.question} className="prompt" />;
       break;
+    }
     case 'reveal': {
       const n = m.sequence.length;
-      body = (
+      const idx = Math.min(frame, Math.max(0, n - 1));
+      const f = m.sequence[idx];
+      if (f) board = { fen: f.fen, orientation: mover, lastMove: { from: f.from, to: f.to }, arrows: [{ from: f.from, to: f.to, color: idx % 2 === 0 ? 'played' : 'reply' }] };
+      prompt = <CoachText text={t.reveal} />;
+      banner = (
         <>
-          <CoachText text={t.reveal} />
           {n > 0 && (
             <div className="sequence">
-              <button className="icon" aria-label="Previous" onClick={() => (window.clearInterval(timer.current), setFrame(Math.max(0, frame - 1)))}>‹</button>
+              <button className="icon" aria-label="Previous" onClick={() => (window.clearInterval(timer.current), setFrame(Math.max(0, idx - 1)))}>
+                ‹
+              </button>
               <div className="seq-moves">
-                {m.sequence.map((f, i) => (
-                  <span key={i} className={i === Math.min(frame, n - 1) ? 'on' : ''} onClick={() => (window.clearInterval(timer.current), setFrame(i))}>
-                    {f.san}
+                {m.sequence.map((s, i) => (
+                  <span key={i} className={i === idx ? 'on' : ''} onClick={() => (window.clearInterval(timer.current), setFrame(i))}>
+                    {s.san}
                   </span>
                 ))}
               </div>
-              <button className="icon" aria-label="Next" onClick={() => (window.clearInterval(timer.current), setFrame(Math.min(n - 1, frame + 1)))}>›</button>
-              <button className="icon" aria-label="Replay" onClick={() => play(n, setFrame)}>↻</button>
+              <button className="icon" aria-label="Next" onClick={() => (window.clearInterval(timer.current), setFrame(Math.min(n - 1, idx + 1)))}>
+                ›
+              </button>
+              <button className="icon" aria-label="Replay" onClick={() => play(n, setFrame)}>
+                ↻
+              </button>
             </div>
           )}
-          <div className="actions">{btn('Continue', next)}</div>
+          <div className="actions">{btn(continueLabel, next)}</div>
         </>
       );
       break;
     }
     case 'find_better': {
       const v = better?.verdict;
-      const fb =
-        v === 'correct'
-          ? `${better!.san}! ${t.betterCorrect}`
-          : v === 'ok'
-            ? `${better!.san} is an improvement on the game, but there's something stronger: ${m.bestSan}.`
-            : v === 'shown'
-              ? `The move to find was ${m.bestSan}.`
-              : v === 'same'
-              ? `That's the move from the game (${better!.san}). Look for something else.`
-              : v === 'wrong'
-                ? `${better!.san} doesn't quite solve it. ${better?.note ?? ''} Try again, or reveal the move.`
-                : v === 'checking'
-                  ? `Checking ${better!.san}…`
-                  : '';
+      if (betterFrame >= 0 && m.betterSequence[betterFrame]) {
+        const f = m.betterSequence[betterFrame];
+        board = { fen: f.fen, orientation: mover, lastMove: { from: f.from, to: f.to }, arrows: [{ from: f.from, to: f.to, color: betterFrame % 2 === 0 ? 'best' : 'reply' }] };
+      } else if (!better || v === 'wrong' || v === 'same') {
+        board = {
+          fen: m.betterFen,
+          orientation: mover,
+          arrows: better ? [uciArrow(better.uci, 'guess')] : [],
+          highlights: better ? [{ square: toSquares(better.uci).to, tone: 'danger' }] : [],
+          movable: mover,
+          onMove: onBetter,
+        };
+      } else {
+        const arrows: Arrow[] = v === 'shown' ? [] : [uciArrow(better.uci, 'guess')];
+        if (v !== 'correct' && m.bestUci) arrows.push(uciArrow(m.bestUci, 'best'));
+        board = {
+          fen: better.fen,
+          orientation: mover,
+          arrows,
+          lastMove: toSquares(better.uci),
+          highlights: v === 'correct' ? [{ square: toSquares(better.uci).to, tone: 'good' }] : [],
+        };
+      }
       const done = v === 'correct' || v === 'ok' || v === 'shown';
-      body = (
+      const verdict = !better ? (
+        <Verdict tone="neutral" title={`Your turn: play a move for ${COLOR_NAME[mover]}`} text="Drag a piece, or tap it and then the square." />
+      ) : v === 'checking' ? (
+        <Verdict tone="neutral" title={`Checking ${better.san}…`} />
+      ) : v === 'correct' ? (
+        <Verdict tone="good" title={`Correct — ${better.san}`} text={t.betterCorrect} />
+      ) : v === 'ok' ? (
+        <Verdict tone="neutral" title={`Better than the game — but not the best`} text={`${better.san} improves on the game. The strongest was ${m.bestSan} (green arrow).`} />
+      ) : v === 'shown' ? (
+        <Verdict tone="neutral" title={`The move to find: ${m.bestSan}`} text={t.betterCorrect} />
+      ) : v === 'same' ? (
+        <Verdict tone="bad" title={`That's the game move (${better.san})`} text="Look for something different — try again." />
+      ) : (
+        <Verdict tone="bad" title={`Not quite — ${better.san}`} text={`${better.note ?? ''} Try another move, or reveal the answer.`.trim()} />
+      );
+      prompt = <CoachText text={t.betterPrompt} className="prompt" />;
+      banner = (
         <>
-          <CoachText text={t.betterPrompt} className="prompt" />
-          {!better && <p className="hint">Play a move for {COLOR_NAME[mover]} on the board.</p>}
-          {better && (
-            <div className={`feedback ${v === 'correct' ? 'good' : v === 'ok' || v === 'checking' || v === 'shown' ? 'neutral' : 'bad'}`}>
-              <CoachText text={fb} />
-            </div>
-          )}
+          {verdict}
           {betterFrame >= 0 && (
             <div className="sequence">
               <div className="seq-moves">
-                {m.betterSequence.map((f, i) => (
+                {m.betterSequence.map((s, i) => (
                   <span key={i} className={i === betterFrame ? 'on' : ''} onClick={() => (window.clearInterval(timer.current), setBetterFrame(i))}>
-                    {f.san}
+                    {s.san}
                   </span>
                 ))}
               </div>
-              <button className="icon" aria-label="Replay" onClick={() => play(m.betterSequence.length, setBetterFrame)}>↻</button>
             </div>
           )}
           <div className="actions">
-            {!done && m.bestUci && btn('Show the better move', () => setBetter({ uci: m.bestUci!, san: m.bestSan ?? '', fen: m.betterSequence[0]?.fen ?? m.betterFen, verdict: 'shown' }), 'ghost')}
+            {!done && m.bestUci && btn('Show the answer', () => setBetter({ uci: m.bestUci!, san: m.bestSan ?? '', fen: m.betterSequence[0]?.fen ?? m.betterFen, verdict: 'shown' }), 'ghost')}
             {done && m.betterSequence.length > 1 && btn('Show the line', () => play(m.betterSequence.length, setBetterFrame), 'ghost')}
-            {btn(done ? 'Continue' : 'Skip', next, done ? 'primary' : 'ghost')}
+            {btn(done ? continueLabel : 'Skip', next, done ? 'primary' : 'ghost')}
           </div>
         </>
       );
@@ -268,10 +309,10 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
     }
     case 'why_good': {
       const c = m.choice!;
-      body = (
+      board = { fen: m.fenAfter, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights };
+      prompt = <p className="prompt">{c.prompt}</p>;
+      banner = (
         <>
-          <CoachText text={t.intent} />
-          <p className="prompt">{c.prompt}</p>
           <div className="options">
             {c.options.map((o, i) => (
               <button
@@ -284,171 +325,293 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment, onNext: () => void
               </button>
             ))}
           </div>
-          {choice !== null && (
-            <div className={`feedback ${choice === c.correct ? 'good' : 'neutral'}`}>
-              <CoachText text={(choice === c.correct ? 'Exactly. ' : 'Not quite. ') + c.explanation} />
-            </div>
-          )}
-          <div className="actions">{choice !== null && btn('Continue', next)}</div>
+          {choice !== null &&
+            (choice === c.correct ? (
+              <Verdict tone="good" title="Correct" text={c.explanation} />
+            ) : (
+              <Verdict tone="bad" title="Not quite" text={c.explanation} />
+            ))}
+          <div className="actions">{choice !== null && btn(continueLabel, next)}</div>
         </>
       );
       break;
     }
-    case 'lesson':
-      body = (
-        <>
-          <div className="lesson">
-            <span className="lesson-label">Lesson</span>
-            <CoachText text={t.lesson} />
-          </div>
-          <button className="link" onClick={() => setShowEngine(!showEngine)}>
-            {showEngine ? 'Hide' : 'Show'} engine details
-          </button>
-          {showEngine && (
-            <div className="engine-details">
-              <div>
-                Evaluation: {formatCp(m.numbers.cpBefore)} → {formatCp(m.numbers.cpAfter)} (your point of view)
-              </div>
-              {m.bestSan && (
-                <div>
-                  Engine's choice{m.betterPly !== m.ply ? ` on ${moveLabel(game.plies[m.betterPly - 1])}` : ''}: <b>{m.bestSan}</b> — {m.bestLineSan.slice(0, 5).join(' ')}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="actions">{btn(isLast ? 'Finish → drills' : 'Next moment', next)}</div>
-        </>
+    case 'lesson': {
+      board =
+        m.kind === 'good_idea'
+          ? { fen: m.fenAfter, orientation: mover, arrows: m.introMarkup.arrows, highlights: m.introMarkup.highlights }
+          : {
+              fen: m.betterFen,
+              orientation: mover,
+              arrows: [...(m.betterPly === m.ply ? [uciArrow(m.playedUci, 'played')] : []), ...(m.bestUci ? [uciArrow(m.bestUci, 'best')] : [])],
+            };
+      prompt = (
+        <div className="lesson">
+          <span className="lesson-label">Lesson</span>
+          <CoachText text={t.lesson} />
+        </div>
       );
+      banner = <div className="actions">{btn('Continue the game →', next)}</div>;
       break;
+    }
   }
 
-  const panel = (
-    <div className="moment">
-      <div className="moment-head">
-        <span className={`tag ${m.kind === 'good_idea' ? 'tag-good' : ''}`}>{m.kind === 'good_idea' ? 'Good idea' : categoryLabel(m.category)}</span>
-        <div className="steps">
-          {m.steps.map((s, i) => (
-            <span key={s + i} className={`dot ${i < stepIdx ? 'done' : i === stepIdx ? 'on' : ''}`} />
-          ))}
+  const details = (
+    <>
+      <button className="link" onClick={() => setShowEngine(!showEngine)}>
+        {showEngine ? 'Hide' : 'Show'} engine details
+      </button>
+      {showEngine && (
+        <div className="engine-details">
+          <div>
+            Evaluation (your view): {formatCp(m.numbers.cpBefore)} before → {formatCp(m.numbers.cpAfter)} after {m.playedSan}
+          </div>
+          {m.bestSan && (
+            <div>
+              Engine's choice{m.betterPly !== m.ply ? ` on ${moveLabel(game.plies[m.betterPly - 1])}` : ''}: <b>{m.bestSan}</b> — {m.bestLineSan.slice(0, 5).join(' ')}
+            </div>
+          )}
         </div>
+      )}
+    </>
+  );
+
+  const head = (
+    <div className="moment-head">
+      <span className={`tag ${m.kind === 'good_idea' ? 'tag-good' : ''}`}>{m.kind === 'good_idea' ? '★ Good idea' : `Guided moment · ${categoryLabel(m.category)}`}</span>
+      <div className="steps" aria-label={`Step ${stepIdx + 1} of ${m.steps.length}`}>
+        {m.steps.map((s, i) => (
+          <span key={s + i} className={`dot ${i < stepIdx ? 'done' : i === stepIdx ? 'on' : ''}`} />
+        ))}
       </div>
-      <h2 className="moment-title">{t.title}</h2>
-      {body}
     </div>
   );
-  return { board, panel };
+
+  return {
+    board,
+    prompt: (
+      <>
+        {head}
+        <h2 className="moment-title">{t.title}</h2>
+        {prompt}
+      </>
+    ),
+    banner,
+    details,
+    stateKey: `${m.id}:${stepIdx}:${guess?.uci ?? ''}:${better?.verdict ?? ''}:${choice ?? ''}`,
+  };
 }
 
-export function GuidedReview({ game, initialMoment, initialPly }: { game: StoredGame; initialMoment?: number; initialPly?: number }) {
+/** "You did this before": the same kind of mistake in an earlier analyzed game. */
+function useSeenBefore(game: StoredGame, m: TeachingMoment | undefined) {
+  const { games } = useApp();
+  return useMemo(() => {
+    if (!m || m.kind !== 'mistake') return undefined;
+    const theme = themeOf(m.category);
+    const at = gamePlayedAt(game);
+    const earlier = games
+      .filter((g) => g.id !== game.id && g.status === 'analyzed' && gamePlayedAt(g) < at)
+      .sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
+    for (const g of earlier) {
+      const credible = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && f.ply > 0;
+      const same = g.findings.find((f) => credible(f) && f.category === m.category) ?? g.findings.find((f) => credible(f) && themeOf(f.category) === theme);
+      if (same) return { game: g, finding: same, exact: same.category === m.category, count: earlier.filter((x) => x.findings.some((f) => credible(f) && themeOf(f.category) === theme)).length };
+    }
+    return undefined;
+  }, [games, game, m]);
+}
+
+export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPly?: number }) {
   const moments = game.moments;
-  const [mode, setMode] = useState<'moment' | 'browse'>(initialPly !== undefined || moments.length === 0 ? 'browse' : 'moment');
-  const [mi, setMi] = useState(Math.min(initialMoment ?? 0, Math.max(0, moments.length - 1)));
-  const [ply, setPly] = useState(initialPly ?? 0);
-  const moment = moments[mi];
+  const momentAt = useMemo(() => new Map(moments.map((m) => [m.ply, m])), [moments]);
+  const startMoment = initialPly !== undefined ? momentAt.get(initialPly) : undefined;
+  const [ply, setPly] = useState(startMoment ? startMoment.ply - 1 : Math.min(initialPly ?? 0, game.plies.length));
+  const [active, setActive] = useState<TeachingMoment | undefined>(startMoment);
+  const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set(game.completedMomentIds));
+  const topRef = useRef<HTMLDivElement>(null);
 
-  const goNext = () => {
-    if (mi < moments.length - 1) setMi(mi + 1);
-    else navigate(`/game/${game.id}/drills`);
+  const finish = (m: TeachingMoment, completed: boolean) => {
+    if (completed) setDoneIds((s) => new Set(s).add(m.id));
+    setActive(undefined);
+    setPly(m.ply); // play the actual game move and carry on
   };
-  const runner = useMomentRunner(game, moment ?? moments[0] ?? ({} as TeachingMoment), goNext, mi === moments.length - 1);
+  const runner = useMomentRunner(
+    game,
+    active,
+    () => active && finish(active, true),
+    () => active && finish(active, false),
+  );
+  const seenBefore = useSeenBefore(game, active);
 
-  // Keyboard navigation in browse mode.
+  const startMomentAt = (m: TeachingMoment) => {
+    setPly(m.ply - 1);
+    setActive(m);
+  };
+  const next = () => {
+    if (active) return;
+    const upcoming = momentAt.get(ply + 1);
+    if (upcoming && !doneIds.has(upcoming.id)) startMomentAt(upcoming);
+    else setPly((p) => Math.min(game.plies.length, p + 1));
+  };
+  const prev = () => (active ? setActive(undefined) : setPly((p) => Math.max(0, p - 1)));
+  const nextMoment = moments.find((m) => m.ply > ply + 1 && !doneIds.has(m.id));
+
+  // On phones the strip + question + board + verdict just fit the screen.
+  // Keep that block aligned to the top whenever the move or the moment's state
+  // changes, so the verdict is always visible and nothing jumps around.
+  const stateKey = runner?.stateKey ?? `browse:${ply}`;
+  const firstRender = useRef(true);
   useEffect(() => {
-    if (mode !== 'browse') return;
+    if (firstRender.current && initialPly === undefined) {
+      firstRender.current = false;
+      return;
+    }
+    firstRender.current = false;
+    const el = topRef.current;
+    if (!el || window.innerWidth > 860) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - 6;
+    if (Math.abs(window.scrollY - top) > 3) window.scrollTo({ top, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateKey]);
+
+  useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') setPly((p) => Math.max(0, p - 1));
-      if (e.key === 'ArrowRight') setPly((p) => Math.min(game.plies.length, p + 1));
+      if (active) return;
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') prev();
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
-  }, [mode, game.plies.length]);
+  });
 
-  const browseBoard: BoardProps = useMemo(() => {
-    const p = game.plies[ply - 1];
-    const fen = p ? p.fenAfter : game.plies[0].fenBefore;
-    const markMoment = moments.find((x) => x.ply === ply);
-    return {
-      fen,
-      orientation: game.userColor,
-      lastMove: p ? { from: p.from, to: p.to } : undefined,
-      highlights: markMoment ? [{ square: p!.to, tone: markMoment.kind === 'good_idea' ? 'good' : 'danger' }] : [],
-    };
-  }, [ply, game, moments]);
-
-  const board = mode === 'moment' && moment ? runner.board : browseBoard;
+  const current = game.plies[ply - 1];
+  const upcoming = momentAt.get(ply + 1);
   const evalAt = ply > 0 ? game.analysis?.moves[ply - 1] : undefined;
+  const plyNotes = game.findings.filter((f) => f.ply === ply && ply > 0 && f.confidence !== 'low' && !momentAt.has(ply));
+
+  // ---------------------------------------------------------- play-through
+  const browseBoard: BoardProps = {
+    fen: current ? current.fenAfter : game.plies[0].fenBefore,
+    orientation: game.userColor,
+    lastMove: current ? { from: current.from, to: current.to } : undefined,
+  };
+  const yours = current?.color === game.userColor;
+  const browsePrompt = (
+    <>
+      {ply === 0 ? (
+        <p>
+          Play through your game move by move with <b>Next</b>. I'll stop before the {moments.length} critical moment{moments.length === 1 ? '' : 's'} (marked in the
+          strip) so you can think before seeing what happened.
+        </p>
+      ) : (
+        <p className="move-caption">
+          <b>{moveLabel(current!)}</b> <span className="muted">— {yours ? 'you played' : `${game.opponentName} played`}</span>
+          {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
+        </p>
+      )}
+      {plyNotes.map((f, i) => (
+        <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
+      ))}
+      {upcoming && (
+        <p className="upcoming">
+          ⚑ Next move is a critical moment{doneIds.has(upcoming.id) ? ' (already reviewed — Next plays it)' : ' — Next will stop and ask you first'}.
+        </p>
+      )}
+    </>
+  );
+  const browseBanner = (
+    <>
+      <div className="board-controls">
+        <button className="icon" onClick={() => (setActive(undefined), setPly(0))} aria-label="Start">
+          «
+        </button>
+        <button className="icon" onClick={prev} aria-label="Previous move">
+          ‹
+        </button>
+        <button className="btn primary next-btn" onClick={next} disabled={ply >= game.plies.length}>
+          {upcoming && !doneIds.has(upcoming.id) ? 'Next: stop & think' : 'Next'} ›
+        </button>
+        <button className="icon" onClick={() => (setActive(undefined), setPly(game.plies.length))} aria-label="End">
+          »
+        </button>
+      </div>
+      {nextMoment && !upcoming && (
+        <div className="actions center">
+          <button className="btn ghost" onClick={() => startMomentAt(nextMoment)}>
+            Skip ahead to the next critical moment ({moveLabel(game.plies[nextMoment.ply - 1])})
+          </button>
+        </div>
+      )}
+      {ply >= game.plies.length && (
+        <div className="actions center">
+          <button className="btn primary" onClick={() => navigate(`/game/${game.id}/drills`)}>
+            Game over — practise the drills →
+          </button>
+        </div>
+      )}
+    </>
+  );
+  const browseDetails = evalAt ? (
+    <p className="muted small">
+      Engine after {moveLabel(game.plies[ply - 1])}: {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))} (your view)
+      {evalAt.bestSan && !evalAt.isBest ? ` · engine preferred ${evalAt.bestSan}` : ''}
+    </p>
+  ) : null;
+
+  const panels: Panels = runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  const marks = Object.fromEntries(moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : ('bad' as const)]));
 
   return (
     <HoverProvider>
-      <div className="review">
-        <div className="review-board">
-          <Board {...board} />
-          {mode === 'browse' && (
-            <div className="board-controls">
-              <button className="icon" onClick={() => setPly(0)} aria-label="Start">«</button>
-              <button className="icon" onClick={() => setPly(Math.max(0, ply - 1))} aria-label="Previous move">‹</button>
-              <span className="ply-label">{ply === 0 ? 'Start' : moveLabel(game.plies[ply - 1])}</span>
-              <button className="icon" onClick={() => setPly(Math.min(game.plies.length, ply + 1))} aria-label="Next move">›</button>
-              <button className="icon" onClick={() => setPly(game.plies.length)} aria-label="End">»</button>
-            </div>
-          )}
-          <div className="legend">
-            <span><i style={{ background: 'rgb(214,128,38)' }} /> your move</span>
-            <span><i style={{ background: 'rgb(196,64,64)' }} /> opponent</span>
-            <span><i style={{ background: 'rgb(46,140,92)' }} /> better</span>
-            <span><i style={{ background: 'rgb(60,108,196)' }} /> your guess</span>
+      <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
+        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} onSelect={(p) => (setActive(undefined), setPly(p))} />
+        <div className="rv-grid">
+          <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
+          <div className="rv-board">
+            <Board {...panels.board} />
           </div>
-        </div>
-        <div className="review-panel card">
-          <div className="moment-chips">
-            <button className={`chip ${mode === 'browse' ? 'on' : ''}`} onClick={() => setMode('browse')}>
-              Move list
-            </button>
-            {moments.map((x, i) => (
-              <button
-                key={x.id}
-                className={`chip ${mode === 'moment' && i === mi ? 'on' : ''} ${x.kind === 'good_idea' ? 'good' : ''} ${game.completedMomentIds.includes(x.id) ? 'done' : ''}`}
-                onClick={() => {
-                  setMi(i);
-                  setMode('moment');
-                }}
-                title={x.text.title}
-              >
-                {x.kind === 'good_idea' ? '★ ' : ''}
-                {moveLabel(game.plies[x.ply - 1])}
-              </button>
-            ))}
-          </div>
-          {mode === 'moment' && moment ? (
-            runner.panel
-          ) : (
-            <div className="browse">
-              <MoveList
-                plies={game.plies}
-                current={ply}
-                onSelect={setPly}
-                marks={Object.fromEntries(moments.map((x) => [x.ply, x.kind === 'good_idea' ? 'good' : 'bad']))}
-              />
-              {evalAt && (
-                <p className="muted small">
-                  {moveLabel(game.plies[ply - 1])}: eval {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))} (your view)
-                  {evalAt.bestSan && !evalAt.isBest ? ` · engine preferred ${evalAt.bestSan}` : ''}
+          <div className="rv-banner">{panels.banner}</div>
+          <aside className="rv-side">
+            {active && seenBefore && (
+              <div className="seen-before">
+                <span className="eyebrow">You've seen this before</span>
+                <p>
+                  {seenBefore.exact ? 'The same kind of mistake' : 'A related mistake'} came up in your game vs <b>{seenBefore.game.opponentName}</b>:{' '}
+                  {seenBefore.finding.evidence}
+                  {seenBefore.count >= 2 ? ` That's ${seenBefore.count + 1} games now.` : ''}
                 </p>
-              )}
-              {moments.find((x) => x.ply === ply) && (
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    setMi(moments.findIndex((x) => x.ply === ply));
-                    setMode('moment');
-                  }}
-                >
-                  Review this teaching moment
+                <button className="link" onClick={() => navigate(`/game/${seenBefore.game.id}/review?ply=${seenBefore.finding.ply}`)}>
+                  Open that position →
                 </button>
-              )}
-              {moments.length === 0 && <p className="muted">No teaching moments in this game — nothing significant to review.</p>}
+              </div>
+            )}
+            {panels.details}
+            <div className="legend">
+              <span>
+                <i style={{ background: 'rgb(214,128,38)' }} /> your move
+              </span>
+              <span>
+                <i style={{ background: 'rgb(196,64,64)' }} /> opponent
+              </span>
+              <span>
+                <i style={{ background: 'rgb(46,140,92)' }} /> better
+              </span>
+              <span>
+                <i style={{ background: 'rgb(60,108,196)' }} /> your guess
+              </span>
             </div>
-          )}
+            {moments.length > 0 && (
+              <div className="moment-index">
+                <span className="eyebrow">Critical moments</span>
+                {moments.map((x) => (
+                  <button key={x.id} className={`chip ${active?.id === x.id ? 'on' : ''} ${x.kind === 'good_idea' ? 'good' : ''}`} onClick={() => startMomentAt(x)}>
+                    {doneIds.has(x.id) ? '✓ ' : x.kind === 'good_idea' ? '★ ' : ''}
+                    {moveLabel(game.plies[x.ply - 1])}
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
         </div>
       </div>
     </HoverProvider>
