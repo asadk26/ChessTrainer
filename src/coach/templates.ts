@@ -52,7 +52,7 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
     case 'tactical_blindness':
       return f.facts.mateIn ? `${mv} — there was checkmate` : `${mv} — a chance to win material`;
     case 'blunder':
-      return `${mv} — a piece left unprotected`;
+      return f.facts.victimPiece === 'pawn' ? `${mv} — a pawn that could just be taken` : `${mv} — a piece left unprotected`;
     case 'missed_threat':
       return `${mv} — what was your opponent threatening?`;
     case 'calculation':
@@ -73,6 +73,8 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
       return `${mv} — giving material back`;
     case 'hunting_material':
       return `${mv} — one pawn too many`;
+    case 'stranded_piece':
+      return `${mv} — free material, but no way back`;
     case 'unnecessary_complications':
       return `${mv} — keep it simple when ahead`;
     case 'failure_to_simplify':
@@ -324,6 +326,20 @@ function buildCategoryText(input: MomentTextInput): MomentText {
         reveal: `${Array.isArray(facts.undeveloped) && facts.undeveloped.length ? `${list(facts.undeveloped)} were still at home` : 'Your pieces were not coordinated'}${facts.kingStuck ? ' and your king was still in the center' : ''}. Another pawn hardly matters when you're already up ${lead}; safety does.`,
         lesson: "When you're far ahead, stop collecting material. Finish development, castle, and trade pieces — then the extra material wins by itself.",
       };
+    case 'stranded_piece': {
+      const esc = Array.isArray(facts.escapes) ? (facts.escapes as string[]) : [];
+      const meanwhile = Array.isArray(facts.meanwhile) ? (facts.meanwhile as string[]) : [];
+      return {
+        ...base,
+        intent: `You played ${played.san}, going after the ${s(facts.captured)} on ${s(facts.square)}.`,
+        question: `The ${s(facts.captured)} on ${s(facts.square)} looks free. But after ${s(facts.grabSan)}, where does your ${s(facts.piece)} go next? Find a better move.`,
+        betterPrompt: `The ${s(facts.captured)} looks free — but can your ${s(facts.piece)} get back out afterwards? Find a better move.`,
+        betterCorrect: `Yes — ${bestSan} keeps your pieces working instead of sending one ${s(facts.where)}.`,
+        reveal: `After ${s(facts.grabSan)} your ${s(facts.piece)} was stuck ${s(facts.where)}${esc.length ? `: ${list(esc)} ${esc.length > 1 ? 'were' : 'was'} covered` : ''}. ${opp} won it back with ${s(facts.lostSan)}${meanwhile.length ? `, and used the time for ${list(meanwhile)}` : ''}.`,
+        lesson:
+          "A knight or bishop that captures in a corner or on the edge often can't get back out. Before grabbing, look at the piece's escape squares after the capture — if they can all be covered, the material isn't really free.",
+      };
+    }
     case 'unnecessary_complications':
       return {
         ...base,

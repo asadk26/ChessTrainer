@@ -19,14 +19,29 @@ describe('a chaotic game that swung back and forth', () => {
   it('names the missed mates as checkmates, in the summary, moments and drills', () => {
     expect(r.headline).toMatch(/missed checkmates/);
     expect(r.hurt[0].text).toMatch(/You missed a checkmate twice: move 41 \(Qg3# instead of Rxh6\) and move 46 \(Qg3# instead of Qxc8\)/);
-    for (const ply of [81, 91]) expect(game.moments.find((m) => m.ply === ply)?.text.title).toMatch(/there was checkmate/);
+    // Same mate (Qg3#) twice: one lesson, not two.
+    const mateMoments = game.moments.filter((m) => m.text.title.includes('there was checkmate'));
+    expect(mateMoments.map((m) => m.ply)).toEqual([81]);
     const mateDrills = drills.filter((d) => d.solutionSan === 'Qg3#');
     expect(mateDrills.length).toBeGreaterThan(0);
     for (const d of mateDrills) expect(d.prompt).toMatch(/checkmate in one/);
   });
 
+  it('teaches the knight that grabbed the rook on a8 and got stuck there', () => {
+    const f = game.findings.find((x) => x.category === 'stranded_piece');
+    expect(f).toMatchObject({ ply: 41, severity: 3, confidence: 'high', relatedPlies: [43, 52] });
+    expect(f!.evidence).toMatch(/21\.Nc7\+ and 22\.Nxa8 won the rook on a8, but your knight was stuck in the corner with no safe way out \(c7 and b6 were covered\)/);
+    expect(f!.evidence).toMatch(/26\.\.\.Qxa8.*gained only a pawn/);
+    expect(r.hurt.some((h) => h.text === f!.evidence)).toBe(true);
+    const m = game.moments.find((x) => x.ply === 41)!;
+    expect(m.text.title).toMatch(/free material, but no way back/);
+    expect(m.explanation?.problem).toMatch(/knight is stuck in the corner with no way back/);
+    expect(drills.some((d) => d.ply === 41)).toBe(true);
+  });
+
   it('explains 29.g4 as a loose pawn, not as pawn structure', () => {
     expect(at(57).map((f) => f.category)).toEqual(['blunder']);
+    expect(at(57)[0].confidence).toBe('medium');
     expect(at(57)[0].evidence).toMatch(/fxg4/);
     expect(game.findings.some((f) => f.category === 'pawn_structure')).toBe(false); // c2 was already isolated; Kf1 isn't a pawn move
   });

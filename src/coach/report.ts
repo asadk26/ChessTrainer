@@ -24,7 +24,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 4;
+export const REPORT_VERSION = 5;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -157,6 +157,7 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
       return eps.map((e) => e.finding.evidence).join(' ');
     }
     case 'loose_pieces':
+    case 'stranded':
     case 'opponent_threats':
     case 'endgame':
     case 'opening_development':

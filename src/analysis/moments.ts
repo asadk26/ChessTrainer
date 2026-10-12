@@ -48,6 +48,7 @@ const PRIMARY_ORDER: CategoryId[] = [
   'gave_back_material',
   'missed_threat',
   'tactical_blindness',
+  'stranded_piece',
   'calculation',
   'premature_attack',
   'pointless_check',
@@ -136,6 +137,12 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     .map(([ply, fs]) => ({ ply, fs, score: significance(fs, evals, prior) }))
     .filter((x) => x.score >= MIN_SIGNIFICANCE)
     .sort((a, b) => b.score - a.score)
+    // The same lesson twice (e.g. the same missed mate on two moves) only needs one moment.
+    .filter((x, k, all) => {
+      const key = (fs: Finding[]) => fs.map((f) => (f.facts.mateIn ? `mate:${f.facts.bestSan}` : '')).find(Boolean);
+      const mine = key(x.fs);
+      return !mine || all.findIndex((y) => key(y.fs) === mine) === k;
+    })
     .slice(0, MAX_MISTAKE_MOMENTS);
 
   const moments: TeachingMoment[] = scored.map(({ ply, fs, score }) => {

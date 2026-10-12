@@ -177,7 +177,8 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
         category: 'blunder',
         ply: p.ply,
         severity: sev(d),
-        confidence: 'high',
+        // A lone pawn rarely explains the whole drop, so it's a smaller, less certain lesson.
+        confidence: hungPawn ? 'medium' : 'high',
         evidence: `${label(p)} put the ${PIECE_NAME[cap.type]} on ${cap.square} where it could be taken (${cap.san}).`,
         facts: { ...facts, movedPieceHung: true },
       },
@@ -949,6 +950,97 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
 }
 
 /** Credit: a rook placed on an open file. */
+/** Safe destinations for the piece on `square` (side to move): legal moves to squares the opponent doesn't attack. */
+function escapeSquares(fen: string, square: string): { all: string[]; safe: string[] } {
+  const c = new Chess(fen);
+  const me = c.turn();
+  const all: string[] = [];
+  const safe: string[] = [];
+  for (const m of c.moves({ square: square as never, verbose: true })) {
+    if (all.includes(m.to)) continue;
+    all.push(m.to);
+    const after = new Chess(fen);
+    after.move(m);
+    if (attackersOf(after.fen(), m.to, other(me)).length === 0) safe.push(m.to);
+  }
+  return { all, safe };
+}
+
+/**
+ * A knight or bishop grabs material on the edge, has no safe way back out,
+ * and is lost there a few moves later (e.g. Nc7+ … Nxa8, then …Qxa8).
+ */
+function detectStrandedPiece(ctx: DetectorContext): Finding[] {
+  const us = ctx.userColor;
+  const opp = COLOR_NAME[other(us)];
+  for (let i = 0; i < ctx.plies.length; i++) {
+    const p = ctx.plies[i];
+    if (p.color !== us || !p.captured || (p.piece !== 'n' && p.piece !== 'b')) continue;
+    const edge = 'ah'.includes(p.to[0]) || '18'.includes(p.to[1]);
+    if (!edge) continue;
+    // The piece never leaves the square and is captured on it within eight moves.
+    let lostAt: number | undefined;
+    for (let j = i + 1; j < Math.min(ctx.plies.length, i + 17); j++) {
+      const q = ctx.plies[j];
+      if (q.color === us && q.from === p.to) break;
+      if (q.color !== us && q.to === p.to) {
+        if (q.captured === p.piece) lostAt = j;
+        break;
+      }
+    }
+    if (lostAt === undefined || lostAt < i + 3) continue; // an immediate recapture is just a trade
+    const reply = ctx.plies[i + 1];
+    if (!reply) continue;
+    const esc = escapeSquares(reply.fenAfter, p.to);
+    if (esc.safe.length) continue;
+    // The decision: the capture itself, or the same piece's approach move just before it.
+    const prev = ctx.plies[i - 2];
+    const approach = prev && prev.piece === p.piece && prev.to === p.from ? i - 2 : undefined;
+    const decision = approach !== undefined && pd(ctx.evals[approach]) > pd(ctx.evals[i]) ? approach : i;
+    const d = pd(ctx.evals[decision]);
+    if (d < 8) continue;
+    const before = materialBalance(ctx.plies[decision].fenBefore, us);
+    const after = materialBalance(ctx.plies[lostAt].fenAfter, us);
+    const gain = after - before;
+    const lost = ctx.plies[lostAt];
+    const meanwhile = ctx.plies
+      .slice(i + 1, lostAt)
+      .filter((q) => q.color !== us && (q.captured || isCheckMove(q.san)))
+      .map((q) => q.san)
+      .slice(0, 3);
+    const where = '18'.includes(p.to[1]) && 'ah'.includes(p.to[0]) ? 'in the corner' : 'on the edge';
+    const piece = PIECE_NAME[p.piece];
+    const grabbed = approach !== undefined ? `${label(ctx.plies[approach])} and ${label(p)}` : label(p);
+    const covered = esc.all.length ? ` (${esc.all.join(' and ')} ${esc.all.length > 1 ? 'were' : 'was'} covered)` : '';
+    const net = gain <= 0 ? 'In the end the grab gained nothing.' : gain <= 2 ? `In the end the grab gained only ${materialPhrase(gain)}.` : '';
+    return [
+      {
+        kind: 'weakness',
+        category: 'stranded_piece',
+        ply: ctx.plies[decision].ply,
+        // Losing the piece back for little net gain is the whole point of the pattern.
+        severity: d >= 12 || gain <= 1 ? 3 : 2,
+        confidence: 'high',
+        relatedPlies: [p.ply, lost.ply].filter((x) => x !== ctx.plies[decision].ply),
+        evidence: `${grabbed} won the ${PIECE_NAME[p.captured]} on ${p.to}, but your ${piece} was stuck ${where} with no safe way out${covered}. ${opp} collected it with ${label(lost)}${meanwhile.length ? `, after using the time for ${meanwhile.join(', ')}` : ''}. ${net}`.trim(),
+        facts: {
+          bestSan: ctx.evals[decision].bestSan,
+          piece,
+          square: p.to,
+          captured: PIECE_NAME[p.captured],
+          grabSan: p.san,
+          lostSan: lost.san,
+          escapes: esc.all,
+          meanwhile,
+          gain,
+          where,
+        },
+      },
+    ];
+  }
+  return [];
+}
+
 function detectRookOnOpenFile(ctx: DetectorContext): Finding[] {
   for (let i = 0; i < ctx.plies.length; i++) {
     const p = ctx.plies[i];
@@ -1254,6 +1346,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   findings.push(...detectPassivePieces(ctx));
   findings.push(...detectChasedPiece(ctx));
   findings.push(...detectTacticFound(ctx));
+  findings.push(...detectStrandedPiece(ctx));
   findings.push(...detectRookOnOpenFile(ctx));
   findings.push(...detectGameLevel(ctx, findings));
   return findings;

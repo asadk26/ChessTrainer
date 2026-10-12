@@ -64,6 +64,9 @@ export function explainMove(inp: ExplainInput): MoveExplanation {
   else if (cap) problems.push(`it lets ${opp} win your ${PIECE_NAME[cap.type]} (${cap.san})`);
   else if (lost >= 2) problems.push(`it lets ${opp} win material (${e.replyLineSan.slice(0, 2).join(' ')})`);
   const replySan = e.replyLineSan[0];
+  const stranded = here.find((f) => f.category === 'stranded_piece' && f.ply === ply);
+  if (stranded && !problems.length)
+    problems.push(`after ${stranded.facts.grabSan} your ${stranded.facts.piece} is stuck ${stranded.facts.where} with no way back, and ${opp} wins it later (${stranded.facts.lostSan})`);
   const perpetual = here.find((f) => f.facts.perpetual && f.ply === ply);
   if (perpetual && !problems.length)
     problems.push(`it lets ${opp} force a draw by checking your king again and again (${(perpetual.facts.replyLine as string[]).slice(0, 4).join(' ')})`);

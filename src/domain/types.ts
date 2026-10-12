@@ -89,7 +89,8 @@ export type CategoryId =
   | 'hunting_material'
   | 'allowed_counterplay'
   | 'pawn_structure'
-  | 'passive_piece';
+  | 'passive_piece'
+  | 'stranded_piece';
 
 export type StrengthId =
   | 'castled_early'
@@ -323,7 +324,8 @@ export type ThemeId =
   | 'clock'
   | 'endgame'
   | 'structure'
-  | 'activity';
+  | 'activity'
+  | 'stranded';
 
 // ---------------------------------------------------------------- drills ---
 

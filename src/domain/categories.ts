@@ -29,6 +29,7 @@ export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   allowed_counterplay: { label: 'Allowing avoidable counterplay', weight: 0.85, theme: 'conversion' },
   pawn_structure: { label: 'Weakening your own pawn structure', weight: 0.35, theme: 'structure' },
   passive_piece: { label: 'Leaving a piece passive', weight: 0.45, theme: 'activity' },
+  stranded_piece: { label: 'Grabbing with a piece that gets stuck', weight: 0.9, theme: 'stranded' },
   time_management: { label: 'Time management', weight: 0.5, theme: 'clock' },
   endgame: { label: 'Endgame technique', weight: 0.5, theme: 'endgame' },
 };
@@ -60,6 +61,13 @@ export interface ThemeMeta {
 }
 
 export const THEMES: Record<ThemeId, ThemeMeta> = {
+  stranded: {
+    label: 'Pieces stranded after grabbing material',
+    focusTitle: 'Before you grab material with a knight or bishop, check how it gets back out.',
+    focusDetail:
+      "A piece that captures in a corner or on the edge often has no way back. Before taking, look at the squares it could retreat to after the capture. If your opponent can cover them all, the material isn't really free — you may lose the piece and a lot of time.",
+    clause: 'a piece that grabbed material got stuck and was lost',
+  },
   structure: {
     label: 'Pawn structure',
     focusTitle: 'Before a pawn capture or recapture, check whether it leaves you with doubled or isolated pawns.',

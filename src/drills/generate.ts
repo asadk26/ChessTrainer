@@ -23,6 +23,7 @@ const PROBLEM_INDEX: Partial<Record<CategoryId, number>> = {
   king_safety: 3,
   gave_back_material: 0,
   hunting_material: 1,
+  stranded_piece: 0,
   allowed_counterplay: 4,
   unnecessary_complications: 4,
   failure_to_simplify: 4,
