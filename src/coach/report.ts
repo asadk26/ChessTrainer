@@ -28,7 +28,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 10;
+export const REPORT_VERSION = 11;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -178,7 +178,11 @@ function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color)
   const opp = COLOR_NAME[other(userColor)];
   const plyList = (f: Finding) => [f.ply, ...(f.relatedPlies ?? [])].filter((p) => p > 0);
   const push = (f: Finding | undefined, text: (f: Finding) => string) => {
-    if (f) items.push({ text: text(f), category: f.category as StrengthId, plies: plyList(f) });
+    if (!f) return;
+    // One credit per move: don't praise the same move twice in different words.
+    const plies = plyList(f);
+    if (plies.length && plies.every((p) => items.some((it) => it.plies?.includes(p)))) return;
+    items.push({ text: text(f), category: f.category as StrengthId, plies });
   };
 
   const opening = [has('center_control'), has('developed_pieces'), has('castled_early')].filter(Boolean) as Finding[];
@@ -192,10 +196,10 @@ function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color)
     items.push({ text: `Your opening fundamentals were solid: you ${joinList(parts)}.`, category: opening[0].category as StrengthId, plies: opening.map((f) => f.ply).filter((p) => p > 0) });
   }
 
-  push(has('found_tactic'), (f) => f.evidence);
+  for (const f of strengths.filter((x) => x.category === 'found_tactic')) push(f, (x) => x.evidence);
   push(has('won_free_material'), (f) => `${f.evidence} When your opponent left something hanging, you noticed.`);
   push(has('passed_pawn'), (f) => `${f.evidence} In the endgame that pawn was worth more than any piece.`);
-  push(has('neutralized_counterplay'), (f) => `${f.evidence} Trading off the attackers was exactly right.`);
+  push(has('neutralized_counterplay'), (f) => (f.facts.captured ? f.evidence : `${f.evidence} Trading off the attackers was exactly right.`));
   push(has('opened_vs_king'), (f) => `${plyLabel(plies, f.ply)} was a good idea: ${opp}'s king was still on ${f.facts.oppKing}, and you started opening lines toward it.`);
   push(has('defensive_resource'), (f) => f.evidence);
   push(has('simplified_when_ahead'), (f) => `${f.evidence} Trades make a material lead easier to convert.`);
@@ -216,7 +220,11 @@ const SOFT_NOTES: Partial<Record<CategoryId, (f: Finding) => string>> = {
   unnecessary_complications: (f) => `${f.evidence} It didn't cost much, but simple is safer.`,
   hunting_material: (f) => f.evidence,
   gave_back_material: (f) => f.evidence,
+  development: (f) => `${f.evidence} It didn't cost anything this game, but it's a habit worth watching.`,
 };
+
+/** A small, cost-free note: shown under "smaller notes", never as a main problem or the focus. */
+const isSoft = (f: Finding) => f.severity === 1 && !!SOFT_NOTES[f.category as CategoryId];
 
 function recentOf(prior: PriorGameFindings[]) {
   return [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, RECENT - 1);
@@ -399,7 +407,7 @@ export function buildReport(input: ReportInput): GameReport {
   const strongGroups = groups.filter((g) => g.strong);
   const didWell = didWellItems(findings, plies, userColor);
   // Main summary: themes with strong evidence first; a weaker (but credible) theme only fills remaining space.
-  const shown = [...strongGroups, ...groups.filter((g) => !g.strong)].slice(0, 3);
+  const shown = [...strongGroups, ...groups.filter((g) => !g.strong && !g.findings.every(isSoft))].slice(0, 3);
   const hurt: ReportItem[] = shown.map((g) => ({
     text: hurtText(g, plies, userColor),
     plies: g.findings.flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]),
@@ -412,7 +420,7 @@ export function buildReport(input: ReportInput): GameReport {
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
   // With no strong theme, a credible weaker one (the one we'll mention) still beats a generic default.
-  const focusTheme = chooseFocus(groups, prior) ?? groups[0]?.theme ?? 'opponent_threats';
+  const focusTheme = chooseFocus(groups, prior) ?? groups.find((g) => !g.findings.every(isSoft))?.theme ?? 'opponent_threats';
   const focusMeta = focusFor(focusTheme, findings);
 
   let headline: string;

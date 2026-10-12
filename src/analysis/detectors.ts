@@ -982,7 +982,7 @@ function detectChasedPiece(ctx: DetectorContext): Finding[] {
 
 /** Credit: a move that sets up a clear tactic (fork, winning material), found in the game. */
 function detectTacticFound(ctx: DetectorContext): Finding[] {
-  let best: { f: Finding; gain: number } | undefined;
+  const found: { f: Finding; gain: number }[] = [];
   for (let i = 0; i < ctx.plies.length; i++) {
     const p = ctx.plies[i];
     const e = ctx.evals[i];
@@ -996,8 +996,7 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
     if (!hit || (p.captured && hit.id === 'win_material' && (hit.plies ?? 1) <= 1)) continue;
     const gain = e.materialAfterReply - e.materialBefore;
     if (gain < 2) continue;
-    if (!best || gain > best.gain)
-      best = {
+    found.push({
         gain,
         f: {
           kind: 'strength',
@@ -1008,9 +1007,16 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
           evidence: `${label(p)} ${hit.text} — a real tactic, and you found it.`,
           facts: { san: p.san },
         },
-      };
+      });
   }
-  return best ? [best.f] : [];
+  // The two biggest, if they're separate episodes.
+  const out: Finding[] = [];
+  for (const x of found.sort((a, b) => b.gain - a.gain)) {
+    if (out.length >= 2) break;
+    if (out.some((f) => Math.abs(f.ply - x.f.ply) <= 4)) continue;
+    out.push(x.f);
+  }
+  return out.sort((a, b) => a.ply - b.ply);
 }
 
 /** Credit: a rook placed on an open file. */
@@ -1220,12 +1226,15 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
       out.push({ kind: 'strength', category: 'developed_pieces', ply: at10.ply, severity: 2, confidence: 'high', evidence: 'All minor pieces developed by move 10.', facts: {} });
     } else if (left.length >= 2) {
       const ahead = aheadAt(at10);
+      // Pieces at home only matter if it showed: a real drop somewhere in the opening.
+      const costly = ctx.plies.some((p, k) => p.color === user && p.moveNumber <= 12 && pd(ctx.evals[k]) >= 8);
       out.push({
         kind: 'weakness',
         category: 'development',
         ply: at10.ply,
-        severity: 2,
-        confidence: 'high',
+        // Cost-free: a smaller note, not a main problem.
+        severity: costly ? 2 : 1,
+        confidence: costly ? 'high' : 'medium',
         evidence: ahead
           ? `By move 10 you were already up ${materialPhrase(cx(ctx, at10)!.material)}, but ${left.join(' and ')} were still at home. With a big lead, finishing development is the fastest way to make it count.`
           : `By move 10, ${left.length} minor pieces (${left.join(', ')}) were still at home.`,
@@ -1371,8 +1380,10 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       ply: neutralized,
       severity: 2,
       confidence: 'high',
-      evidence: `${lbl(neutralized)} took the sting out of ${COLOR_NAME[opp]}'s attack on your king.`,
-      facts: {},
+      evidence: ctx.plies[neutralized - 1]?.captured
+        ? `${lbl(neutralized)} removed the piece attacking your king and took the sting out of ${COLOR_NAME[opp]}'s attack.`
+        : `${lbl(neutralized)} took the sting out of ${COLOR_NAME[opp]}'s attack on your king.`,
+      facts: { captured: !!ctx.plies[neutralized - 1]?.captured },
     });
   }
   return out;

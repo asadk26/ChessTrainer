@@ -33,8 +33,8 @@ export function storedFromPgn(pgn: string, userColor: 'w' | 'b', id = 'g1', impo
 
 export const sampleStored = (id = 'g1', importedAt?: number) => storedFromPgn(SAMPLE_PGN, 'w', id, importedAt);
 
-export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game' | 'chaotic-game' | 'black-win-game' | 'queen-blunder-game' | 'queen-hunt-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
-  const color = ['knight-trip-game', 'black-win-game', 'queen-blunder-game', 'queen-hunt-game'].includes(name) ? 'b' : 'w';
+export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game' | 'chaotic-game' | 'black-win-game' | 'queen-blunder-game' | 'queen-hunt-game' | 'resign-win-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
+  const color = ['knight-trip-game', 'black-win-game', 'queen-blunder-game', 'queen-hunt-game', 'resign-win-game'].includes(name) ? 'b' : 'w';
   return {
     game: storedFromPgn(readFileSync(join(here, 'fixtures', `${name}.pgn`), 'utf8'), color, id, importedAt),
     positions: JSON.parse(readFileSync(join(here, 'fixtures', `${name}-positions.json`), 'utf8')) as PositionEval[],

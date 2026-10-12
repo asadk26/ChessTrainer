@@ -166,9 +166,27 @@ export function describeMove(inp: DescribeInput): { san: string; purposes: Purpo
       fenK = f.fen;
     }
     const exchange = target?.type === 'r' && gain < 4;
+    // Something of ours goes in return (e.g. a rook for the queen): say so.
+    let given: PieceType | undefined;
+    if (target && !exchange) {
+      let fenG = inp.fen;
+      for (let k = 0; k < Math.min(5, frames.length); k++) {
+        const f = frames[k];
+        const victim = pieceAt(fenG, f.to);
+        if (k % 2 === 1 && victim && victim.color === mover && PIECE_VALUE[victim.type] >= 3 && PIECE_VALUE[victim.type] < PIECE_VALUE[target.type]) {
+          given = victim.type;
+          break;
+        }
+        fenG = f.fen;
+      }
+    }
     add({
       id: 'win_material',
-      text: !target ? 'wins material' : exchange ? `wins the exchange (your minor piece for the rook on ${target.square})` : `wins the ${sq(target.type, target.square)}`,
+      text: !target
+        ? 'wins material'
+        : exchange
+          ? `wins the exchange (your minor piece for the rook on ${target.square})`
+          : `wins the ${sq(target.type, target.square)}${given ? ` for a ${name(given)}` : ''}`,
       weight: 90,
       confidence: target ? 'high' : 'medium',
       squares: target ? [target.square] : [],
