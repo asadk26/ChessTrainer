@@ -410,6 +410,8 @@ export interface StoredGame {
   source?: { site: 'chesscom'; id: string; url: string; timeClass?: string };
   /** The player's own word on how the game ended, overriding the PGN result (which may be missing or copied wrong). */
   outcome?: 'win' | 'loss' | 'draw';
+  /** AI-written explanations of single positions, keyed by ply, cached so revisiting costs no API call. */
+  aiExplanations?: Record<number, AiExplanation>;
   /** "This seems wrong" notes the player left on the coaching. */
   feedback?: CoachFeedback[];
 }
@@ -483,4 +485,21 @@ export interface ProfileSummary {
   categories: CategoryStats[];
   strengths: StrengthStats[];
   improving: CategoryStats[];
+}
+
+/** An AI instructor's explanation of one position, grounded in (and checked against) the Stockfish analysis. */
+export interface AiExplanation {
+  ply: number;
+  tryingTo: string;
+  missed: string;
+  whyBetter: string;
+  opponentReply: string;
+  difference: string;
+  takeaway: string;
+  pattern: string;
+  confidence: 'clear' | 'small_difference';
+  model?: string;
+  createdAt: number;
+  /** Identifies the engine analysis it was based on; if the analysis changes, the explanation is stale. */
+  grounding: string;
 }

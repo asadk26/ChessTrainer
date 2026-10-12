@@ -262,7 +262,7 @@ export function Dashboard() {
             {llm.provider && (
             <label className="check">
               <input type="checkbox" checked={settings.useLlm} onChange={(e) => updateSettings({ useLlm: e.target.checked })} />
-              AI coach voice ({llm.provider} · {llm.model})
+              AI instructor explanations ({llm.provider} · {llm.model}) — for each game's 1–2 lessons, and on request
             </label>
             )}
             {llm.reason && <div className="muted small">{llm.reason}</div>}

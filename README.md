@@ -86,6 +86,39 @@ analysis of games you have on both, never deletes anything, and never imports th
 **Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
 domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
+## AI instructor with Gemini (optional, personal use)
+
+The chain stays: **Stockfish → structured chess facts → deterministic lesson selection → AI
+explanation.** The AI never decides the chess; Stockfish remains the source of truth for best
+moves, evaluations, lines and move quality.
+
+- **What it explains:** for each game's 1–2 lessons (automatically) and for any other move on
+  request ("Explain this more deeply"): what you were trying to do, what you missed, why the better
+  move is better, the opponent's best reply, how the positions differ, a take-away, and a link to a
+  recurring pattern when your recent games show one.
+- **What it gets** (`src/coach/momentContext.ts`): FEN, your colour and rating, your move and its
+  quality, Stockfish's top 2–3 candidates with short lines cut where they make their point, the
+  evaluation before/after in words, what each line wins or loses, the line comparison, detected
+  features (king safety, activity, development, structure), and recurring patterns from recent games.
+- **Grounding:** the fixed system prompt (server-side) forbids moves or tactics not in the input
+  and asks it to say "small or positional difference" when the facts don't show a clear reason.
+  Answers are rejected if they mention any move that isn't in the game or Stockfish's lines.
+- **Cache:** explanations are stored with the game (`aiExplanations`), so revisiting costs no API
+  call; "Regenerate" makes a new one. If the engine analysis changes, the old one isn't reused.
+- **Without it** nothing changes: the built-in coach and Stockfish work on their own.
+
+Setup (Vercel → Settings → Environment Variables, or `.env.local` for local dev):
+
+```
+GEMINI_API_KEY=...              # from https://aistudio.google.com/apikey
+GEMINI_MODEL=gemini-flash-latest  # optional; Google's alias for the current Flash model
+COACH_ACCESS_TOKEN=...          # required when hosted, so your deployment isn't an open proxy to your key
+```
+
+Then enter the same access code once in the app (Dashboard → Settings). The key is only read by
+the server function (`/api/coach/complete`) and sent to Google in a header; it never reaches the
+browser bundle.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value

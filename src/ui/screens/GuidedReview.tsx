@@ -10,6 +10,7 @@ import { Verdict, type Panels } from '../components/reviewParts';
 import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoard';
 import { useLessonRunner } from '../components/LessonRunner';
 import { EvalChange } from '../components/EvalBar';
+import { AiExplain } from '../components/AiExplain';
 import { gapBetween, qualityOf, qualityOfGap, type Quality } from '../../analysis/moveQuality';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
@@ -658,8 +659,10 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
               Explore
             </button>
           )}
+          {noteHere.kind === 'mistake' && <AiExplain game={game} ply={noteHere.betterPly} bestSan={noteCmp?.bestSan} compact />}
         </div>
       )}
+      {!noteHere && !upcomingRaw && evalAt && mine && !evalAt.isBest && verdict !== 'equal' && <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} compact />}
       {plyNotes.map((f, i) => (
         <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
       ))}

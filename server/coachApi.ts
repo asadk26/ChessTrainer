@@ -2,7 +2,7 @@
 // dev/preview middleware (server/coachPlugin.ts) and the Vercel functions
 // (api/coach/*.ts). API keys only ever live here, on the server side.
 import { timingSafeEqual } from 'node:crypto';
-import { COACH_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
+import { COACH_SYSTEM_PROMPT, MOMENT_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
 import { providerFromEnv, type Env, type LlmProvider } from './llm';
 
 export interface ApiResult {
@@ -47,13 +47,15 @@ export async function coachComplete(opts: ApiOptions, givenToken: string | null 
   const { provider, token, reason } = resolve(opts);
   if (!provider) return { status: 503, body: { error: reason ?? 'No LLM configured' } };
   if (token && !tokenMatches(token, givenToken)) return { status: 401, body: { error: 'Missing or incorrect AI coach access code.' } };
-  const body = (rawBody ?? {}) as { prompt?: unknown; maxTokens?: unknown };
+  const body = (rawBody ?? {}) as { prompt?: unknown; maxTokens?: unknown; task?: unknown };
   if (typeof body.prompt !== 'string' || !body.prompt.trim()) return { status: 400, body: { error: 'Bad request' } };
   if (body.prompt.length > MAX_PROMPT_CHARS) return { status: 413, body: { error: 'Prompt too large' } };
   const maxTokens = Math.min(16000, Math.max(256, Number(body.maxTokens) || 16000));
   try {
     // The system prompt is fixed server-side; the browser only supplies game facts.
-    const text = await provider.complete({ system: COACH_SYSTEM_PROMPT, prompt: body.prompt, maxTokens });
+    // Which fixed prompt: the whole-game summary, or one teaching moment.
+    const system = body.task === 'moment' ? MOMENT_SYSTEM_PROMPT : COACH_SYSTEM_PROMPT;
+    const text = await provider.complete({ system, prompt: body.prompt, maxTokens });
     return { status: 200, body: { text } };
   } catch (e) {
     return { status: 502, body: { error: (e as Error).message } };

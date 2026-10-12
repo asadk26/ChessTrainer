@@ -15,6 +15,7 @@ import { DEEP_DEPTH } from '../../analysis/pipeline';
 import { analysePosition } from '../actions';
 import { CoachText } from './CoachText';
 import type { Panels } from './reviewParts';
+import { AiExplain } from './AiExplain';
 
 const arrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
 const MAX_TRY_MOVES = 3;
@@ -164,6 +165,7 @@ export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: 
             </div>
           )}
           {deepening && <p className="muted small">Checking this position more deeply…</p>}
+          {isUser && quality !== 'best' && <AiExplain game={game} ply={ply} bestSan={bestSan} compact />}
         </>
       ),
       banner: (

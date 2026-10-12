@@ -18,6 +18,7 @@ import { CoachText } from './CoachText';
 import { EvalChange } from './EvalBar';
 import { Verdict, type Panels } from './reviewParts';
 import { gameMoveComparison } from './PracticeBoard';
+import { AiExplain } from './AiExplain';
 
 type Phase = 'ask_reply' | 'reply_feedback' | 'ask_find' | 'find_feedback' | 'point' | 'wrap';
 type Grade = 'right' | 'reasonable' | 'refuted';
@@ -359,6 +360,7 @@ export function useLessonRunner(
           ) : null}
           {c && <CoachText text={c.summary} className="ply-note" />}
           <p className="muted small">Tap a column to play through that line on the board.</p>
+          <AiExplain game={game} ply={m.betterPly} bestSan={bestSan} auto />
         </>
       ),
       banner: (

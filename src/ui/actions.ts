@@ -1,5 +1,6 @@
 // App-level operations that combine storage, engine and coaching.
-import type { CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
+import type { AiExplanation, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
+import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { findDuplicate } from '../chess/fingerprint';
@@ -100,7 +101,8 @@ export function runAnalysis(gameId: string, onProgress: (done: number, total: nu
     }
   })();
   running.set(gameId, job);
-  job.finally(() => running.delete(gameId));
+  const clear = () => void running.delete(gameId);
+  job.then(clear, clear);
   return job;
 }
 
@@ -276,4 +278,66 @@ export function analysePosition(fen: string, depth: number, multiPv = 1): Promis
     liveCache.set(key, p);
   }
   return p;
+}
+
+/** Is an AI instructor available and switched on (and, when hosted, unlocked)? */
+export async function aiReady(): Promise<boolean> {
+  const status = await getLlmStatus();
+  const settings = await repo.getSettings();
+  return !!status.provider && settings.useLlm && (!status.requiresToken || !!settings.coachToken);
+}
+
+const inflight = new Map<string, Promise<AiExplanation>>();
+
+/**
+ * An AI explanation of the move at `ply`, grounded in the stored Stockfish analysis.
+ * Cached on the game: revisiting costs nothing unless `force` asks to regenerate.
+ */
+export function explainPosition(gameId: string, ply: number, opts: { force?: boolean } = {}): Promise<AiExplanation> {
+  const key = `${gameId}:${ply}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const job = (async () => {
+    const game = await repo.getGame(gameId);
+    if (!game) throw new Error('Game not found');
+    const cached = game.aiExplanations?.[ply];
+    const all = await repo.listGames();
+    const settings = await repo.getSettings();
+    const ctx = buildMomentContext(game, ply, { rating: settings.rating, prior: priorGames(game, all) });
+    if (!ctx) throw new Error('No engine analysis for this move yet.');
+    if (cached && !opts.force && cached.grounding === ctx.grounding) return cached;
+    const status = await getLlmStatus();
+    if (!status.provider) throw new Error('No AI coach is configured.');
+    const text = await llmComplete(momentPrompt(ctx), settings.coachToken, 4096, 'moment');
+    const expl = parseMomentExplanation(text, ctx, ply, status.model);
+    const fresh = (await repo.getGame(gameId)) ?? game;
+    await repo.saveGame({ ...fresh, aiExplanations: { ...(fresh.aiExplanations ?? {}), [ply]: expl } });
+    return expl;
+  })();
+  inflight.set(key, job);
+  const clear = () => void inflight.delete(key);
+  job.then(clear, clear);
+  return job;
+}
+
+/** Lessons whose automatic explanation failed this session (not retried automatically). */
+const failedLessons = new Set<string>();
+
+/** Richer explanations for the 1–2 lessons of a game (only those, and only if not cached). */
+export async function explainLessons(gameId: string): Promise<number> {
+  if (!(await aiReady())) return 0;
+  const game = await repo.getGame(gameId);
+  if (!game) return 0;
+  let n = 0;
+  for (const m of game.moments.filter((x) => x.tier === 'lesson' && x.kind === 'mistake')) {
+    if (game.aiExplanations?.[m.betterPly] || failedLessons.has(`${gameId}:${m.betterPly}`)) continue;
+    try {
+      await explainPosition(gameId, m.betterPly);
+      n++;
+    } catch (e) {
+      console.warn('AI explanation failed; the built-in coaching stays.', e);
+      failedLessons.add(`${gameId}:${m.betterPly}`);
+    }
+  }
+  return n;
 }

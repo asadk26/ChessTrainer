@@ -3,7 +3,7 @@
 // local Vite server during development, or in a Vercel Function when hosted.
 
 export interface LlmStatus {
-  provider: 'anthropic' | 'openai' | null;
+  provider: 'anthropic' | 'openai' | 'gemini' | null;
   model?: string;
   /** Hosted deployments require an access code (COACH_ACCESS_TOKEN). */
   requiresToken?: boolean;
@@ -23,11 +23,11 @@ export function getLlmStatus(): Promise<LlmStatus> {
   return cached;
 }
 
-export async function llmComplete(prompt: string, token?: string, maxTokens = 16000): Promise<string> {
+export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: 'report' | 'moment' = 'report'): Promise<string> {
   const res = await fetch('/api/coach/complete', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { 'x-coach-token': token } : {}) },
-    body: JSON.stringify({ prompt, maxTokens }),
+    body: JSON.stringify({ prompt, maxTokens, task }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `LLM request failed (${res.status})`);

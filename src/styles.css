@@ -476,3 +476,9 @@ p { margin: 0 0 0.75rem; }
 .note-card { display: grid; gap: 0.3rem; margin: 0.35rem 0; padding: 0.55rem 0.7rem; border-left: 3px solid var(--v-inaccuracy); background: var(--surface-2); border-radius: 6px; }
 .note-card .btn { justify-self: start; }
 @media (max-width: 420px) { .compare-card { grid-template-columns: 1fr; } }
+
+/* AI instructor */
+.ai-box { margin-top: 0.5rem; padding: 0.55rem 0.7rem; border: 1px dashed var(--line); border-radius: 8px; background: var(--card); }
+.ai-box .eyebrow { display: block; margin-bottom: 0.25rem; }
+.ai-sections { margin: 0.2rem 0 0.3rem; }
+.ai-box.compact .ai-sections dd { font-size: 0.9rem; }

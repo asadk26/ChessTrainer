@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReportItem, StoredGame } from '../../domain/types';
-import { enrichWithLlm, recoach, runAnalysis, setOutcome } from '../actions';
+import { enrichWithLlm, explainLessons, recoach, runAnalysis, setOutcome } from '../actions';
 import { navigate, useApp } from '../store';
 import { GuidedReview } from './GuidedReview';
 import { DrillList } from './DrillsScreen';
@@ -42,7 +42,8 @@ function useAnalysis(game: StoredGame | undefined) {
       .then(async (g) => {
         setProgress(null);
         await refresh();
-        if (llm.provider && settings.useLlm && (!llm.requiresToken || settings.coachToken)) void enrich(g.id);
+        // AI is used only where it adds most: explanations for this game's 1–2 lessons.
+        if (llm.provider && settings.useLlm && (!llm.requiresToken || settings.coachToken)) void explainLessons(g.id).then(() => refresh());
       })
       .catch(async (e) => {
         setProgress(null);
@@ -51,6 +52,20 @@ function useAnalysis(game: StoredGame | undefined) {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.id, game?.status]);
+
+  // Games analysed earlier (or synced) get their lesson explanations the first time they're opened.
+  const explained = useRef<string | null>(null);
+  useEffect(() => {
+    if (!game || game.status !== 'analyzed' || explained.current === game.id) return;
+    if (!llm.provider || !settings.useLlm || (llm.requiresToken && !settings.coachToken)) return;
+    const missing = game.moments.some((m) => m.tier === 'lesson' && m.kind === 'mistake' && !game.aiExplanations?.[m.betterPly]);
+    explained.current = game.id;
+    if (missing)
+      void explainLessons(game.id).then((n) => {
+        if (n) void refresh();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.id, game?.status, llm.provider]);
 
   return { progress, error, llmState, enrich };
 }

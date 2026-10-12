@@ -9,7 +9,7 @@ export interface LlmRequest {
 }
 
 export interface LlmProvider {
-  readonly name: 'anthropic' | 'openai';
+  readonly name: 'anthropic' | 'openai' | 'gemini';
   readonly model: string;
   complete(req: LlmRequest): Promise<string>;
 }
@@ -74,6 +74,45 @@ export class OpenAICompatibleProvider implements LlmProvider {
   }
 }
 
+/**
+ * Google Gemini through its REST API (generateContent). The key is sent in a
+ * header from the server only; replies are requested as JSON.
+ */
+export class GeminiProvider implements LlmProvider {
+  readonly name = 'gemini' as const;
+  constructor(
+    private apiKey: string,
+    readonly model: string,
+    private fetchImpl: typeof fetch = (...a) => fetch(...a),
+  ) {}
+  async complete(req: LlmRequest): Promise<string> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
+    const res = await this.fetchImpl(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: req.system }] },
+        contents: [{ role: 'user', parts: [{ text: req.prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: req.maxTokens ?? 4096, responseMimeType: 'application/json' },
+      }),
+    });
+    if (res.status === 429) throw new Error('Gemini rate limit reached (free tier). Try again in a minute.');
+    if (!res.ok) throw new Error(`Gemini returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+      promptFeedback?: { blockReason?: string };
+    };
+    if (data.promptFeedback?.blockReason) throw new Error(`Gemini declined this request (${data.promptFeedback.blockReason}).`);
+    const c = data.candidates?.[0];
+    const text = c?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
+    if (!text) throw new Error(`Gemini returned no text${c?.finishReason ? ` (${c.finishReason})` : ''}.`);
+    return text;
+  }
+}
+
+/** Default model: Google's alias for its current Flash model (free tier). Override with GEMINI_MODEL. */
+export const DEFAULT_GEMINI_MODEL = 'gemini-flash-latest';
+
 /** Pick a provider from environment variables, or null when none is configured. */
 export function providerFromEnv(env: Env): LlmProvider | null {
   const forced = env.COACH_LLM_PROVIDER?.toLowerCase();
@@ -82,7 +121,9 @@ export function providerFromEnv(env: Env): LlmProvider | null {
   const openai = env.OPENAI_BASE_URL || env.OPENAI_API_KEY
     ? new OpenAICompatibleProvider(env.OPENAI_BASE_URL || 'https://api.openai.com/v1', env.OPENAI_API_KEY, env.OPENAI_MODEL || 'gpt-4o-mini')
     : null;
+  const gemini = env.GEMINI_API_KEY ? new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL) : null;
   if (forced === 'openai') return openai;
   if (forced === 'anthropic') return anthropic;
-  return anthropic ?? openai;
+  if (forced === 'gemini') return gemini;
+  return gemini ?? anthropic ?? openai;
 }
