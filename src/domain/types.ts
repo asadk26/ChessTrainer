@@ -15,6 +15,8 @@ export interface GameHeaders {
   site?: string;
   timeControl?: string;
   termination?: string;
+  /** Link to the game on the site it was played on (Chess.com and Lichess PGNs include it). */
+  link?: string;
 }
 
 /** One half-move of a game, with the board before and after it. */
@@ -390,6 +392,8 @@ export interface StoredGame {
   report?: GameReport;
   drillIds: string[];
   completedMomentIds: string[];
+  /** Where the game came from, when it was synced rather than pasted. */
+  source?: { site: 'chesscom'; id: string; url: string; timeClass?: string };
   /** The player's own word on how the game ended, overriding the PGN result (which may be missing or copied wrong). */
   outcome?: 'win' | 'loss' | 'draw';
   /** "This seems wrong" notes the player left on the coaching. */
@@ -423,6 +427,17 @@ export interface PlayerSettings {
   useLlm: boolean;
   /** Access code for a hosted AI coach (COACH_ACCESS_TOKEN). Never included in exports. */
   coachToken?: string;
+  /** Optional Chess.com syncing (public API, no login). */
+  chesscom?: ChessComSettings;
+}
+
+export type ChessComTimeClass = 'rapid' | 'blitz' | 'bullet' | 'daily';
+
+export interface ChessComSettings {
+  username: string;
+  /** Only games from the last N days are synced. */
+  days: number;
+  timeClasses: ChessComTimeClass[];
 }
 
 export type Trend = 'improving' | 'stable' | 'worsening' | 'new' | 'insufficient';

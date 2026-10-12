@@ -9,6 +9,7 @@ import { deleteGame, downloadFeedback, exportBackup, exportFeedback, importBacku
 import { feedbackCount } from '../../coach/feedback';
 import { userOutcome } from '../../chess/outcome';
 import { gameStats, trend } from '../../analysis/engineReview';
+import { ChessComSync } from '../components/ChessComSync';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
@@ -40,7 +41,7 @@ export function Dashboard() {
   const openDrills = drills.filter((d) => !solvedIds.has(d.id)).length;
 
   const trySample = async () => {
-    const g = await importGame(parsePgn(SAMPLE_PGN), 'w');
+    const { game: g } = await importGame(parsePgn(SAMPLE_PGN), 'w');
     await refresh();
     navigate(`/game/${g.id}`);
   };
@@ -82,6 +83,10 @@ export function Dashboard() {
             Try the sample game
           </button>
         </div>
+        <section className="card">
+          <h3>Or sync your Chess.com games</h3>
+          <ChessComSync />
+        </section>
         <p className="muted small">
           Moving from another device? Export your data there (Dashboard → Settings), then restore it here: {importButton}
         </p>
@@ -94,6 +99,9 @@ export function Dashboard() {
   return (
     <div className="dashboard">
       {importMsg && <div className={`feedback ${importMsg.ok ? 'good' : 'bad'}`}>{importMsg.text}</div>}
+      <section className="card sync-card">
+        <ChessComSync />
+      </section>
       <section className="card focus-card">
         <span className="eyebrow">Current focus</span>
         {settings.focus ? (

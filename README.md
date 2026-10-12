@@ -86,6 +86,29 @@ analysis of games you have on both, never deletes anything, and never imports th
 **Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
 domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
+## Chess.com sync (optional)
+
+Dashboard → **Chess.com** → enter your username → **Sync Chess.com**. No login: it uses
+Chess.com's public Published-Data API.
+
+- **What it reads.** The list of your monthly archives, then only the months that overlap the
+  sync window (30 days by default, or 90). Months that have finished are read once per filter
+  setting and never again; the current month is re-checked on each sync. A sync within a minute
+  of the last one makes no requests. There is no background polling.
+- **What it imports.** Standard chess only (no Chess960 or custom starting positions), Rapid by
+  default (Blitz, Bullet and Daily can be switched on). Your side is found by matching your
+  username case-insensitively. At most 10 new games per sync, Rapid first; the rest come next time.
+- **Same pipeline as pasted games.** Synced games go through the same `importGame` → Stockfish →
+  coaching path and the same duplicate check (`src/chess/fingerprint.ts`): the Chess.com game id
+  when there is one, otherwise the exact move list (short games also need the same date). Pasting
+  a game you've already synced (or syncing one you pasted) opens the existing game instead.
+- **Requests.** They go through a tiny read-only proxy (`/api/chesscom`, `server/chesscomProxy.ts`)
+  that only forwards the two endpoints above and sends an identifying User-Agent, as Chess.com
+  asks — set `CHESSCOM_CONTACT` (an email or URL) in Vercel. Without the proxy (e.g. a static
+  host) the browser calls the public API directly. Requests are serial; a 429 shows "try again
+  later".
+- Manual PGN import stays available as a fallback.
+
 ## User flow
 
 1. **Import** – paste a PGN. Players, colours, ratings, result, date and moves are parsed (smart quotes,

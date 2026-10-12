@@ -414,3 +414,13 @@ p { margin: 0 0 0.75rem; }
 .engine-notes li { margin-bottom: 0.7rem; }
 .engine-notes .link.small { font-size: 0.8rem; }
 .acc-badge { font-size: 0.75rem; font-variant-numeric: tabular-nums; border: 1px solid var(--line); border-radius: 6px; padding: 0.05rem 0.35rem; color: var(--muted); margin-right: 0.4rem; }
+
+/* Chess.com sync */
+.chesscom-sync .row-between { gap: 0.6rem; flex-wrap: wrap; }
+.chesscom-sync.editing { display: grid; gap: 0.6rem; }
+.chesscom-sync label { display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.chesscom-sync input:not([type='checkbox']), .chesscom-sync select { font: inherit; padding: 0.45rem 0.55rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); max-width: 320px; }
+.chesscom-sync .checks { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
+.chesscom-sync .checks legend { font-size: 0.9rem; margin-bottom: 0.25rem; padding: 0; }
+.chesscom-sync label.check { display: inline-flex; align-items: center; gap: 0.35rem; }
+.chesscom-sync .feedback { margin-top: 0.5rem; }

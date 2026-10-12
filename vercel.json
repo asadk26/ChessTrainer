@@ -6,7 +6,8 @@
   "outputDirectory": "dist",
   "functions": {
     "api/coach/complete.ts": { "maxDuration": 60 },
-    "api/coach/status.ts": { "maxDuration": 10 }
+    "api/coach/status.ts": { "maxDuration": 10 },
+    "api/chesscom.ts": { "maxDuration": 15 }
   },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "headers": [

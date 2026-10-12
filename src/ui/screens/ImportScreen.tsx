@@ -32,9 +32,9 @@ export function ImportScreen() {
   const submit = async () => {
     if (!game || !me) return;
     setBusy(true);
-    const stored = await importGame(game, me, outcome ?? undefined);
+    const { game: stored, duplicate } = await importGame(game, me, outcome ?? undefined);
     await refresh();
-    navigate(`/game/${stored.id}`);
+    navigate(`/game/${stored.id}${duplicate ? '?already=1' : ''}`);
   };
 
   return (

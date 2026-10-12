@@ -107,6 +107,7 @@ export function parsePgn(raw: string): ParsedGame {
     site: tags.Site,
     timeControl: tags.TimeControl,
     termination: tags.Termination,
+    link: tags.Link,
   };
 
   return { headers, startFen, plies, pgn };

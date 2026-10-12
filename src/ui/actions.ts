@@ -2,6 +2,9 @@
 import type { CoachFeedback, Color, ParsedGame, StoredGame } from '../domain/types';
 import { feedbackReport } from '../coach/feedback';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
+import { findDuplicate } from '../chess/fingerprint';
+import { planSync, syncSummary, SyncError, type ChessComFetch } from '../sync/chesscom';
+import { chesscomFetch } from '../sync/chesscomClient';
 import { REPORT_VERSION } from '../coach/report';
 import { repo, type ImportSummary } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
@@ -16,7 +19,18 @@ function newId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-export async function importGame(parsed: ParsedGame, userColor: Color, outcome?: Outcome): Promise<StoredGame> {
+/**
+ * The one way games get in — pasted PGN or Chess.com sync. A game that's already
+ * here (same site id, or the same moves) isn't added twice; the existing one is returned.
+ */
+export async function importGame(
+  parsed: ParsedGame,
+  userColor: Color,
+  outcome?: Outcome,
+  source?: StoredGame['source'],
+): Promise<{ game: StoredGame; duplicate: boolean }> {
+  const existing = findDuplicate(await repo.listGames(), { headers: parsed.headers, plies: parsed.plies, source });
+  if (existing) return { game: existing, duplicate: true };
   const userName = userColor === 'w' ? parsed.headers.white : parsed.headers.black;
   const game: StoredGame = {
     id: newId(),
@@ -35,6 +49,7 @@ export async function importGame(parsed: ParsedGame, userColor: Color, outcome?:
     completedMomentIds: [],
     // Only stored when it differs from what the PGN says (or the PGN has no result).
     outcome: outcome && outcome !== outcomeFromResult(parsed.headers.result, userColor) ? outcome : undefined,
+    source,
   };
   await repo.saveGame(game);
   const settings = await repo.getSettings();
@@ -44,7 +59,7 @@ export async function importGame(parsed: ParsedGame, userColor: Color, outcome?:
     displayName: settings.displayName ?? (isPlaceholderName(userName) ? undefined : userName),
     rating: game.userRating ?? settings.rating,
   });
-  return game;
+  return { game, duplicate: false };
 }
 
 /** Sets the dashboard focus from the most recent analyzed game. */
@@ -199,4 +214,51 @@ export async function setOutcome(gameId: string, outcome: Outcome) {
   if (!game) return;
   await repo.saveGame({ ...game, outcome: outcome === outcomeFromResult(game.headers.result, game.userColor) ? undefined : outcome });
   await recoach(gameId);
+}
+
+/** How many new games one sync brings in; the rest come next time (analysis takes a while). */
+export const SYNC_MAX_GAMES = 10;
+
+export interface SyncResult {
+  message: string;
+  imported: StoredGame[];
+}
+
+/**
+ * Manual Chess.com sync: find new games in the last N days, import them through
+ * importGame (same model, dedupe and pipeline as pasted games), then analyse them
+ * one at a time, oldest first, so each game's coaching sees the ones before it.
+ */
+export async function syncChessCom(onProgress?: (text: string) => void, fetcher: ChessComFetch = chesscomFetch): Promise<SyncResult> {
+  const settings = await repo.getSettings();
+  const cfg = settings.chesscom;
+  if (!cfg?.username) throw new SyncError('invalid_username', 'Add your Chess.com username in Settings first.');
+  onProgress?.('Checking Chess.com…');
+  const plan = await planSync(
+    { username: cfg.username, days: cfg.days, timeClasses: cfg.timeClasses, now: Date.now(), maxGames: SYNC_MAX_GAMES },
+    fetcher,
+    await repo.listGames(),
+    await repo.getSyncState(),
+  );
+  const imported: StoredGame[] = [];
+  for (const c of plan.toImport) {
+    const { game, duplicate } = await importGame(c.parsed, c.color, undefined, c.source);
+    if (!duplicate) imported.push(game);
+  }
+  await repo.saveSyncState(plan.state);
+  const message = syncSummary({ ...plan, toImport: imported.length === plan.toImport.length ? plan.toImport : plan.toImport.slice(0, imported.length) }, cfg.days);
+  return { message, imported };
+}
+
+/** Analyse games one after another (Stockfish runs one position at a time anyway). */
+export async function analyzeInOrder(games: StoredGame[], onProgress?: (done: number, total: number, current: StoredGame) => void) {
+  for (let i = 0; i < games.length; i++) {
+    onProgress?.(i, games.length, games[i]);
+    try {
+      await runAnalysis(games[i].id, () => undefined);
+    } catch (e) {
+      console.warn('Analysis failed for synced game', games[i].id, e);
+    }
+  }
+  onProgress?.(games.length, games.length, games[games.length - 1]);
 }

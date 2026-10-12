@@ -3,6 +3,7 @@
 // Suggested table mapping: games, drills, drill_attempts, player_settings
 // (findings/moments/report can live as JSONB columns on games).
 import type { Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
+import type { SyncState } from '../sync/chesscom';
 import { mergeFeedback } from '../coach/feedback';
 
 export interface CoachRepository {
@@ -19,6 +20,9 @@ export interface CoachRepository {
   exportAll(): Promise<string>;
   /** Merge a backup into the current data (never deletes anything). */
   importAll(json: string): Promise<ImportSummary>;
+  /** Chess.com sync bookkeeping (which finished months were already read). Not part of backups. */
+  getSyncState(): Promise<SyncState | undefined>;
+  saveSyncState(s: SyncState | undefined): Promise<void>;
 }
 
 export interface ImportSummary {
@@ -112,6 +116,13 @@ export class LocalStorageRepository implements CoachRepository {
   }
   async saveSettings(s: PlayerSettings) {
     this.write('settings', s);
+  }
+  async getSyncState() {
+    return this.read<SyncState | undefined>('chesscomSync', undefined);
+  }
+  async saveSyncState(s: SyncState | undefined) {
+    if (s) this.write('chesscomSync', s);
+    else this.store.removeItem(PREFIX + 'chesscomSync');
   }
   async exportAll() {
     return JSON.stringify(
