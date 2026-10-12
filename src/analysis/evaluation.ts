@@ -63,6 +63,7 @@ export function formatCp(cp: number): string {
     return cp > 0 ? `M${n}` : `-M${n}`;
   }
   const v = cp / 100;
+  if (Math.abs(v) < 0.05) return '0.0';
   return (v > 0 ? '+' : '') + v.toFixed(1);
 }
 

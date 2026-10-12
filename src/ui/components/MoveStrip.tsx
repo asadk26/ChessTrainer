@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { PlyRecord } from '../../domain/types';
+import { VERDICT_LABEL, type Verdict } from '../../analysis/engineReview';
 
 /**
  * The game as one horizontal, swipeable strip. Keeps the current move centred
@@ -11,11 +12,14 @@ export function MoveStrip({
   current,
   onSelect,
   marks = {},
+  verdicts = {},
 }: {
   plies: PlyRecord[];
   current: number;
   onSelect: (ply: number) => void;
   marks?: Record<number, 'good' | 'bad' | 'done'>;
+  /** Stockfish's verdict per ply (both sides), shown as an underline. */
+  verdicts?: Record<number, Verdict>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -36,9 +40,9 @@ export function MoveStrip({
           {p.color === 'w' && <span className="ms-no">{p.moveNumber}.</span>}
           <button
             data-ply={p.ply}
-            className={`ms-move ${current === p.ply ? 'on' : ''} ${marks[p.ply] ? `mark-${marks[p.ply]}` : ''}`}
+            className={`ms-move ${current === p.ply ? 'on' : ''} ${marks[p.ply] ? `mark-${marks[p.ply]}` : ''} ${verdicts[p.ply] ? `v-${verdicts[p.ply]}` : ''}`}
             onClick={() => onSelect(p.ply)}
-            title={marks[p.ply] ? (marks[p.ply] === 'good' ? 'Good idea' : 'Critical moment') : undefined}
+            title={[marks[p.ply] ? (marks[p.ply] === 'good' ? 'Good idea' : 'Critical moment') : '', verdicts[p.ply] ? `Stockfish: ${VERDICT_LABEL[verdicts[p.ply]]}` : ''].filter(Boolean).join(' · ') || undefined}
           >
             {p.san}
           </button>

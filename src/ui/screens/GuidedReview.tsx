@@ -12,6 +12,7 @@ import { categoryLabel } from '../../domain/categories';
 import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
+import { VERDICT_LABEL, engineNotes, verdictOf, type Verdict } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
 import { gamePlayedAt } from '../../analysis/pipeline';
@@ -551,6 +552,20 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   const upcoming = momentAt.get(ply + 1);
   const evalAt = ply > 0 ? game.analysis?.moves[ply - 1] : undefined;
   const plyNotes = game.findings.filter((f) => f.ply === ply && ply > 0 && f.confidence !== 'low' && !momentAt.has(ply));
+  const verdicts = useMemo(() => {
+    const out: Record<number, Verdict> = {};
+    (game.analysis?.moves ?? []).forEach((e, i) => {
+      const v = verdictOf(e);
+      if (v === 'inaccuracy' || v === 'mistake' || v === 'blunder') out[i + 1] = v;
+    });
+    return out;
+  }, [game.analysis]);
+  // Only moves already played: marking upcoming ones would give the critical moments away.
+  const shownVerdicts = useMemo(() => Object.fromEntries(Object.entries(verdicts).filter(([p]) => Number(p) <= ply)) as Record<number, Verdict>, [verdicts, ply]);
+  const notesByPly = useMemo(() => new Map(engineNotes(game).map((n) => [n.ply, n])), [game]);
+  const engineNote = notesByPly.get(ply);
+  const verdict = evalAt ? verdictOf(evalAt) : undefined;
+  const mine = evalAt?.color === game.userColor;
 
   // ---------------------------------------------------------- play-through
   const browseBoard: BoardProps = {
@@ -572,6 +587,13 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
           {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
         </p>
       )}
+      {evalAt && verdict && (
+        <p className={`engine-line v-${verdict}`}>
+          <span className="engine-chip">Stockfish</span> {VERDICT_LABEL[verdict]}
+          {!evalAt.isBest && evalAt.bestSan ? ` · preferred ${evalAt.bestSan} (${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view)` : ''}
+        </p>
+      )}
+      {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
       {plyNotes.map((f, i) => (
         <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
       ))}
@@ -617,7 +639,6 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   const browseDetails = evalAt ? (
     <p className="muted small">
       Engine after {moveLabel(game.plies[ply - 1])}: {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))} (your view)
-      {evalAt.bestSan && !evalAt.isBest ? ` · engine preferred ${evalAt.bestSan}` : ''}
     </p>
   ) : null;
 
@@ -627,7 +648,7 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   return (
     <HoverProvider>
       <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
-        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} onSelect={(p) => (setActive(undefined), setPly(p))} />
+        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} verdicts={active ? {} : shownVerdicts} onSelect={(p) => (setActive(undefined), setPly(p))} />
         <div className="rv-grid">
           <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
           <div className="rv-board">
@@ -661,6 +682,15 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
               </span>
               <span>
                 <i style={{ background: 'rgb(60,108,196)' }} /> your guess
+              </span>
+              <span>
+                <i className="lg-v inaccuracy" /> inaccuracy
+              </span>
+              <span>
+                <i className="lg-v mistake" /> mistake
+              </span>
+              <span>
+                <i className="lg-v blunder" /> blunder
               </span>
             </div>
             {moments.length > 0 && (

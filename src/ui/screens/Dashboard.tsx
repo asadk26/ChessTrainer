@@ -8,6 +8,7 @@ import { parsePgn } from '../../chess/pgn';
 import { deleteGame, downloadFeedback, exportBackup, exportFeedback, importBackup, importGame } from '../actions';
 import { feedbackCount } from '../../coach/feedback';
 import { userOutcome } from '../../chess/outcome';
+import { gameStats, trend } from '../../analysis/engineReview';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
@@ -30,6 +31,11 @@ export function Dashboard() {
     [analyzed],
   );
   const recent = [...games].sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
+  const statsById = useMemo(() => new Map(analyzed.map((g) => [g.id, gameStats(g)] as const)), [analyzed]);
+  const accTrend = useMemo(
+    () => trend(analyzed.flatMap((g) => (statsById.get(g.id) ? [{ at: gamePlayedAt(g), s: statsById.get(g.id)! }] : []))),
+    [analyzed, statsById],
+  );
   const solvedIds = new Set(attempts.filter((a) => a.correct).map((a) => a.drillId));
   const openDrills = drills.filter((d) => !solvedIds.has(d.id)).length;
 
@@ -101,6 +107,24 @@ export function Dashboard() {
         )}
       </section>
 
+      {analyzed.length > 0 && (
+        <section className="card trend-card">
+          <h3>How your games are going</h3>
+          {accTrend ? (
+            <p>
+              Accuracy: <b>{accTrend.recent}</b> over your last {accTrend.n} games vs {accTrend.earlier} over the {accTrend.n} before
+              {accTrend.recent - accTrend.earlier >= 3 ? ' — improving.' : accTrend.earlier - accTrend.recent >= 3 ? ' — a dip; check the recurring weaknesses below.' : ' — about the same.'}{' '}
+              Blunders per game: <b>{accTrend.recentBlunders}</b> vs {accTrend.earlierBlunders}.
+            </p>
+          ) : (
+            <p className="muted">
+              Each game's Stockfish accuracy is shown next to it below. Once you have 6 analyzed games, I'll compare your recent games with earlier ones ({analyzed.length}/6 so far).
+            </p>
+          )}
+          <p className="muted small">Accuracy is a rough measure — short or one-sided games swing it a lot. It's not a rating estimate.</p>
+        </section>
+      )}
+
       <div className="grid-2">
         <section className="card">
           <h3>Recent strengths</h3>
@@ -165,6 +189,11 @@ export function Dashboard() {
                   vs <b>{g.opponentName}</b> <span className="muted small">{g.userColor === 'w' ? 'as White' : 'as Black'}</span>
                   <span className="muted small block">{g.status === 'analyzed' ? g.report?.focus.title : g.status === 'error' ? `Error: ${g.error}` : 'Not analyzed yet'}</span>
                 </span>
+                {statsById.get(g.id) && (
+                  <span className="acc-badge" title="Stockfish accuracy (0–100)">
+                    {statsById.get(g.id)!.you.accuracy}
+                  </span>
+                )}
                 <span className="muted small">{g.headers.date ?? new Date(g.importedAt).toLocaleDateString()}</span>
                 <button
                   className="icon subtle"

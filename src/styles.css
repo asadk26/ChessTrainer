@@ -393,3 +393,24 @@ p { margin: 0 0 0.75rem; }
 .btn.small { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
 .feedback-card p { margin: 0.25rem 0 0.5rem; }
 .outcome-select { font: inherit; font-size: inherit; color: inherit; background: transparent; border: 1px dashed var(--line); border-radius: 6px; padding: 0 0.2rem; cursor: pointer; }
+
+/* Stockfish verdicts (both sides): an underline in the move strip, a line under the move. */
+:root { --v-inaccuracy: #d9a520; --v-mistake: #e07b2a; --v-blunder: #c0392b; }
+.ms-move.v-inaccuracy { box-shadow: inset 0 -3px 0 var(--v-inaccuracy); }
+.ms-move.v-mistake { box-shadow: inset 0 -3px 0 var(--v-mistake); }
+.ms-move.v-blunder { box-shadow: inset 0 -3px 0 var(--v-blunder); }
+.lg-v.inaccuracy { background: var(--v-inaccuracy); }
+.lg-v.mistake { background: var(--v-mistake); }
+.lg-v.blunder { background: var(--v-blunder); }
+.engine-line { font-size: 0.85rem; color: var(--muted); margin: 0.2rem 0; }
+.engine-chip { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; border: 1px solid var(--line); border-radius: 5px; padding: 0.05rem 0.35rem; margin-right: 0.2rem; }
+.engine-line.v-inaccuracy .engine-chip { border-color: var(--v-inaccuracy); }
+.engine-line.v-mistake .engine-chip { border-color: var(--v-mistake); }
+.engine-line.v-blunder .engine-chip { border-color: var(--v-blunder); }
+.accuracy-line { font-size: 0.9rem; margin: 0.6rem 0 0; }
+.accuracy-line .block { display: block; margin-top: 0.15rem; }
+.note-kind { display: inline-block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted); margin-bottom: 0.15rem; }
+.note-kind.trap { color: var(--v-mistake); }
+.engine-notes li { margin-bottom: 0.7rem; }
+.engine-notes .link.small { font-size: 0.8rem; }
+.acc-badge { font-size: 0.75rem; font-variant-numeric: tabular-nums; border: 1px solid var(--line); border-radius: 6px; padding: 0.05rem 0.35rem; color: var(--muted); margin-right: 0.4rem; }

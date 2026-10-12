@@ -7,6 +7,7 @@ import { DrillList } from './DrillsScreen';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/PositionDiagram';
 import { REPORT_VERSION } from '../../coach/report';
+import { engineNotes, gameStats } from '../../analysis/engineReview';
 import { repo } from '../../storage/repository';
 import { FlagButton } from '../components/FlagButton';
 import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
@@ -102,6 +103,8 @@ function Items({
 
 function Summary({ game }: { game: StoredGame }) {
   const r = game.report!;
+  const stats = gameStats(game);
+  const notes = engineNotes(game);
   // Positions drawn under "what hurt you" aren't repeated in the smaller notes,
   // and an item doesn't repeat a position an earlier item already showed.
   const hurtShown = new Set<number>();
@@ -117,6 +120,16 @@ function Summary({ game }: { game: StoredGame }) {
         <FlagButton game={game} where="headline" quote={r.headline} />
         {r.story && <p className="story muted">{r.story}</p>}
         {r.story && <FlagButton game={game} where="story" quote={r.story} />}
+        {stats && (
+          <p className="accuracy-line">
+            <span className="engine-chip">Stockfish</span> Accuracy: <b>you {stats.you.accuracy}</b> · {game.opponentName} {stats.opponent.accuracy}
+            <span className="muted">
+              {' '}· your {stats.you.inaccuracy} inaccurac{stats.you.inaccuracy === 1 ? 'y' : 'ies'}, {stats.you.mistake} mistake{stats.you.mistake === 1 ? '' : 's'},{' '}
+              {stats.you.blunder} blunder{stats.you.blunder === 1 ? '' : 's'}
+            </span>
+            {stats.caveat && <span className="muted small block">{stats.caveat}</span>}
+          </p>
+        )}
       </section>
       <section className="card">
         <h3 className="good-h">What you did well</h3>
@@ -140,6 +153,23 @@ function Summary({ game }: { game: StoredGame }) {
         <p>{r.focus.detail}</p>
         <FlagButton game={game} where="focus" quote={`${r.focus.title} ${r.focus.detail}`} />
       </section>
+      {notes.length > 0 && (
+        <section className="card subtle-card engine-notes">
+          <h3>Stockfish's other notes</h3>
+          <p className="muted small">Engine facts the coach didn't turn into lessons — so a move without a lesson isn't automatically the best move.</p>
+          <ul className="report-list">
+            {notes.map((n) => (
+              <li key={n.ply + n.kind}>
+                <span className={`note-kind ${n.kind}`}>{n.kind === 'trap' ? 'It worked, but…' : n.kind === 'uncovered' ? 'Your move' : 'Their miss'}</span>
+                <CoachText text={n.text} />
+                <button className="link small" onClick={() => navigate(`/game/${game.id}/review?ply=${n.ply}`)}>
+                  Show on the board →
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {r.minorNotes.length > 0 && (
         <section className="card subtle-card">
           <h3>Smaller notes</h3>
