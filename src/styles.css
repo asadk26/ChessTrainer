@@ -450,3 +450,29 @@ p { margin: 0 0 0.75rem; }
 .line-moves .ms-move.played:not(.on) { color: var(--v-mistake); font-weight: 700; }
 .try-list { margin: 0.3rem 0; padding-left: 1.2rem; }
 .try-list li { margin: 0.15rem 0; }
+
+/* Advantage meter: a visual, not a number */
+.eval-bar { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; vertical-align: middle; }
+.eval-track { position: relative; display: inline-block; width: 64px; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.eval-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+.band-slightly_worse .eval-fill, .band-clearly_worse .eval-fill, .band-losing .eval-fill { background: var(--v-mistake); }
+.band-equal .eval-fill { background: var(--icon-muted, #999); }
+.eval-mid { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 1px; background: var(--ink); opacity: 0.35; }
+.eval-word { font-weight: 600; }
+.eval-change { display: inline-flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.eval-arrow { color: var(--muted); }
+
+/* Lessons: comparison card, notes */
+.ms-move.mark-note::after { content: ''; position: absolute; top: 3px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: var(--v-inaccuracy); }
+.compare-card { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.4rem 0; }
+.cc-col { border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.55rem; cursor: pointer; background: var(--card); }
+.cc-col.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft, rgba(46, 140, 92, 0.15)); }
+.cc-head { font-weight: 700; font-size: 0.85rem; margin-bottom: 0.25rem; }
+.cc-row { font-size: 0.85rem; padding: 0.12rem 0 0.12rem 1rem; position: relative; }
+.cc-row::before { position: absolute; left: 0; }
+.cc-row.good::before { content: '✓'; color: var(--accent); }
+.cc-row.bad::before { content: '✗'; color: var(--warn); }
+.cc-row.neutral::before { content: '•'; color: var(--muted); }
+.note-card { display: grid; gap: 0.3rem; margin: 0.35rem 0; padding: 0.55rem 0.7rem; border-left: 3px solid var(--v-inaccuracy); background: var(--surface-2); border-radius: 6px; }
+.note-card .btn { justify-self: start; }
+@media (max-width: 420px) { .compare-card { grid-template-columns: 1fr; } }

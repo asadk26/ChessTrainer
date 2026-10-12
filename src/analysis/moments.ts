@@ -1,6 +1,8 @@
 // The significance layer: decides which moves are worth teaching. Engine
 // evaluation loss is one input, not the definition of "important".
 import type {
+  LessonQuestion,
+  MomentPriority,
   MoveExplanation,
   CategoryId,
   Color,
@@ -67,7 +69,41 @@ const PRIMARY_ORDER: CategoryId[] = [
   'time_management',
 ];
 
-export const MAX_MISTAKE_MOMENTS = 3;
+export const MAX_MISTAKE_MOMENTS = 4;
+/** Only the highest-value moments become interactive lessons; the rest are short notes. */
+export const MAX_LESSONS = 2;
+
+/**
+ * Teaching priority, in the order that matters most for improvement:
+ * 1 your move had a concrete refutation, 2 a missed winning tactic, 3 a major
+ * advantage swing, 4 a recurring personal habit, 5 a positional decision, 6 a
+ * small inaccuracy.
+ */
+export function priorityOf(fs: Finding[], e: MoveEval | undefined, prior: PriorGameFindings[]): MomentPriority {
+  const d = e ? pd(e) : 0;
+  const lostMaterial = !!e && e.materialBefore - e.materialAfterReply >= 2 && d >= 12;
+  if (
+    lostMaterial ||
+    e?.mateThreatAgainst ||
+    fs.some((f) => ['blunder', 'missed_threat', 'stranded_piece', 'gave_back_material'].includes(f.category) || f.facts.perpetual || f.facts.tacticForOpponent || f.facts.forkSan)
+  )
+    return 1;
+  if (fs.some((f) => f.category === 'tactical_blindness')) return 2;
+  if (d >= 22) return 3;
+  if (fs.some((f) => priorGamesWith(f.category, prior) > 0)) return 4;
+  if (d < 12) return 6;
+  return 5;
+}
+
+/** Which question a lesson opens with. Predicting the opponent's reply is the default whenever there is a concrete one. */
+export function questionFor(priority: MomentPriority, replySan: string | undefined, playedSan = ''): LessonQuestion {
+  const forcing = !!replySan && /[x+#]/.test(replySan);
+  // After a check the reply is mostly forced, so predicting it teaches little.
+  const replyIsAChoice = !/[+#]/.test(playedSan);
+  if (replySan && replyIsAChoice && (priority === 1 || (priority === 3 && forcing))) return 'predict_reply';
+  if (priority === 6) return 'cleaner';
+  return 'find';
+}
 export const MIN_SIGNIFICANCE = 18;
 
 export function priorGamesWith(category: string, prior: PriorGameFindings[]): number {
@@ -150,9 +186,12 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
       const mine = key(x.fs);
       return !mine || all.findIndex((y) => key(y.fs) === mine) === k;
     })
+    // Highest learning value first: refutations, missed tactics, swings, habits, positional, small slips.
+    .map((x) => ({ ...x, priority: priorityOf(x.fs, evals[x.ply - 1], prior) }))
+    .sort((a, b) => a.priority - b.priority || b.score - a.score)
     .slice(0, MAX_MISTAKE_MOMENTS);
 
-  const moments: TeachingMoment[] = scored.map(({ ply, fs, score }) => {
+  const moments: TeachingMoment[] = scored.map(({ ply, fs, score, priority }, rank) => {
     const primary = [...fs]
       .filter((f) => f.severity >= 2)
       .sort((a, b) => PRIMARY_ORDER.indexOf(a.category as CategoryId) - PRIMARY_ORDER.indexOf(b.category as CategoryId))[0];
@@ -197,10 +236,18 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
 
     const targetSquares = (primary.facts.targetSquares as string[] | undefined) ?? [];
     const victim = primary.facts.victimSquare as string | undefined;
+    const refutationUci = positions[ply]?.lines[0]?.pv[0];
+    const refutationSan = refutationUci ? playLine(played.fenAfter, [refutationUci])[0]?.san : undefined;
+    const tier = rank < MAX_LESSONS ? ('lesson' as const) : ('note' as const);
     return {
       id: `${input.gameId}:${ply}`,
       ply,
       kind: 'mistake',
+      tier,
+      priority,
+      question: tier === 'lesson' ? questionFor(priority, refutationSan, played.san) : undefined,
+      refutationUci,
+      refutationSan,
       category: primary.category,
       categories: Array.from(new Set(fs.map((f) => f.category))),
       significance: score,
@@ -254,6 +301,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
       id: `${input.gameId}:${good.ply}:good`,
       ply: good.ply,
       kind: 'good_idea',
+      tier: 'note',
       category: good.category,
       categories: [good.category],
       significance: 0,

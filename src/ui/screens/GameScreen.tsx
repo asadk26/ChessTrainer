@@ -103,6 +103,7 @@ function Items({
 
 function Summary({ game }: { game: StoredGame }) {
   const r = game.report!;
+  const lessons = game.moments.filter((m) => m.tier !== 'note').length;
   const stats = gameStats(game);
   const notes = engineNotes(game);
   // Positions drawn under "what hurt you" aren't repeated in the smaller notes,
@@ -179,7 +180,7 @@ function Summary({ game }: { game: StoredGame }) {
       <div className="actions">
         {game.moments.length > 0 && (
           <button className="btn primary" onClick={() => navigate(`/game/${game.id}/review`)}>
-            Replay the game ({game.moments.length} guided moment{game.moments.length > 1 ? 's' : ''})
+            Replay the game{lessons ? ` (${lessons} short lesson${lessons > 1 ? 's' : ''})` : ''}
           </button>
         )}
         <button className="btn ghost" onClick={() => navigate(`/game/${game.id}/drills`)}>

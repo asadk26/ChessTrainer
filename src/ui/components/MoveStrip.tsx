@@ -17,7 +17,7 @@ export function MoveStrip({
   plies: PlyRecord[];
   current: number;
   onSelect: (ply: number) => void;
-  marks?: Record<number, 'good' | 'bad' | 'done'>;
+  marks?: Record<number, 'good' | 'bad' | 'done' | 'note'>;
   /** Stockfish's verdict per ply (both sides), shown as an underline. */
   verdicts?: Record<number, Verdict>;
 }) {
@@ -42,7 +42,7 @@ export function MoveStrip({
             data-ply={p.ply}
             className={`ms-move ${current === p.ply ? 'on' : ''} ${marks[p.ply] ? `mark-${marks[p.ply]}` : ''} ${verdicts[p.ply] ? `v-${verdicts[p.ply]}` : ''}`}
             onClick={() => onSelect(p.ply)}
-            title={[marks[p.ply] ? (marks[p.ply] === 'good' ? 'Good idea' : 'Critical moment') : '', verdicts[p.ply] ? `Stockfish: ${VERDICT_LABEL[verdicts[p.ply]]}` : ''].filter(Boolean).join(' · ') || undefined}
+            title={[marks[p.ply] ? (marks[p.ply] === 'good' ? 'Good idea' : marks[p.ply] === 'note' ? 'Worth knowing' : 'Lesson') : '', verdicts[p.ply] ? `Stockfish: ${VERDICT_LABEL[verdicts[p.ply]]}` : ''].filter(Boolean).join(' · ') || undefined}
           >
             {p.san}
           </button>

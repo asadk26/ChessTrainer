@@ -86,6 +86,33 @@ analysis of games you have on both, never deletes anything, and never imports th
 **Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
 domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
+## Lessons: the instructor loop
+
+Each game gets at most **two interactive lessons**, chosen by learning value
+(`priorityOf` in `src/analysis/moments.ts`): 1 your move had a concrete refutation (or gave
+material back), 2 a missed winning tactic, 3 a major advantage swing, 4 a recurring personal
+habit, 5 a positional decision, 6 a small inaccuracy. Everything else becomes a short **note**
+shown as you pass the move, with an optional Explore.
+
+A lesson (`src/ui/components/LessonRunner.tsx`):
+
+1. **One question.** *Predict the opponent's strongest reply* whenever your move had a concrete
+   refutation and the reply was a real choice (not forced by your check) — then *find a move that
+   avoids it*. Otherwise *find the better move* (or *find the cleaner move* for small slips).
+2. **Graded feedback** by quality band: **right** (best or equally good — other good moves are
+   listed), **reasonable** (good / inaccuracy — what it misses, as a comparison), **refuted**
+   (mistake or worse — the opponent's concrete answer and what it wins). Retry or reveal.
+3. **The point.** Both lines are walked until something actually changes
+   (`src/analysis/linePoint.ts`): mate, promotion, material changing hands once the exchange is
+   over, queens off, a dangerous passed pawn — or called *quiet* if nothing does. A two-column
+   comparison card shows the evaluation band and the concrete differences for each line.
+4. **Take-away**, plus Explore for the full practice board.
+
+Evaluation is shown in words with a small bar (`src/analysis/evalBand.ts`): Winning / Clearly
+better / Slightly better / Equal / … and the swing ("Clearly better → Equal: this gave back most of
+your advantage"). No draw percentages or decimals in the main view — Stockfish's win/draw/loss
+model is calibrated on engine play, so it would be false precision here.
+
 ## Practice board and line comparison
 
 Inside Guided Review, any of your moves that wasn't Stockfish's choice (and every teaching

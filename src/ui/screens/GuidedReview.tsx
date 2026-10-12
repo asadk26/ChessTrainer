@@ -8,6 +8,8 @@ import { Board, type BoardProps } from '../components/Board';
 import { FlagButton } from '../components/FlagButton';
 import { Verdict, type Panels } from '../components/reviewParts';
 import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoard';
+import { useLessonRunner } from '../components/LessonRunner';
+import { EvalChange } from '../components/EvalBar';
 import { gapBetween, qualityOf, qualityOfGap, type Quality } from '../../analysis/moveQuality';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
@@ -513,7 +515,16 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     () => active && finish(active, false),
     (p) => setPracticePly(p),
   );
+  const lesson = useLessonRunner(
+    game,
+    active,
+    () => active && finish(active, true),
+    () => active && finish(active, false),
+    (p) => setPracticePly(p),
+  );
   const seenBefore = useSeenBefore(game, active);
+  // Only lessons stop the play-through; notes are shown in passing.
+  const stopsAt = (m: TeachingMoment | undefined) => !!m && m.tier !== 'note' && !doneIds.has(m.id);
 
   const startMomentAt = (m: TeachingMoment) => {
     setPly(m.ply - 1);
@@ -522,16 +533,16 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   const next = () => {
     if (active) return;
     const upcoming = momentAt.get(ply + 1);
-    if (upcoming && !doneIds.has(upcoming.id)) startMomentAt(upcoming);
+    if (stopsAt(upcoming)) startMomentAt(upcoming!);
     else setPly((p) => Math.min(game.plies.length, p + 1));
   };
   const prev = () => (active ? setActive(undefined) : setPly((p) => Math.max(0, p - 1)));
-  const nextMoment = moments.find((m) => m.ply > ply + 1 && !doneIds.has(m.id));
+  const nextMoment = moments.find((m) => m.ply > ply + 1 && stopsAt(m));
 
   // On phones the strip + question + board + verdict just fit the screen.
   // Keep that block aligned to the top whenever the move or the moment's state
   // changes, so the verdict is always visible and nothing jumps around.
-  const stateKey = runner?.stateKey ?? `browse:${ply}`;
+  const stateKey = lesson?.stateKey ?? runner?.stateKey ?? `browse:${ply}`;
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current && initialPly === undefined) {
@@ -566,7 +577,10 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   });
 
   const current = game.plies[ply - 1];
-  const upcoming = momentAt.get(ply + 1);
+  const upcomingRaw = momentAt.get(ply + 1);
+  const upcoming = upcomingRaw && upcomingRaw.tier !== 'note' ? upcomingRaw : undefined;
+  const noteHere = ply > 0 ? moments.find((x) => x.ply === ply && x.tier === 'note') : undefined;
+  const noteCmp = useMemo(() => (noteHere && noteHere.kind === 'mistake' ? gameMoveComparison(game, noteHere.betterPly) : undefined), [game, noteHere]);
   const evalAt = ply > 0 ? game.analysis?.moves[ply - 1] : undefined;
   const plyNotes = game.findings.filter((f) => f.ply === ply && ply > 0 && f.confidence !== 'low' && !momentAt.has(ply));
   const verdicts = useMemo(() => {
@@ -591,12 +605,17 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     lastMove: current ? { from: current.from, to: current.to } : undefined,
   };
   const yours = current?.color === game.userColor;
+  const lessonCount = moments.filter((x) => x.tier !== 'note').length;
+  const noteCount = moments.filter((x) => x.tier === 'note').length;
   const browsePrompt = (
     <>
       {ply === 0 ? (
         <p>
-          Play through your game move by move with <b>Next</b>. I'll stop before the {moments.length} critical moment{moments.length === 1 ? '' : 's'} (marked in the
-          strip) so you can think before seeing what happened.
+          Play through your game move by move with <b>Next</b>.{' '}
+          {lessonCount
+            ? `I'll stop for ${lessonCount === 1 ? 'one short lesson' : `${lessonCount} short lessons`} — the most useful moments of this game — and ask you a question first.`
+            : 'No lessons this time — nothing big went wrong.'}
+          {noteCount ? ` ${noteCount} smaller point${noteCount === 1 ? '' : 's'} will show up as you pass ${noteCount === 1 ? 'it' : 'them'}.` : ''}
         </p>
       ) : (
         <p className="move-caption">
@@ -622,12 +641,31 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
           {mine ? `Explore: your move vs ${evalAt.bestSan}` : `Explore: ${evalAt.bestSan} instead`}
         </button>
       )}
+      {noteHere && (
+        <div className="note-card">
+          <span className="eyebrow">{noteHere.kind === 'good_idea' ? 'Good idea' : 'Worth knowing'}</span>
+          <b className="note-title">{noteHere.text.title}</b>
+          {noteHere.kind === 'mistake' && evalAt && <EvalChange before={evalAt.cpBefore * (mine ? 1 : -1)} after={evalAt.cpAfter * (mine ? 1 : -1)} />}
+          <CoachText
+            text={
+              noteHere.kind === 'good_idea'
+                ? noteHere.text.lesson
+                : noteCmp?.comparison?.summary ?? (noteHere.explanation?.problem ? `${noteHere.explanation.problem.charAt(0).toUpperCase()}${noteHere.explanation.problem.slice(1)}.` : noteHere.text.lesson)
+            }
+          />
+          {noteHere.kind === 'mistake' && (
+            <button className="btn ghost small" onClick={() => setPracticePly(noteHere.betterPly)}>
+              Explore
+            </button>
+          )}
+        </div>
+      )}
       {plyNotes.map((f, i) => (
         <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
       ))}
       {upcoming && (
         <p className="upcoming">
-          ⚑ Next move is a critical moment{doneIds.has(upcoming.id) ? ' (already reviewed — Next plays it)' : ' — Next will stop and ask you first'}.
+          ⚑ Next move is a lesson{doneIds.has(upcoming.id) ? ' (already reviewed — Next plays it)' : ' — Next will stop and ask you first'}.
         </p>
       )}
     </>
@@ -651,7 +689,7 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
       {nextMoment && !upcoming && (
         <div className="actions center">
           <button className="btn ghost" onClick={() => startMomentAt(nextMoment)}>
-            Skip ahead to the next critical moment ({moveLabel(game.plies[nextMoment.ply - 1])})
+            Skip ahead to the next lesson ({moveLabel(game.plies[nextMoment.ply - 1])})
           </button>
         </div>
       )}
@@ -670,8 +708,10 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     </p>
   ) : null;
 
-  const panels: Panels = practice ?? runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
-  const marks = Object.fromEntries(moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : ('bad' as const)]));
+  const panels: Panels = practice ?? lesson ?? runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  const marks = Object.fromEntries(
+    moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : x.tier === 'note' ? ('note' as const) : ('bad' as const)]),
+  );
 
   return (
     <HoverProvider>
@@ -723,10 +763,10 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
             </div>
             {moments.length > 0 && (
               <div className="moment-index">
-                <span className="eyebrow">Critical moments</span>
+                <span className="eyebrow">Lessons & notes</span>
                 {moments.map((x) => (
-                  <button key={x.id} className={`chip ${active?.id === x.id ? 'on' : ''} ${x.kind === 'good_idea' ? 'good' : ''}`} onClick={() => startMomentAt(x)}>
-                    {doneIds.has(x.id) ? '✓ ' : x.kind === 'good_idea' ? '★ ' : ''}
+                  <button key={x.id} className={`chip ${active?.id === x.id ? 'on' : ''} ${x.kind === 'good_idea' ? 'good' : ''}`} onClick={() => (x.tier === 'note' ? (setActive(undefined), setPracticePly(null), setPly(x.ply)) : startMomentAt(x))}>
+                    {doneIds.has(x.id) ? '✓ ' : x.kind === 'good_idea' ? '★ ' : x.tier === 'lesson' ? '? ' : ''}
                     {moveLabel(game.plies[x.ply - 1])}
                   </button>
                 ))}

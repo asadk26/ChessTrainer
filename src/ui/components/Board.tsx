@@ -89,7 +89,7 @@ export function Board({ fen, orientation, arrows = [], highlights = [], lastMove
         onSquareClick={onSquareClick}
         autoPromoteToQueen
         areArrowsAllowed={false}
-        customArrows={arrows.map((a) => [a.from as Square, a.to as Square, ARROW_COLORS[a.color]])}
+        customArrows={arrows.filter((a, i) => arrows.findIndex((b) => b.from === a.from && b.to === a.to) === i).map((a) => [a.from as Square, a.to as Square, ARROW_COLORS[a.color]])}
         customSquareStyles={squareStyles}
         customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
         customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}

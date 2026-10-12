@@ -25,8 +25,10 @@ import {
   relativeRank,
   undevelopedMinors,
 } from '../chess/board';
-import { MATE_CP, winPercent } from './evaluation';
+import { MATE_CP } from './evaluation';
 import { EQUAL_BAND, gapBetween } from './moveQuality';
+import { BAND_LABEL, bandOf } from './evalBand';
+import { lineToPoint, type LinePoint } from './linePoint';
 
 const lineSans = (fs: SequenceFrame[]) => fs.map((f) => f.san).join(' ');
 
@@ -53,7 +55,16 @@ export interface Reason {
   favors: 'preferred' | 'other';
 }
 
+export interface CardRow {
+  text: string;
+  tone: 'good' | 'bad' | 'neutral';
+}
+
 export interface LineComparison {
+  /** Short side-by-side facts for each line (only rows that differ, plus evaluation). */
+  card: { preferred: CardRow[]; other: CardRow[] };
+  /** Where each line makes its point. */
+  points: { preferred: LinePoint; other: LinePoint };
   preferredSan: string;
   otherSan: string;
   /** Frames actually worth showing — the shortest stretch that demonstrates the difference. */
@@ -199,6 +210,8 @@ interface DiffCtx {
   ourPawnsA: string[];
   /** The starting position, for counting what each line gives up. */
   start: Snap;
+  /** Exact "what changed" wording for the other line's material, when compared at its point. */
+  materialTextOther?: string;
   /** The next move in each line after the compared position, if any (to confirm a piece really falls). */
   nextA?: SequenceFrame;
   nextB?: SequenceFrame;
@@ -217,7 +230,9 @@ function diffs(a: Snap, b: Snap, ctx: DiffCtx): Reason[] {
       const got = describe(lb.theirs, la.theirs);
       const onlyPawns = gave.every((g) => /pawn/.test(g)) && got.every((g) => /pawn/.test(g));
       out.push(
-        gave.length && !onlyPawns
+        ctx.materialTextOther && /wins your/.test(ctx.materialTextOther)
+          ? { key: 'material', favors: 'preferred', forOther: ctx.materialTextOther }
+          : gave.length && !onlyPawns
           ? { key: 'material', favors: 'preferred', forOther: `you give up your ${joinAnd(gave)}${got.length ? ` for ${a11(joinAnd(got))}` : ''}` }
           : { key: 'material', favors: 'preferred', forPreferred: `leaves you ${materialPhrase(dm)} better off`, forOther: `you're ${materialPhrase(dm)} worse off` },
       );
@@ -292,14 +307,7 @@ function settle(frames: SequenceFrame[], k: number): number {
 }
 
 function bucket(cp: number): string {
-  const w = winPercent(cp);
-  if (w >= 85) return 'winning';
-  if (w >= 66) return 'clearly better';
-  if (w >= 55) return 'slightly better';
-  if (w > 45) return 'equal';
-  if (w > 34) return 'slightly worse';
-  if (w > 15) return 'clearly worse';
-  return 'losing';
+  return BAND_LABEL[bandOf(cp)].toLowerCase();
 }
 
 function evalSentence(prefSan: string, otherSan: string, prefCp: number, otherCp: number): { text: string; same: boolean } {
@@ -310,9 +318,9 @@ function evalSentence(prefSan: string, otherSan: string, prefCp: number, otherCp
   return { text: `After ${prefSan} ${state(a)}; after ${otherSan} ${state(b)}`, same: false };
 }
 
-export function compareLines(input: CompareInput): LineComparison | undefined {
+function compareCore(input: CompareInput, cuts?: { a: number; b: number; materialTextOther?: string }): Omit<LineComparison, 'card' | 'points'> | undefined {
   const { fen, mover } = input;
-  const maxPlies = input.maxPlies ?? 8;
+  const maxPlies = Math.max(input.maxPlies ?? 8, cuts?.a ?? 0, cuts?.b ?? 0);
   const prefFrames = playLine(fen, input.preferred.ucis, maxPlies);
   const otherFrames = playLine(fen, input.other.ucis, maxPlies);
   if (!prefFrames.length || !otherFrames.length) return undefined;
@@ -324,8 +332,14 @@ export function compareLines(input: CompareInput): LineComparison | undefined {
   const base = { us: mover, opening, ahead, prefSan, otherSan, cpGap: input.preferred.cp - input.other.cp, start };
   const at = (frames: SequenceFrame[], n: number) => (n === 0 ? fen : frames[n - 1].fen);
   const ourPawns = (f: string) => pieceSquares(f, mover, 'p');
-  const cmp = (na: number, nb: number) =>
-    diffs(snapshot(at(prefFrames, na), mover), snapshot(at(otherFrames, nb), mover), { ...base, nextA: prefFrames[na], nextB: otherFrames[nb], ourPawnsA: ourPawns(at(prefFrames, na)) });
+  const cmp = (na: number, nb: number, materialTextOther?: string) =>
+    diffs(snapshot(at(prefFrames, na), mover), snapshot(at(otherFrames, nb), mover), {
+      ...base,
+      nextA: prefFrames[na],
+      nextB: otherFrames[nb],
+      ourPawnsA: ourPawns(at(prefFrames, na)),
+      materialTextOther,
+    });
 
   // A forced mate needs no positional explanation.
   const mateIn = (cp: number) => (cp >= MATE_CP - 1000 ? Math.max(1, Math.round((MATE_CP - cp) / 10)) : 0);
@@ -354,7 +368,14 @@ export function compareLines(input: CompareInput): LineComparison | undefined {
 
   // Shortest stretch (after the reply, so the position has settled) that shows a clear reason.
   let chosen: { a: number; b: number; reasons: Reason[] } | undefined;
-  for (const k of [2, 4, 6, 8].filter((x) => x <= maxPlies)) {
+  // First choice: where each line makes its point (material settles, mate, queens off…).
+  if (cuts) {
+    const a = settle(prefFrames, cuts.a);
+    const b = settle(otherFrames, cuts.b);
+    const rs = cmp(a, b, b === cuts.b ? cuts.materialTextOther : undefined).filter(stable);
+    if (rs.some((r) => r.favors === (evalPrefers ? 'preferred' : 'other'))) chosen = { a, b, reasons: rs };
+  }
+  for (const k of [2, 4, 6, 8].filter((x) => x <= maxPlies && !chosen)) {
     const a = settle(prefFrames, k);
     const b = settle(otherFrames, k);
     const rs = cmp(a, b).filter(stable);
@@ -417,4 +438,46 @@ export function compareLines(input: CompareInput): LineComparison | undefined {
     clear: true,
     summary: summary.charAt(0).toUpperCase() + summary.slice(1),
   };
+}
+
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+function pointRow(p: LinePoint): CardRow | undefined {
+  if (p.kind === 'quiet') return undefined;
+  const bad = /^(White|Black) (wins|mates|promotes|gets)/.test(p.text);
+  const good = /^(you|[A-Z][a-z]+\d?[+#]? is checkmate)/.test(p.text) || /is checkmate$/.test(p.text);
+  return { text: cap(p.text), tone: bad ? 'bad' : good ? 'good' : 'neutral' };
+}
+
+/**
+ * Compare two lines from the same position. Each line is first walked to the point
+ * where it shows something (linePoint); the comparison is made there when that's
+ * enough to explain the difference, otherwise at the shortest stretch that does.
+ */
+export function compareLines(input: CompareInput): LineComparison | undefined {
+  const max = input.maxPlies ?? 10;
+  const pa = lineToPoint(input.fen, input.preferred.ucis, input.mover, max);
+  const pb = lineToPoint(input.fen, input.other.ucis, input.mover, max);
+  const core = compareCore({ ...input, maxPlies: Math.max(8, input.maxPlies ?? 8) }, { a: pa.frames.length, b: pb.frames.length, materialTextOther: pb.kind === 'material' ? pb.text : undefined });
+  if (!core) return undefined;
+  // Show each line up to its point when it has one; otherwise what the comparison needed.
+  const preferredFrames = pa.kind !== 'quiet' && pa.frames.length >= core.preferredFrames.length ? pa.frames : core.preferredFrames;
+  const otherFrames = pb.kind !== 'quiet' && pb.frames.length >= core.otherFrames.length ? pb.frames : core.otherFrames;
+  const gap = gapBetween(input.preferred.cp, input.other.cp);
+  const otherCp = gap < EQUAL_BAND ? input.preferred.cp : input.other.cp;
+  const evalRow = (cp: number): CardRow => ({ text: BAND_LABEL[bandOf(cp)], tone: 'neutral' });
+  const pref: CardRow[] = [evalRow(input.preferred.cp)];
+  const oth: CardRow[] = [evalRow(otherCp)];
+  const pr = pointRow(pa);
+  const or = pointRow(pb);
+  if (pr && !(or && or.text === pr.text)) pref.push(pr);
+  if (or && !(pr && or.text === pr.text)) oth.push(or);
+  for (const r of core.reasons) {
+    if (r.key === 'material' && (pr || or)) continue; // the point rows already say it
+    if (r.favors === 'preferred') {
+      if (r.forPreferred) pref.push({ text: cap(r.forPreferred), tone: 'good' });
+      if (r.forOther) oth.push({ text: cap(r.forOther), tone: 'bad' });
+    } else if (r.forOther) oth.push({ text: cap(r.forOther), tone: 'good' });
+  }
+  return { ...core, preferredFrames, otherFrames, points: { preferred: pa, other: pb }, card: { preferred: pref.slice(0, 4), other: oth.slice(0, 4) } };
 }

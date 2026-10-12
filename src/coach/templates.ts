@@ -73,6 +73,11 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
       return `${mv} — giving material back`;
     case 'hunting_material':
       return `${mv} — one pawn too many`;
+    case 'premature_capture':
+    case 'poor_trade':
+      return `${mv} — a capture that helped your opponent`;
+    case 'pawn_structure':
+      return `${mv} — a weaker pawn structure`;
     case 'stranded_piece':
       return `${mv} — free material, but no way back`;
     case 'unnecessary_complications':

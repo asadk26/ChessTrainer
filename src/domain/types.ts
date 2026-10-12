@@ -208,10 +208,22 @@ export interface SequenceFrame {
   caption: string;
 }
 
+/** 1 refutation · 2 missed tactic · 3 big swing · 4 recurring habit · 5 positional · 6 small inaccuracy. */
+export type MomentPriority = 1 | 2 | 3 | 4 | 5 | 6;
+export type LessonQuestion = 'predict_reply' | 'find' | 'cleaner';
+
 export interface TeachingMoment {
   id: string;
   ply: number;
   kind: 'mistake' | 'good_idea';
+  /** 'lesson': one of the 1–2 interactive questions per game; 'note': a short explanation with an optional Explore. */
+  tier?: 'lesson' | 'note';
+  priority?: MomentPriority;
+  /** For lessons: which question to ask first. */
+  question?: LessonQuestion;
+  /** The opponent's strongest reply to the move played (for "predict the reply"). */
+  refutationUci?: string;
+  refutationSan?: string;
   category: CategoryId | StrengthId;
   categories: (CategoryId | StrengthId)[];
   significance: number;
