@@ -1,5 +1,5 @@
 // App-level operations that combine storage, engine and coaching.
-import type { CoachFeedback, Color, ParsedGame, StoredGame } from '../domain/types';
+import type { CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { feedbackReport } from '../coach/feedback';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { findDuplicate } from '../chess/fingerprint';
@@ -261,4 +261,19 @@ export async function analyzeInOrder(games: StoredGame[], onProgress?: (done: nu
     }
   }
   onProgress?.(games.length, games.length, games[games.length - 1]);
+}
+
+const liveCache = new Map<string, Promise<PositionEval | undefined>>();
+
+/** Live engine analysis of one position (cached per position/depth), for the practice board. */
+export function analysePosition(fen: string, depth: number, multiPv = 1): Promise<PositionEval | undefined> {
+  const key = `${fen}|${depth}|${multiPv}`;
+  let p = liveCache.get(key);
+  if (!p) {
+    p = getBrowserEngine()
+      .then((engine) => (engine ? engine.analyse(fen, { depth, multiPv }) : undefined))
+      .catch(() => undefined);
+    liveCache.set(key, p);
+  }
+  return p;
 }

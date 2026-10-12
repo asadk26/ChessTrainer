@@ -434,3 +434,19 @@ p { margin: 0 0 0.75rem; }
 .line-moves { display: flex; flex-wrap: wrap; gap: 0.15rem; margin: 0.35rem 0; }
 .line-moves .ms-move.best:not(.on) { color: var(--accent); font-weight: 700; }
 .show-best { margin-top: 0.35rem; }
+
+/* Practice board */
+.q-chip { display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.03em; padding: 0.08rem 0.45rem; border-radius: 6px; vertical-align: middle; border: 1px solid var(--line); color: var(--muted); }
+.q-chip.q-best, .q-chip.q-equal { color: var(--accent); border-color: var(--accent); }
+.q-chip.q-good { color: var(--ink); }
+.q-chip.q-inaccuracy { color: var(--v-inaccuracy); border-color: var(--v-inaccuracy); }
+.q-chip.q-mistake { color: var(--v-mistake); border-color: var(--v-mistake); }
+.q-chip.q-blunder { color: var(--v-blunder); border-color: var(--v-blunder); }
+.why-box { margin-top: 0.5rem; padding: 0.55rem 0.7rem; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 6px; }
+.why-box .eyebrow { display: block; margin-bottom: 0.2rem; }
+.practice-actions { justify-content: flex-start; }
+.small-seg { margin-bottom: 0.4rem; }
+.small-seg .seg-btn { font-size: 0.82rem; padding: 0.3rem 0.55rem; }
+.line-moves .ms-move.played:not(.on) { color: var(--v-mistake); font-weight: 700; }
+.try-list { margin: 0.3rem 0; padding-left: 1.2rem; }
+.try-list li { margin: 0.15rem 0; }

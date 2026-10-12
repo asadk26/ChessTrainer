@@ -6,13 +6,16 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Arrow, Finding, StoredGame, TeachingMoment } from '../../domain/types';
 import { Board, type BoardProps } from '../components/Board';
 import { FlagButton } from '../components/FlagButton';
+import { Verdict, type Panels } from '../components/reviewParts';
+import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoard';
+import { gapBetween, qualityOf, qualityOfGap, type Quality } from '../../analysis/moveQuality';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
 import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
-import { VERDICT_LABEL, engineNotes, verdictOf, type Verdict } from '../../analysis/engineReview';
+import { VERDICT_LABEL, engineNotes, verdictOf, type Verdict as MoveVerdict } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
 import { gamePlayedAt } from '../../analysis/pipeline';
@@ -25,37 +28,11 @@ const toSquares = (uci: string) => ({ from: uci.slice(0, 2), to: uci.slice(2, 4)
 type BetterVerdict = 'correct' | 'ok' | 'wrong' | 'same' | 'checking' | 'shown';
 
 /** A big, unmissable answer verdict shown directly under the board. */
-function Verdict({ tone, title, text }: { tone: 'good' | 'bad' | 'neutral'; title: string; text?: string }) {
-  const icon = tone === 'good' ? '✓' : tone === 'bad' ? '✗' : '•';
-  return (
-    <div className={`verdict ${tone}`} role="status">
-      <span className="verdict-icon" aria-hidden>
-        {icon}
-      </span>
-      <div>
-        <div className="verdict-title">{title}</div>
-        {text && <CoachText text={text} className="verdict-text" />}
-      </div>
-    </div>
-  );
-}
-
-interface Panels {
-  board: BoardProps;
-  /** Short instruction/explanation shown above the board. */
-  prompt: ReactNode;
-  /** Verdict + actions shown directly below the board. */
-  banner: ReactNode;
-  /** Secondary detail (engine numbers etc.). */
-  details: ReactNode;
-  /** Changes whenever the question/verdict changes, so the layout can keep it in view. */
-  stateKey: string;
-}
 
 function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone: () => void, onSkip: () => void, onExplore: (ply: number) => void): Panels | null {
   const [stepIdx, setStepIdx] = useState(0);
   const [guess, setGuess] = useState<{ uci: string; san: string; fen: string; ok: boolean; shown?: boolean } | null>(null);
-  const [better, setBetter] = useState<{ uci: string; san: string; fen: string; verdict: BetterVerdict; note?: string } | null>(null);
+  const [better, setBetter] = useState<{ uci: string; san: string; fen: string; verdict: BetterVerdict; note?: string; quality?: Quality } | null>(null);
   const [frame, setFrame] = useState(0);
   const [betterFrame, setBetterFrame] = useState(-1);
   const [choice, setChoice] = useState<number | null>(null);
@@ -89,6 +66,9 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
     return () => window.clearInterval(timer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, m?.id]);
+
+  // Where the game move and Stockfish's move lead, in practical terms (the heart of the lesson).
+  const lessonCmp = useMemo(() => (m && m.kind !== 'good_idea' ? gameMoveComparison(game, m.betterPly) : undefined), [game, m]);
 
   if (!m || !step) return null;
 
@@ -125,7 +105,8 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
       return true;
     }
     if (uci === m.bestUci || m.acceptableUcis.includes(uci)) {
-      setBetter({ uci, san, fen, verdict: 'correct' });
+      const pos = game.analysis?.positions[m.betterPly - 1];
+      setBetter({ uci, san, fen, verdict: 'correct', quality: uci === m.bestUci ? 'best' : qualityOf(pos, uci) ?? 'equal' });
       return true;
     }
     setBetter({ uci, san, fen, verdict: 'checking' });
@@ -136,7 +117,8 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
       if (!res) note = "The engine isn't available to check this move.";
       else if (closeToBest(res, { win: bestW, cp: betterBestCp ?? -10000 })) verdict = 'correct';
       else if (res.win >= playedW + 8) verdict = 'ok';
-      setBetter({ uci, san, fen, verdict, note });
+      const quality = res && betterBestCp !== undefined ? qualityOfGap(gapBetween(betterBestCp, res.cp)) : undefined;
+      setBetter({ uci, san, fen, verdict, note, quality });
     });
     return true;
   };
@@ -275,7 +257,17 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
       ) : v === 'checking' ? (
         <Verdict tone="neutral" title={`Checking ${better.san}…`} />
       ) : v === 'correct' ? (
-        <Verdict tone="good" title={`Correct — ${better.san}`} text={t.why ?? t.betterCorrect} />
+        <Verdict
+          tone="good"
+          title={
+            better.quality === 'best' || !better.quality
+              ? `Correct — ${better.san} is Stockfish's first choice`
+              : better.quality === 'equal'
+                ? `Correct — ${better.san} is just as good as ${m.bestSan}`
+                : `Good — ${better.san} works; ${m.bestSan} is a little more precise`
+          }
+          text={t.why ?? t.betterCorrect}
+        />
       ) : v === 'ok' ? (
         <Verdict
           tone="neutral"
@@ -388,6 +380,20 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
                   </dd>
                 </>
               )}
+              {lessonCmp?.comparison && (
+                <>
+                  <dt>Where each move leads</dt>
+                  <dd>
+                    <CoachText text={lessonCmp.comparison.summary} />
+                  </dd>
+                </>
+              )}
+              {lessonCmp && lessonCmp.alternatives.length > 0 && (
+                <>
+                  <dt>Also fine</dt>
+                  <dd>{lessonCmp.alternatives.join(', ')} — Stockfish rates these as highly as {lessonCmp.bestSan}.</dd>
+                </>
+              )}
             </dl>
           )}
           <FlagButton
@@ -405,7 +411,7 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
               .join(' | ')}
           />
           <div className="actions">
-            {m.kind !== 'good_idea' && (game.analysis?.positions[m.betterPly - 1]?.lines[0]?.pv.length ?? 0) > 1 && btn("Explore Stockfish's line", () => onExplore(m.betterPly), 'ghost')}
+            {m.kind !== 'good_idea' && (game.analysis?.positions[m.betterPly - 1]?.lines[0]?.pv.length ?? 0) > 1 && btn('Explore the lines & try your own move', () => onExplore(m.betterPly), 'ghost')}
             {btn('Continue the game →', next)}
           </div>
         </>
@@ -490,8 +496,9 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   const [ply, setPly] = useState(startMoment ? startMoment.ply - 1 : Math.min(initialPly ?? 0, game.plies.length));
   const [active, setActive] = useState<TeachingMoment | undefined>(startMoment);
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set(game.completedMomentIds));
-  // Stepping through Stockfish's line from the position before one of the moves.
-  const [explore, setExplore] = useState<{ ply: number; step: number } | null>(null);
+  // The practice board for one decision (position before that move), or null.
+  const [practicePly, setPracticePly] = useState<number | null>(null);
+  const practice = usePracticeBoard(game, practicePly, () => setPracticePly(null));
   const topRef = useRef<HTMLDivElement>(null);
 
   const finish = (m: TeachingMoment, completed: boolean) => {
@@ -504,7 +511,7 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     active,
     () => active && finish(active, true),
     () => active && finish(active, false),
-    (p) => setExplore({ ply: p, step: 0 }),
+    (p) => setPracticePly(p),
   );
   const seenBefore = useSeenBefore(game, active);
 
@@ -546,10 +553,8 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if (explore) {
-        if (e.key === 'ArrowRight') setExplore({ ...explore, step: explore.step + 1 });
-        if (e.key === 'ArrowLeft') setExplore({ ...explore, step: Math.max(0, explore.step - 1) });
-        if (e.key === 'Escape') setExplore(null);
+      if (practicePly !== null) {
+        if (e.key === 'Escape') setPracticePly(null);
         return;
       }
       if (active) return;
@@ -565,7 +570,7 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
   const evalAt = ply > 0 ? game.analysis?.moves[ply - 1] : undefined;
   const plyNotes = game.findings.filter((f) => f.ply === ply && ply > 0 && f.confidence !== 'low' && !momentAt.has(ply));
   const verdicts = useMemo(() => {
-    const out: Record<number, Verdict> = {};
+    const out: Record<number, MoveVerdict> = {};
     (game.analysis?.moves ?? []).forEach((e, i) => {
       const v = verdictOf(e);
       if (v === 'inaccuracy' || v === 'mistake' || v === 'blunder') out[i + 1] = v;
@@ -573,7 +578,7 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     return out;
   }, [game.analysis]);
   // Only moves already played: marking upcoming ones would give the critical moments away.
-  const shownVerdicts = useMemo(() => Object.fromEntries(Object.entries(verdicts).filter(([p]) => Number(p) <= ply)) as Record<number, Verdict>, [verdicts, ply]);
+  const shownVerdicts = useMemo(() => Object.fromEntries(Object.entries(verdicts).filter(([p]) => Number(p) <= ply)) as Record<number, MoveVerdict>, [verdicts, ply]);
   const notesByPly = useMemo(() => new Map(engineNotes(game).map((n) => [n.ply, n])), [game]);
   const engineNote = notesByPly.get(ply);
   const verdict = evalAt ? verdictOf(evalAt) : undefined;
@@ -602,13 +607,19 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
       {evalAt && verdict && (
         <p className={`engine-line v-${verdict}`}>
           <span className="engine-chip">Stockfish</span> {VERDICT_LABEL[verdict]}
-          {!evalAt.isBest && evalAt.bestSan ? ` · preferred ${evalAt.bestSan} (${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view)` : ''}
+          {verdict === 'equal' && evalAt.bestSan
+            ? ` · its first choice was ${evalAt.bestSan}, but this is just as good`
+            : verdict === 'good' && evalAt.bestSan
+              ? ` · ${evalAt.bestSan} was a little more precise`
+              : !evalAt.isBest && evalAt.bestSan
+                ? ` · preferred ${evalAt.bestSan} (${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view)`
+                : ''}
         </p>
       )}
       {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
       {evalAt && !evalAt.isBest && evalAt.bestSan && (game.analysis?.positions[ply - 1]?.lines[0]?.pv.length ?? 0) > 0 && (
-        <button className="btn ghost small show-best" onClick={() => setExplore({ ply, step: 0 })}>
-          Show Stockfish's move ({evalAt.bestSan}) and line
+        <button className="btn ghost small show-best" onClick={() => setPracticePly(ply)}>
+          {mine ? `Explore: your move vs ${evalAt.bestSan}` : `Explore: ${evalAt.bestSan} instead`}
         </button>
       )}
       {plyNotes.map((f, i) => (
@@ -659,76 +670,13 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
     </p>
   ) : null;
 
-  // ------------------------------------------------------------ line explorer
-  const explorer: Panels | null = (() => {
-    if (!explore) return null;
-    const played = game.plies[explore.ply - 1];
-    const pos = game.analysis?.positions[explore.ply - 1];
-    const e = game.analysis?.moves[explore.ply - 1];
-    if (!played || !pos?.lines[0]) return null;
-    const frames = playLine(played.fenBefore, pos.lines[0].pv, 10);
-    const step = Math.min(explore.step, frames.length);
-    const at = step === 0 ? undefined : frames[step - 1];
-    const who = played.color === game.userColor ? 'you' : game.opponentName;
-    const close = () => setExplore(null);
-    return {
-      board: {
-        fen: at ? at.fen : played.fenBefore,
-        orientation: game.userColor,
-        lastMove: at ? { from: at.from, to: at.to } : undefined,
-        arrows: step === 0 ? [uciArrow(played.uci, 'played'), uciArrow(pos.lines[0].pv[0], 'best')] : [],
-      },
-      prompt: (
-        <>
-          <p className="move-caption">
-            <b>Stockfish's line</b> <span className="muted">— instead of {moveLabel(played)} ({who})</span>
-          </p>
-          <p className="best-move">
-            Best move: <b>{e?.bestSan ?? frames[0]?.san}</b>
-            {e ? <span className="muted"> · {formatCp(e.cpBefore * (played.color === game.userColor ? 1 : -1))} instead of {formatCp(e.cpAfter * (played.color === game.userColor ? 1 : -1))} (your view)</span> : null}
-          </p>
-          <div className="line-moves">
-            <button className={`ms-move ${step === 0 ? 'on' : ''}`} onClick={() => setExplore({ ...explore, step: 0 })}>
-              start
-            </button>
-            {frames.map((f, i) => (
-              <button key={i} className={`ms-move ${step === i + 1 ? 'on' : ''} ${i === 0 ? 'best' : ''}`} onClick={() => setExplore({ ...explore, step: i + 1 })}>
-                {f.san}
-              </button>
-            ))}
-          </div>
-          <p className="muted small">
-            {step === 0
-              ? 'Orange: what was played. Green: what Stockfish prefers. Step through to see why.'
-              : "This is Stockfish's continuation for both sides — it shows the idea, not the only way to play."}
-          </p>
-        </>
-      ),
-      banner: (
-        <div className="board-controls">
-          <button className="icon" onClick={() => setExplore({ ...explore, step: Math.max(0, step - 1) })} aria-label="Previous move in line">
-            ‹
-          </button>
-          <button className="btn primary next-btn" onClick={() => setExplore({ ...explore, step: Math.min(frames.length, step + 1) })} disabled={step >= frames.length}>
-            Next in line ›
-          </button>
-          <button className="btn ghost" onClick={close}>
-            Back
-          </button>
-        </div>
-      ),
-      details: null,
-      stateKey: `explore:${explore.ply}:${step}`,
-    };
-  })();
-
-  const panels: Panels = explorer ?? runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  const panels: Panels = practice ?? runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
   const marks = Object.fromEntries(moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : ('bad' as const)]));
 
   return (
     <HoverProvider>
       <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
-        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} verdicts={active ? {} : shownVerdicts} onSelect={(p) => (setExplore(null), setActive(undefined), setPly(p))} />
+        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} verdicts={active ? {} : shownVerdicts} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
         <div className="rv-grid">
           <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
           <div className="rv-board">

@@ -5,25 +5,14 @@ import type { MoveEval, PlyRecord, StoredGame } from '../domain/types';
 import { COLOR_NAME, other } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { formatCp, MATE_CP, pd } from './evaluation';
+import { QUALITY_LABEL, qualityOfGap, type Quality } from './moveQuality';
 
-export type Verdict = 'best' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
+export type Verdict = Quality;
+export const VERDICT_LABEL = QUALITY_LABEL;
 
-export const VERDICT_LABEL: Record<Verdict, string> = {
-  best: 'Best move',
-  good: 'Good',
-  inaccuracy: 'Inaccuracy',
-  mistake: 'Mistake',
-  blunder: 'Blunder',
-};
-
-/** Same thresholds the coach uses (practical win% drop). */
+/** Same bands as everywhere else: "equally good" moves are never marked down. */
 export function verdictOf(e: MoveEval): Verdict {
-  if (e.isBest) return 'best';
-  const d = pd(e);
-  if (d < 6) return 'good';
-  if (d < 12) return 'inaccuracy';
-  if (d < 22) return 'mistake';
-  return 'blunder';
+  return qualityOfGap(pd(e), e.isBest);
 }
 
 /** Lichess's per-move accuracy from the win% drop. */

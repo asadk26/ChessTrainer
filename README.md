@@ -86,6 +86,33 @@ analysis of games you have on both, never deletes anything, and never imports th
 **Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
 domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
+## Practice board and line comparison
+
+Inside Guided Review, any of your moves that wasn't Stockfish's choice (and every teaching
+moment) opens a practice board:
+
+1. The position before the move, with the move played (orange) and Stockfish's choice (green).
+2. **Move quality bands** (`src/analysis/moveQuality.ts`), from the MultiPV lines: *best*,
+   *equally good* (within 2.5 win% of the top move — engine noise at these depths), *good but
+   less precise* (< 6), *inaccuracy* (< 12), *mistake* (< 22), *blunder*. Moves in the equal band
+   are listed as "just as good", and a move is never called wrong for not being #1.
+3. Both lines, cut to the **shortest stretch that shows the difference** (with a "longer line"
+   option), never stopping in the middle of an exchange.
+4. **Try your own move**: Stockfish answers, you continue for up to 3 moves, then compare.
+5. **Comparison in chess terms** (`src/analysis/compareLines.ts`): the end positions of the two
+   lines are compared on material (what each side gave up, with like-for-like trades cancelled),
+   king safety, development, piece and queen activity, pawn weaknesses, passed pawns, rooks on
+   open files, pieces that actually fall, and queen trades. A feature is only mentioned when the
+   difference is clear and still holds at the end of the line; material only when the evaluation
+   agrees (otherwise it's a sacrifice with compensation). Forced mates are described as mates.
+   When nothing concrete explains the gap, it says so instead of inventing a reason.
+
+**Deeper analysis for critical moments.** Ordinary moves keep the fast depth-12 pass. After the
+first coaching pass, the positions around each teaching moment are re-analysed at depth 18 with
+three candidate moves and the game is coached again from those evaluations
+(`deepenCritical` in `src/analysis/pipeline.ts`). Other positions opened in the practice board
+are deepened live in the browser.
+
 ## Chess.com sync (optional)
 
 Dashboard → **Chess.com** → enter your username → **Sync Chess.com**. No login: it uses

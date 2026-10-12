@@ -66,6 +66,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
         analyzedAt: Date.now(),
         positions,
         moves,
+        deepPositions: game.analysis?.deepPositions?.filter((i) => (positions[i]?.depth ?? 0) >= DEEP_DEPTH),
       },
       findings,
       explanations,
@@ -84,9 +85,46 @@ export async function analyzeGame(
   opts: { depth: number; prior: PriorGameFindings[]; onProgress?: (done: number, total: number) => void },
 ): Promise<{ game: StoredGame; drills: Drill[] }> {
   const { positions } = await analyzeWithEngine(game.plies, engine, { depth: opts.depth, onProgress: opts.onProgress });
-  const res = coachFromPositions({ ...game, analysis: game.analysis ?? { depth: opts.depth, engine: engine.name, analyzedAt: 0, positions: [], moves: [] } }, positions, opts.prior);
+  const base = { ...game, analysis: game.analysis ?? { depth: opts.depth, engine: engine.name, analyzedAt: 0, positions: [], moves: [] } };
+  const res = await deepenCritical(base, positions, engine, opts.prior, opts.onProgress);
   res.game.analysis!.engine = engine.name;
   return res;
+}
+
+/** Critical teaching moments get a deeper look; ordinary moves keep the fast analysis. */
+export const DEEP_DEPTH = 18;
+
+/**
+ * Re-analyse the positions around each teaching moment (before the move, and after
+ * it) at depth 18 with three candidate moves, then coach again from those better
+ * evaluations. Only a handful of positions, so imports stay fast.
+ */
+export async function deepenCritical(
+  game: StoredGame,
+  positions: PositionEval[],
+  engine: Engine,
+  prior: PriorGameFindings[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ game: StoredGame; drills: Drill[] }> {
+  const first = coachFromPositions(game, positions, prior);
+  const wanted = new Set<number>();
+  for (const m of first.game.moments) {
+    if (m.kind !== 'mistake') continue;
+    wanted.add(m.betterPly - 1); // before the decision
+    wanted.add(m.ply); // after the move played
+  }
+  const todo = [...wanted].filter((i) => positions[i] && !positions[i].terminal && positions[i].depth < DEEP_DEPTH).sort((a, b) => a - b);
+  if (!todo.length) return first;
+  const deep = [...positions];
+  const base = positions.length;
+  for (let k = 0; k < todo.length; k++) {
+    const i = todo[k];
+    deep[i] = await engine.analyse(positions[i].fen, { depth: DEEP_DEPTH, multiPv: 3 });
+    onProgress?.(base + k + 1, base + todo.length);
+  }
+  const deepPositions = deep.map((p, i) => (p.depth >= DEEP_DEPTH ? i : -1)).filter((i) => i >= 0);
+  const second = coachFromPositions({ ...game, analysis: { ...(game.analysis ?? { depth: 0, engine: engine.name, analyzedAt: 0, positions: [], moves: [] }), deepPositions } }, deep, prior);
+  return second;
 }
 
 export function describePly(game: StoredGame, ply: number): string {

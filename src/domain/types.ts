@@ -384,6 +384,8 @@ export interface StoredGame {
     analyzedAt: number;
     positions: PositionEval[];
     moves: MoveEval[];
+    /** Position indices re-analysed at depth 18 because they're critical teaching moments. */
+    deepPositions?: number[];
   };
   findings: Finding[];
   /** Three-part explanations keyed by ply, for credible mistakes and missed chances. */
