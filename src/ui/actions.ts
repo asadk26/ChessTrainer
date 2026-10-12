@@ -1,6 +1,7 @@
 // App-level operations that combine storage, engine and coaching.
 import type { CoachFeedback, Color, ParsedGame, StoredGame } from '../domain/types';
 import { feedbackReport } from '../coach/feedback';
+import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { REPORT_VERSION } from '../coach/report';
 import { repo, type ImportSummary } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
@@ -15,7 +16,7 @@ function newId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-export async function importGame(parsed: ParsedGame, userColor: Color): Promise<StoredGame> {
+export async function importGame(parsed: ParsedGame, userColor: Color, outcome?: Outcome): Promise<StoredGame> {
   const userName = userColor === 'w' ? parsed.headers.white : parsed.headers.black;
   const game: StoredGame = {
     id: newId(),
@@ -32,6 +33,8 @@ export async function importGame(parsed: ParsedGame, userColor: Color): Promise<
     moments: [],
     drillIds: [],
     completedMomentIds: [],
+    // Only stored when it differs from what the PGN says (or the PGN has no result).
+    outcome: outcome && outcome !== outcomeFromResult(parsed.headers.result, userColor) ? outcome : undefined,
   };
   await repo.saveGame(game);
   const settings = await repo.getSettings();
@@ -188,4 +191,12 @@ export async function downloadFeedback(text?: string) {
   a.download = `chess-coach-feedback-${new Date().toISOString().slice(0, 10)}.md`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** The player corrects how the game ended; the coaching is re-run (no engine needed). */
+export async function setOutcome(gameId: string, outcome: Outcome) {
+  const game = await repo.getGame(gameId);
+  if (!game) return;
+  await repo.saveGame({ ...game, outcome: outcome === outcomeFromResult(game.headers.result, game.userColor) ? undefined : outcome });
+  await recoach(gameId);
 }

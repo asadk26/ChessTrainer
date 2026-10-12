@@ -390,6 +390,8 @@ export interface StoredGame {
   report?: GameReport;
   drillIds: string[];
   completedMomentIds: string[];
+  /** The player's own word on how the game ended, overriding the PGN result (which may be missing or copied wrong). */
+  outcome?: 'win' | 'loss' | 'draw';
   /** "This seems wrong" notes the player left on the coaching. */
   feedback?: CoachFeedback[];
 }

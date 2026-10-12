@@ -1,6 +1,7 @@
 // "This seems wrong" notes: stored on the game, exported as one Markdown
 // document (PGN + each flagged statement) that can be pasted to whoever
 // improves the coach.
+import { OUTCOME_LABEL, userOutcome } from '../chess/outcome';
 import type { CoachFeedback, FeedbackWhere, StoredGame } from '../domain/types';
 
 export const WHERE_LABEL: Record<FeedbackWhere, string> = {
@@ -46,7 +47,7 @@ export function feedbackReport(games: StoredGame[], appVersion?: number): string
       ``,
       `## ${g.headers.white} vs ${g.headers.black} (${g.headers.result})${g.headers.date ? ` · ${g.headers.date}` : ''}`,
       ``,
-      `I played ${g.userColor === 'w' ? 'White' : 'Black'}.`,
+      `I played ${g.userColor === 'w' ? 'White' : 'Black'}${userOutcome(g) ? ` · ${OUTCOME_LABEL[userOutcome(g)!].toLowerCase()}${g.outcome ? ' (corrected by me)' : ''}` : ''}.`,
       ``,
     );
     for (const f of g.feedback!) {

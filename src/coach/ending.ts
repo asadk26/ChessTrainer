@@ -4,6 +4,7 @@ import { Chess } from 'chess.js';
 import type { PositionEval, StoredGame } from '../domain/types';
 import { COLOR_NAME, materialBalance, other, playLine } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
+import { userOutcome } from '../chess/outcome';
 import { MATE_CP, positionCp } from '../analysis/evaluation';
 
 function howItEnded(termination: string | undefined, who: string): string {
@@ -20,8 +21,9 @@ export function endingNote(game: StoredGame, positions: PositionEval[]): string 
   if (!last || !final) return undefined;
   if (new Chess(last.fenAfter).isGameOver()) return undefined; // mate or a draw on the board: nothing to add
   const me = game.userColor;
-  const won = (game.headers.result === '1-0' && me === 'w') || (game.headers.result === '0-1' && me === 'b');
-  const lost = (game.headers.result === '0-1' && me === 'w') || (game.headers.result === '1-0' && me === 'b');
+  const outcome = userOutcome(game);
+  const won = outcome === 'win';
+  const lost = outcome === 'loss';
   const toMove = last.color === 'w' ? 'b' : 'w';
   const cp = toMove === me ? positionCp(final) : -positionCp(final); // the user's view
   const opp = COLOR_NAME[other(me)];
@@ -29,16 +31,25 @@ export function endingNote(game: StoredGame, positions: PositionEval[]): string 
   if (won && last.color === me && cp <= -150) {
     return `You won because ${howItEnded(game.headers.termination, opp)} right after ${moveLabel(last)} — but that move actually left ${opp} better. Enjoy the point, but don't count on that next time.`;
   }
-  if (lost && last.color !== me && cp > -900 && Math.abs(cp) < MATE_CP - 1000) {
+  if (lost) {
     const t = (game.headers.termination ?? '').toLowerCase();
     if (t && !t.includes('resign')) return undefined; // lost on time or abandoned: resigning isn't the lesson
-    // Count material after the obvious recapture, if the engine's first move is one.
-    const reply = playLine(last.fenAfter, final.lines[0]?.pv ?? [], 1)[0];
-    const settled = reply?.san.includes('x') ? reply.fen : last.fenAfter;
-    const down = -materialBalance(settled, me);
-    const what = down >= 3 ? `you were down ${down} points of material` : `the position was bad`;
-    const lead = t ? `You resigned after ${moveLabel(last)}: ${what}.` : `If you resigned after ${moveLabel(last)}: ${what}.`;
-    return `${lead} That's a lot, but at this level opponents give material back all the time — unless it's a forced mate, playing on is usually worth it.`;
+    const ifResigned = t ? 'You resigned' : 'If you resigned';
+    // Were you better just before your own last move? Then that one move turned the game.
+    const beforeCp = last.color === me && positions[game.plies.length - 1] ? positionCp(positions[game.plies.length - 1]) : undefined;
+    const turned = beforeCp !== undefined && beforeCp >= 150 ? ` Just before ${moveLabel(last)} you were clearly better — that one move turned the game around.` : '';
+    if (cp >= -150) {
+      return `${ifResigned} after ${moveLabel(last)}, that was too early: the position wasn't lost (${cp >= 150 ? 'you were actually better' : 'it was roughly equal'}).`;
+    }
+    if (cp > -900 && Math.abs(cp) < MATE_CP - 1000) {
+      // Count material after the obvious recapture, if the engine's first move is one.
+      const reply = playLine(last.fenAfter, final.lines[0]?.pv ?? [], 1)[0];
+      const settled = reply?.san.includes('x') ? reply.fen : last.fenAfter;
+      const down = -materialBalance(settled, me);
+      const what = down >= 3 ? `you were down ${down} points of material` : 'you were clearly worse';
+      return `${ifResigned} after ${moveLabel(last)}: ${what}.${turned} ${down >= 3 ? "That's a lot, but at" : 'Worse is not lost: at'} this level opponents give material back all the time — unless it's a forced mate, playing on is usually worth it.`;
+    }
+    return turned ? turned.trim() : undefined;
   }
   return undefined;
 }

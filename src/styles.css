@@ -392,3 +392,4 @@ p { margin: 0 0 0.75rem; }
 .flag-form textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.9rem; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); resize: vertical; }
 .btn.small { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
 .feedback-card p { margin: 0.25rem 0 0.5rem; }
+.outcome-select { font: inherit; font-size: inherit; color: inherit; background: transparent; border: 1px dashed var(--line); border-radius: 6px; padding: 0 0.2rem; cursor: pointer; }

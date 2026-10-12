@@ -7,6 +7,7 @@ import { SAMPLE_PGN } from '../../fixtures/sampleGame';
 import { parsePgn } from '../../chess/pgn';
 import { deleteGame, downloadFeedback, exportBackup, exportFeedback, importBackup, importGame } from '../actions';
 import { feedbackCount } from '../../coach/feedback';
+import { userOutcome } from '../../chess/outcome';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
@@ -154,11 +155,12 @@ export function Dashboard() {
         </div>
         <ul className="games">
           {recent.map((g) => {
-            const won = (g.headers.result === '1-0' && g.userColor === 'w') || (g.headers.result === '0-1' && g.userColor === 'b');
-            const lost = (g.headers.result === '0-1' && g.userColor === 'w') || (g.headers.result === '1-0' && g.userColor === 'b');
+            const outcome = userOutcome(g);
+            const won = outcome === 'win';
+            const lost = outcome === 'loss';
             return (
               <li key={g.id} onClick={() => navigate(`/game/${g.id}`)}>
-                <span className={`result ${won ? 'won' : lost ? 'lost' : 'draw'}`}>{won ? 'W' : lost ? 'L' : '½'}</span>
+                <span className={`result ${won ? 'won' : lost ? 'lost' : 'draw'}`}>{won ? 'W' : lost ? 'L' : outcome === 'draw' ? '½' : '?'}</span>
                 <span className="g-main">
                   vs <b>{g.opponentName}</b> <span className="muted small">{g.userColor === 'w' ? 'as White' : 'as Black'}</span>
                   <span className="muted small block">{g.status === 'analyzed' ? g.report?.focus.title : g.status === 'error' ? `Error: ${g.error}` : 'Not analyzed yet'}</span>

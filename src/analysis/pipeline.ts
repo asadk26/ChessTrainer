@@ -9,6 +9,7 @@ import type { MoveExplanation } from '../domain/types';
 import { buildMoments, type PriorGameFindings } from './moments';
 import { buildReport } from '../coach/report';
 import { endingNote } from '../coach/ending';
+import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
@@ -39,7 +40,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   const moves = buildMoveEvals(game.plies, positions);
   const contexts = buildContexts(game.plies, moves, game.userColor);
   const findings = detectFindings(
-    { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: game.headers.result, contexts },
+    { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: resultFor(userOutcome(game), game.userColor, game.headers.result), contexts },
     game.headers.timeControl,
   );
   // Three-part explanations for every credible mistake / missed chance of the user.

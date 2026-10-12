@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReportItem, StoredGame } from '../../domain/types';
-import { enrichWithLlm, recoach, runAnalysis } from '../actions';
+import { enrichWithLlm, recoach, runAnalysis, setOutcome } from '../actions';
 import { navigate, useApp } from '../store';
 import { GuidedReview } from './GuidedReview';
 import { DrillList } from './DrillsScreen';
@@ -9,6 +9,7 @@ import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/Pos
 import { REPORT_VERSION } from '../../coach/report';
 import { repo } from '../../storage/repository';
 import { FlagButton } from '../components/FlagButton';
+import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
 import type { FeedbackWhere } from '../../domain/types';
 
 function useAnalysis(game: StoredGame | undefined) {
@@ -159,6 +160,30 @@ function Summary({ game }: { game: StoredGame }) {
   );
 }
 
+/** "You lost ▾" — the player can correct a missing or wrong PGN result. */
+function OutcomeSelect({ game }: { game: StoredGame }) {
+  const { refresh } = useApp();
+  const current = userOutcome(game);
+  return (
+    <select
+      className="outcome-select"
+      aria-label="How the game ended for you"
+      value={current ?? ''}
+      onChange={async (e) => {
+        await setOutcome(game.id, e.target.value as Outcome);
+        await refresh();
+      }}
+    >
+      {!current && <option value="">Result unknown</option>}
+      {(['win', 'loss', 'draw'] as Outcome[]).map((o) => (
+        <option key={o} value={o}>
+          {OUTCOME_LABEL[o]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function GameScreen({ id, tab, ply }: { id: string; tab: 'summary' | 'review' | 'drills'; ply?: number }) {
   const { games, refresh, llm } = useApp();
   const game = games.find((g) => g.id === id);
@@ -183,7 +208,7 @@ export function GameScreen({ id, tab, ply }: { id: string; tab: 'summary' | 'rev
           {game.headers.white} <span className="muted">vs</span> {game.headers.black}
         </h1>
         <p className="muted small">
-          {game.headers.result} · you played {game.userColor === 'w' ? 'White' : 'Black'}
+          <OutcomeSelect game={game} /> · you played {game.userColor === 'w' ? 'White' : 'Black'}
           {game.headers.date ? ` · ${game.headers.date}` : ''}
           {game.report ? ` · coach voice: ${game.report.voice === 'llm' ? 'AI' : 'built-in'}` : ''}
           {llmState === 'working' && ' · AI coach is writing…'}
