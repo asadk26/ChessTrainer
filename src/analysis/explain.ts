@@ -5,9 +5,10 @@
 //   3. why the better move is better, in human terms.
 // Anything that can't be inferred reliably is left out.
 import type { Finding, MoveEval, MoveExplanation, PlyContext, PlyRecord, PositionEval } from '../domain/types';
-import { COLOR_NAME, PIECE_NAME, attackersOf, lineToSan, other, pawnShield, pieceAt, playLine, structureScore } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, attackersOf, kingZoneAttacks, lineToSan, other, passTurn, pawnShield, pieceAt, playLine, structureScore } from '../chess/board';
+import { underKingPressure } from './context';
 import { describeMove, joinList, type Purpose, type PurposeId } from './movePurpose';
-import { pd } from './evaluation';
+import { pd, scoreToCp } from './evaluation';
 
 export type { MoveExplanation };
 
@@ -53,7 +54,10 @@ export function explainMove(inp: ExplainInput): MoveExplanation {
 
   // 2. What went wrong.
   const problems: string[] = [];
-  const lost = e.materialBefore - e.materialAfterReply;
+  // The piece was chased by pawns: that *is* the problem, whatever side-lines the engine prefers.
+  const chased = here.find((f) => f.facts.chased && f.ply === ply);
+  if (chased) problems.push(`${opp}'s pawns chased it (${(chased.facts.pushes as string[]).join(', ')}), gaining space${chased.facts.towardKing ? ' toward your king' : ''} with every push`);
+  const lost = problems.length ? 0 : e.materialBefore - e.materialAfterReply;
   const cap = lost >= 2 ? firstCaptureOfOurs(p.fenAfter, e.replyLineUci, us) : undefined;
   if (cap && p.captured && cap.square === p.to)
     problems.push(`after ${cap.san} you've given your ${PIECE_NAME[p.piece]} for a ${PIECE_NAME[p.captured]}`);
@@ -68,11 +72,38 @@ export function explainMove(inp: ExplainInput): MoveExplanation {
   const actualReply = plies[ply];
   if (!trip && actualReply && pd(e) >= 5 && attackersOf(actualReply.fenAfter, p.to, actualReply.color).includes(actualReply.to as never) && p.piece !== 'p')
     problems.push(`${opp} can answer ${actualReply.san} and gain time by attacking your ${PIECE_NAME[p.piece]}`);
+  // Lines open toward our king after the opponent's best reply (e.g. ...Nxf4 Nxc5 ...Qxh4).
+  // These two only apply when the move actually left you worse off (not when you're still clearly better).
+  const nowWorse = e.winAfter < 55;
+  if (!problems.length && nowWorse && pd(e) >= 8 && !ctx?.kingPressure) {
+    const frames = playLine(p.fenAfter, e.replyLineUci, 3);
+    const end = frames.at(-1)?.fen;
+    if (end && underKingPressure(end, us)) problems.push(`it opens the way for ${opp}'s pieces to reach your king (${frames.map((f) => f.san).join(' ')})`);
+  }
+  // A threat that was already there and the move did nothing about (e.g. ...g3 breaking open the king).
+  if (!problems.length && nowWorse && pd(e) >= 15 && e.replyLineUci[0]) {
+    // Only call it an existing threat if it was already a concrete check or capture before the move.
+    const pre = passTurn(p.fenBefore);
+    const preSan = pre ? lineToSan(pre, [e.replyLineUci[0]], 1)[0] : undefined;
+    const concreteBefore = !!preSan && (preSan.includes('+') || preSan.includes('x'));
+    const replyEnd = playLine(p.fenAfter, e.replyLineUci, 1)[0]?.fen;
+    const hitsKing = !!replyEnd && kingZoneAttacks(replyEnd, us) > kingZoneAttacks(p.fenAfter, us) + 1;
+    problems.push(
+      concreteBefore
+        ? `it doesn't deal with ${opp}'s threat ${replySan}`
+        : hitsKing
+          ? `it allows ${replySan}, and ${opp}'s attack on your king breaks through`
+          : `it allows ${replySan}, and ${opp}'s position becomes much better`,
+    );
+  }
   if (has('hunting_material')) problems.push('it spends a move grabbing a pawn while your pieces are still undeveloped and your king is not safe');
   if (has('king_safety') && pawnShield(p.fenAfter, us) < pawnShield(p.fenBefore, us)) problems.push('it loosens the pawns in front of your king');
   if (pd(e) >= 3 && structureScore(p.fenAfter, us) > structureScore(p.fenBefore, us) && p.piece === 'p')
     problems.push('it leaves you with a doubled or isolated pawn');
-  const mistake = problems.length > 0;
+  // A mistake made the position concretely worse; a missed chance left it roughly fine but passed up something better.
+  const turnedBad = e.winBefore >= 40 && e.winAfter < 35;
+  const mistake = problems.length > 0 || turnedBad;
+  if (turnedBad && !problems.length) problems.push(`it lets ${opp} take over (${e.replyLineSan.slice(0, 2).join(' ')})`);
 
   // 3. Why the better move is better — only what it does that the played move didn't.
   const bp = inp.betterPly ?? ply;
@@ -88,6 +119,7 @@ export function explainMove(inp: ExplainInput): MoveExplanation {
       uci: best.pv[0],
       pv: best.pv,
       mateIn: best.score.type === 'mate' && best.score.value > 0 ? best.score.value : undefined,
+      lineCp: scoreToCp(best.score),
       context: contexts.get(bp),
       threatUci: positions[bp]?.lines[0]?.pv[0],
       playedFenAfter: bPly.fenAfter,

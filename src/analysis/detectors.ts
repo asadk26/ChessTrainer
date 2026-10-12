@@ -36,6 +36,7 @@ import { COLOR_NAME } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { pd, scoreToCp, winPercent } from './evaluation';
 import { buildContexts, underKingPressure } from './context';
+import { describeMove } from './movePurpose';
 
 export interface DetectorContext {
   plies: PlyRecord[];
@@ -652,11 +653,19 @@ function detectMissedKingAttack(ctx: DetectorContext, i: number, already: Findin
 function detectKingShelter(ctx: DetectorContext, i: number, already: Finding[]): Finding[] {
   const p = ctx.plies[i];
   const e = ctx.evals[i];
-  if (p.piece !== 'p' || pd(e) < 10 || already.some((f) => f.kind === 'weakness')) return [];
+  if (p.piece !== 'p' || pd(e) < 6 || already.some((f) => f.kind === 'weakness')) return [];
   const king = kingSquare(p.fenBefore, ctx.userColor);
   const kingside = /^[fgh]/.test(king);
   const shelterFiles = kingside ? ['f', 'g', 'h'] : /^[abc]/.test(king) ? ['a', 'b', 'c'] : [];
   if (!shelterFiles.includes(p.from[0])) return [];
+  // Enemy pawns already advancing on that wing: a pawn storm, where pushing your own pawns opens lines for them.
+  const opp = other(ctx.userColor);
+  const storm = new Chess(p.fenBefore)
+    .board()
+    .flat()
+    .filter((x) => x && x.type === 'p' && x.color === opp && shelterFiles.includes(x.square[0]) && relativeRank(x.square, opp) >= 4)
+    .map((x) => x!.square);
+  if (pd(e) < 10 && storm.length < 2) return [];
   return [
     {
       kind: 'weakness',
@@ -664,8 +673,10 @@ function detectKingShelter(ctx: DetectorContext, i: number, already: Finding[]):
       ply: p.ply,
       severity: 2,
       confidence: pd(e) >= 15 ? 'high' : 'medium',
-      evidence: `${label(p)} loosened the pawns in front of your king on ${king}.`,
-      facts: { king, bestSan: e.bestSan, replyLine: e.replyLineSan.slice(0, 4) },
+      evidence: storm.length >= 2
+        ? `${label(p)} pushed a pawn in front of your own king on ${king} while ${COLOR_NAME[opp]}'s pawns (${storm.join(', ')}) were storming toward it — that opens lines for the attack.`
+        : `${label(p)} loosened the pawns in front of your king on ${king}.`,
+      facts: { king, bestSan: e.bestSan, replyLine: e.replyLineSan.slice(0, 4), storm },
     },
   ];
 }
@@ -828,6 +839,81 @@ function detectPassivePieces(ctx: DetectorContext): Finding[] {
     }
   }
   return out.slice(0, 1);
+}
+
+/** The same piece chased by enemy pawns move after move: each push gains space with tempo. */
+function detectChasedPiece(ctx: DetectorContext): Finding[] {
+  const us = ctx.userColor;
+  for (let i = 0; i < ctx.plies.length - 3; i++) {
+    const first = ctx.plies[i];
+    if (first.color !== us || first.piece === 'p' || first.piece === 'k' || first.captured) continue;
+    const chain = [first];
+    let sq = first.to;
+    let k = i;
+    // reply: a pawn move that attacks our piece; then we move that piece again.
+    while (k + 2 < ctx.plies.length) {
+      const reply = ctx.plies[k + 1];
+      const again = ctx.plies[k + 2];
+      if (reply.piece !== 'p' || !attackersOf(reply.fenAfter, sq, reply.color).includes(reply.to as never) || again.from !== sq) break;
+      chain.push(reply, again);
+      sq = again.to;
+      k += 2;
+    }
+    const pushes = chain.filter((p) => p.color !== us);
+    if (pushes.length < 2) continue;
+    const drop = chain.filter((p) => p.color === us).reduce((a, p) => a + pd(ctx.evals[p.ply - 1]), 0);
+    const king = kingSquare(first.fenBefore, us);
+    const towardKing = pushes.every((p) => Math.abs(p.to.charCodeAt(0) - king.charCodeAt(0)) <= 2);
+    if (drop < 6 && !towardKing) continue;
+    const name = PIECE_NAME[first.piece];
+    const seq = chain.map((p) => moveLabel(p)).join(' ');
+    return [
+      {
+        kind: 'weakness',
+        category: 'inefficient_moves',
+        ply: first.ply,
+        severity: 2,
+        confidence: towardKing && drop >= 6 ? 'high' : 'medium',
+        relatedPlies: chain.slice(1).filter((p) => p.color === us).map((p) => p.ply),
+        evidence: `Your ${name} was chased by pawns (${seq}). Each pawn move gained space${towardKing ? ` toward your king` : ''} with tempo, and the ${name} ended up no better placed.`,
+        facts: { piece: name, chased: true, pushes: pushes.map((p) => p.san), towardKing, secondSan: chain[2]?.san },
+      },
+    ];
+  }
+  return [];
+}
+
+/** Credit: a move that sets up a clear tactic (fork, winning material), found in the game. */
+function detectTacticFound(ctx: DetectorContext): Finding[] {
+  let best: { f: Finding; gain: number } | undefined;
+  for (let i = 0; i < ctx.plies.length; i++) {
+    const p = ctx.plies[i];
+    const e = ctx.evals[i];
+    // A forced reply to check is not "finding" a tactic.
+    if (p.color !== ctx.userColor || pd(e) > 3 || inCheck(p.fenBefore)) continue;
+    const pos = ctx.positions[i];
+    const line = pos.lines.find((l) => l.pv[0] === p.uci);
+    const d = describeMove({ fen: p.fenBefore, uci: p.uci, pv: line?.pv ?? [p.uci, ...e.replyLineUci], context: cx(ctx, p) });
+    const hit = d?.purposes.find((x) => (x.id === 'double_attack' || x.id === 'win_material') && x.confidence === 'high');
+    // Only quiet set-ups or forks — a plain recapture isn't a "found tactic".
+    if (!hit || (p.captured && hit.id === 'win_material' && (hit.plies ?? 1) <= 1)) continue;
+    const gain = e.materialAfterReply - e.materialBefore;
+    if (gain < 2) continue;
+    if (!best || gain > best.gain)
+      best = {
+        gain,
+        f: {
+          kind: 'strength',
+          category: 'found_tactic',
+          ply: p.ply,
+          severity: 2,
+          confidence: 'high',
+          evidence: `${label(p)} ${hit.text} — a real tactic, and you found it.`,
+          facts: { san: p.san },
+        },
+      };
+  }
+  return best ? [best.f] : [];
 }
 
 /** Credit: a rook placed on an open file. */
@@ -1132,6 +1218,8 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   }
   findings.push(...detectClock(ctx, timeControl));
   findings.push(...detectPassivePieces(ctx));
+  findings.push(...detectChasedPiece(ctx));
+  findings.push(...detectTacticFound(ctx));
   findings.push(...detectRookOnOpenFile(ctx));
   findings.push(...detectGameLevel(ctx, findings));
   return findings;

@@ -46,6 +46,7 @@ export const STRENGTHS: Record<StrengthId, { label: string; phrase: string }> = 
   passed_pawn: { label: 'Creating passed pawns', phrase: 'You created a dangerous passed pawn and used it.' },
   neutralized_counterplay: { label: "Neutralising counterplay", phrase: "You took the sting out of your opponent's counterplay." },
   rook_open_file: { label: 'Rooks on open files', phrase: 'You put a rook on an open file.' },
+  found_tactic: { label: 'Spotting tactics', phrase: 'You found a tactic that won material.' },
   converted_advantage: { label: 'Converting advantages', phrase: 'You converted your advantage into a win.' },
 };
 

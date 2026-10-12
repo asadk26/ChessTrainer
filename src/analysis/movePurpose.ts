@@ -83,6 +83,8 @@ export interface DescribeInput {
   pv?: string[];
   /** Forced mate length for this line, if the engine found one. */
   mateIn?: number;
+  /** Engine score of this line in centipawns (mover's view), to sanity-check material claims. */
+  lineCp?: number;
   context?: PlyContext;
   /** The opponent's strongest reply to the move that was actually played (e.g. ...Qg4+). */
   threatUci?: string;
@@ -151,7 +153,9 @@ export function describeMove(inp: DescribeInput): { san: string; purposes: Purpo
   // Material won within the first few plies of the line (net of recaptures).
   const base = materialBalance(inp.fen, mover);
   const gain = materialAfterLine(inp.fen, pv, mover, 5, 2) - base;
-  if (gain >= 2 && !mv.promotion && !inp.forIntent) {
+  // A material "win" the engine doesn't actually rate as winning is just a pause mid-exchange.
+  const engineAgrees = inp.lineCp === undefined || inp.lineCp >= 150;
+  if (gain >= 2 && engineAgrees && !mv.promotion && !inp.forIntent) {
     // The first capture in the line that is big enough to explain the gain.
     let target: { type: PieceType; square: string; san: string; k: number } | undefined;
     let fenK = inp.fen;
@@ -301,7 +305,7 @@ export function describeMove(inp: DescribeInput): { san: string; purposes: Purpo
   }
 
   // --- activity ------------------------------------------------------------------
-  if (!captured && (piece === 'n' || piece === 'b' || piece === 'r' || piece === 'q') && !out.some((p) => p.id === 'develop' || p.id === 'open_file' || p.id === 'escape')) {
+  if (!captured && (piece === 'n' || piece === 'b' || piece === 'r' || piece === 'q') && !out.some((p) => p.id === 'develop' || p.id === 'open_file' || p.id === 'half_open_file' || p.id === 'escape')) {
     const m0 = mobility(inp.fen, mv.from);
     const m1 = mobility(after, mv.to);
     if (m0 <= 2 && m1 >= m0 + 3) add({ id: 'improve_bad_piece', text: `brings your passive ${name(piece)} into play`, weight: 38, confidence: 'medium', squares: [mv.to] });

@@ -120,6 +120,8 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
   const labels = eps.map((e) => e.label);
   switch (group.theme) {
     case 'active_without_followup': {
+      const chasedEp = eps.find((e) => e.finding.facts.chased);
+      if (chasedEp && eps.length === 1) return chasedEp.finding.evidence;
       const n = eps.length;
       return `${n > 1 ? 'Several moves looked active' : 'A move looked active'} but had no follow-up: ${joinList(labels)}. ${n > 1 ? 'Each time' : 'There'}, ${opp}'s simplest reply left your piece with nothing to do, so you spent tempi without improving your position.`;
     }
@@ -134,11 +136,21 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
         .sort((a, b) => b.finding.severity - a.finding.severity)
         .map((e) => `On ${e.label}, ${lowerFirst(e.finding.evidence)}`)
         .join(' ');
+    case 'king_safety': {
+      const storms = eps.filter((e) => Array.isArray(e.finding.facts.storm) && (e.finding.facts.storm as string[]).length >= 2);
+      if (storms.length >= 2) {
+        const rest = eps.filter((e) => !storms.includes(e));
+        return [
+          `${joinList(storms.map((e) => e.label))} pushed pawns in front of your own king while ${opp}'s pawns were storming toward it — each one opened lines for the attack.`,
+          ...rest.map((e) => e.finding.evidence),
+        ].join(' ');
+      }
+      return eps.map((e) => e.finding.evidence).join(' ');
+    }
     case 'loose_pieces':
     case 'opponent_threats':
     case 'endgame':
     case 'opening_development':
-    case 'king_safety':
       return eps.map((e) => e.finding.evidence).join(' ');
     default:
       return `${THEMES[group.theme].label}: ${eps.map((e) => lowerFirst(e.finding.evidence)).join(' ')}`;
@@ -166,6 +178,7 @@ function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color)
     items.push({ text: `Your opening fundamentals were solid: you ${joinList(parts)}.`, category: opening[0].category as StrengthId, plies: opening.map((f) => f.ply).filter((p) => p > 0) });
   }
 
+  push(has('found_tactic'), (f) => f.evidence);
   push(has('won_free_material'), (f) => `${f.evidence} When your opponent left something hanging, you noticed.`);
   push(has('passed_pawn'), (f) => `${f.evidence} In the endgame that pawn was worth more than any piece.`);
   push(has('neutralized_counterplay'), (f) => `${f.evidence} Trading off the attackers was exactly right.`);
@@ -195,8 +208,34 @@ function recentOf(prior: PriorGameFindings[]) {
   return [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, RECENT - 1);
 }
 
-function priorHasTheme(g: PriorGameFindings, theme: ThemeId) {
-  return g.findings.some((f) => countsAsPattern(f) && themeOf(f.category) === theme);
+/**
+ * The specific habit a finding represents. Broad themes hide real differences:
+ * "didn't castle" and "pushed pawns in front of a castled king" are both king
+ * safety, but different habits; being chased by pawns isn't a knight round trip.
+ */
+export function habitKey(f: Finding): string {
+  if (f.category === 'king_safety') return f.facts.notCastled ? 'king_safety:not_castled' : 'king_safety:shelter';
+  if (f.facts.chased) return 'inefficient_moves:chased_by_pawns';
+  const t = themeOf(f.category);
+  return t ? `theme:${t}` : f.category;
+}
+
+const HABIT_LABEL: Record<string, string> = {
+  'king_safety:shelter': 'pushing pawns in front of your castled king',
+  'king_safety:not_castled': 'leaving your king in the center',
+  'inefficient_moves:chased_by_pawns': 'letting a piece get chased around by pawns',
+};
+
+/** Plain name for the habit behind a group, e.g. "pushing pawns in front of your castled king". */
+function habitLabel(group: ThemeGroup): string {
+  const keys = group.findings.map(habitKey);
+  const specific = keys.find((k) => HABIT_LABEL[k]);
+  return specific ? HABIT_LABEL[specific] : THEMES[group.theme].label.toLowerCase();
+}
+
+function priorHasTheme(g: PriorGameFindings, theme: ThemeId, current?: Finding[]) {
+  const keys = current ? new Set(current.filter((f) => themeOf(f.category) === theme).map(habitKey)) : undefined;
+  return g.findings.some((f) => countsAsPattern(f) && themeOf(f.category) === theme && (!keys || keys.has(habitKey(f))));
 }
 
 function recurringText(groups: ThemeGroup[], plies: PlyRecord[], prior: PriorGameFindings[]): string {
@@ -221,15 +260,20 @@ function recurringText(groups: ThemeGroup[], plies: PlyRecord[], prior: PriorGam
     return `Nothing in this game clearly repeats an earlier pattern.${goodNews()}`;
   }
   // Prefer a strong theme that actually has history; otherwise the strongest one.
-  const withHistory = strong.find((g) => recentPrior.some((p) => priorHasTheme(p, g.theme)));
+  const withHistory = strong.find((g) => recentPrior.some((p) => priorHasTheme(p, g.theme, g.findings)));
   const top = withHistory ?? strong[0];
-  const themeLabel = THEMES[top.theme].label.toLowerCase();
+  const themeLabel = habitLabel(top);
   const eps = episodes(top, plies);
-  const inThisGame = eps.length > 1 ? `In this game, ${joinList(eps.map((e) => e.label))} all fit that pattern.` : `In this game, ${eps[0].label} fits it.`;
+  const inThisGame =
+    eps.length > 2
+      ? `In this game, ${joinList(eps.map((e) => e.label))} all fit that pattern.`
+      : eps.length === 2
+        ? `In this game, ${joinList(eps.map((e) => e.label))} both fit that pattern.`
+        : `In this game, ${eps[0].label} fits it.`;
   if (recentPrior.length === 0) {
     return `This is your first analyzed game, so nothing counts as a pattern yet. ${inThisGame} I'll watch whether this shows up again — one game isn't a trend.`;
   }
-  const withTheme = recentPrior.filter((g) => priorHasTheme(g, top.theme));
+  const withTheme = recentPrior.filter((g) => priorHasTheme(g, top.theme, top.findings));
   const total = recentPrior.length + 1;
   let text: string;
   if (withTheme.length === 0) {
@@ -254,8 +298,28 @@ export function chooseFocus(groups: ThemeGroup[], prior: PriorGameFindings[]): T
   const eligible = groups.filter((g) => g.strong);
   if (!eligible.length) return undefined;
   const recentPrior = recentOf(prior);
-  const scoreOf = (g: ThemeGroup) => g.score + 0.5 * Math.min(3, recentPrior.filter((p) => priorHasTheme(p, g.theme)).length);
+  const scoreOf = (g: ThemeGroup) => g.score + 0.5 * Math.min(3, recentPrior.filter((p) => priorHasTheme(p, g.theme, g.findings)).length);
   return [...eligible].sort((a, b) => scoreOf(b) - scoreOf(a))[0].theme;
+}
+
+/**
+ * Theme focus text, adjusted to what actually happened. King safety in a game
+ * where you castled early is about keeping the pawn shield, not about castling.
+ */
+export function focusFor(theme: ThemeId, findings: Finding[]): { focusTitle: string; focusDetail: string; clause: string; label: string } {
+  const meta = THEMES[theme];
+  if (theme === 'king_safety') {
+    const ks = findings.filter((f) => f.category === 'king_safety' && countsAsPattern(f));
+    if (ks.length && !ks.some((f) => f.facts.notCastled)) {
+      return {
+        ...meta,
+        focusTitle: "Once you've castled, leave the pawns in front of your king alone — especially when your opponent's pawns are storming toward it.",
+        focusDetail:
+          "Pushing your own king's pawns opens lines for the attacker. Meet a pawn storm by bringing pieces over to defend and by hitting back in the center, and before every move ask what your opponent's next pawn push will open up.",
+      };
+    }
+  }
+  return meta;
 }
 
 /** One or two sentences on the shape of the game, from the per-move context. */
@@ -313,7 +377,7 @@ export function buildReport(input: ReportInput): GameReport {
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
   const focusTheme = chooseFocus(groups, prior) ?? 'opponent_threats';
-  const focusMeta = THEMES[focusTheme];
+  const focusMeta = focusFor(focusTheme, findings);
 
   let headline: string;
   const openingStrengths = findings.filter((f) => f.kind === 'strength' && ['center_control', 'developed_pieces', 'castled_early'].includes(f.category));

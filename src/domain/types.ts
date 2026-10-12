@@ -104,7 +104,8 @@ export type StrengthId =
   | 'defensive_resource'
   | 'passed_pawn'
   | 'neutralized_counterplay'
-  | 'rook_open_file';
+  | 'rook_open_file'
+  | 'found_tactic';
 
 /**
  * How sure the coach is that a finding is real and instructive. Low-confidence
