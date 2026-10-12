@@ -44,7 +44,7 @@ function drillFor(m: TeachingMoment, type: DrillType, gameId: string): Drill | u
         fen: m.betterFen,
         orientation: mover,
         prompt: tactic
-          ? `${me} to move. There's a way to win material — find it.`
+          ? `${me} to move. ${m.text.betterPrompt ?? "There's a way to win material — find it."}`
           : `${me} to move. In the game you played ${m.betterPly === m.ply ? m.playedSan : 'a retreat'}. Find a more useful move.`,
         acceptableUcis: Array.from(new Set([m.bestUci, ...m.acceptableUcis])),
         solutionUci: m.bestUci,

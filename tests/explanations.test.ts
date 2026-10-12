@@ -35,7 +35,7 @@ describe('why the better move is better', () => {
   it('distinguishes a true mistake from a missed opportunity', () => {
     expect(sample.explanations![33].kind).toBe('missed_opportunity'); // 17.Bc4: nothing lost, exd6 missed
     expect(winning.explanations![43]).toMatchObject({ kind: 'mistake', problem: expect.stringMatching(/win your bishop/) });
-    expect(winning.explanations![45].problem).toMatch(/start checking your king with Qg4\+/);
+    expect(winning.explanations![45].problem).toMatch(/force a draw by checking your king again and again \(Qg4\+ Kh1/);
     expect(winning.explanations![67].problem).toMatch(/given your rook for a knight/); // 34.Rxe5+
   });
 

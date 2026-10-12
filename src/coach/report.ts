@@ -106,6 +106,7 @@ function conversionClause(f: Finding, plies: PlyRecord[], opp: string): string {
     case 'unnecessary_complications':
       return `${mv} returned material for complications`;
     case 'allowed_counterplay':
+      if (f.facts.perpetual) return `${mv} let ${opp} force a draw by perpetual check (${(f.facts.replyLine as string[]).slice(0, 3).join(' ')})`;
       return f.facts.drawish ? `${mv} let ${opp} start checking your king with a draw in hand` : `${mv} let ${opp}'s pieces come alive against your king`;
     case 'failure_to_simplify':
       return `${mv} kept the queens on when a trade was there`;
@@ -129,13 +130,21 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
       const lead = Math.max(...group.findings.map((f) => Number(f.facts.material ?? f.facts.materialBefore ?? 0)));
       const top = [...eps].sort((a, b) => b.finding.severity - a.finding.severity || a.finding.ply - b.finding.ply).slice(0, 4);
       const clauses = top.sort((a, b) => a.finding.ply - b.finding.ply).map((e) => conversionClause(e.finding, plies, opp));
+      if (group.findings.some((f) => f.facts.perpetual)) return `You had a winning position, but ${joinList(clauses)}.`;
       return `${lead >= 3 ? `You were up ${materialPhrase(lead)}, but you` : 'When ahead, you'} made the win harder than it needed to be: ${joinList(clauses)}.`;
     }
-    case 'tactics':
+    case 'tactics': {
+      const mates = eps.filter((e) => e.finding.facts.mateIn);
+      if (mates.length >= 2) {
+        const rest = eps.filter((e) => !mates.includes(e)).map((e) => `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
+        const each = mates.map((e) => `move ${plies[e.finding.ply - 1].moveNumber} (${e.finding.facts.bestSan} instead of ${plies[e.finding.ply - 1].san})`);
+        return [`You missed a checkmate ${mates.length === 2 ? 'twice' : `${mates.length} times`}: ${joinList(each)}. ${mates.every((e) => plies[e.finding.ply - 1].captured) ? 'Each time you took material instead — but mate ends the game, so checks come first.' : 'Checks come first: mate ends the game.'}`, ...rest].join(' ');
+      }
       return [...eps]
         .sort((a, b) => b.finding.severity - a.finding.severity)
         .map((e) => `On ${e.label}, ${lowerFirst(e.finding.evidence)}`)
         .join(' ');
+    }
     case 'king_safety': {
       const storms = eps.filter((e) => Array.isArray(e.finding.facts.storm) && (e.finding.facts.storm as string[]).length >= 2);
       if (storms.length >= 2) {
@@ -352,6 +361,16 @@ export function gameStory(plies: PlyRecord[], contexts: Map<number, PlyContext> 
     const firstBehind = list.find((c) => c.behind)!;
     parts.push(`You were behind in material from move ${mv(firstBehind.ply)}, so this game was about finding resources.`);
   }
+  // A see-saw game: the evaluation crossed from clearly better to clearly worse (or back) at least twice.
+  const swings: { side: 'win' | 'lose'; ply: number }[] = [];
+  for (const c of list) {
+    const side = c.cp >= 200 ? 'win' : c.cp <= -200 ? 'lose' : undefined;
+    if (side && side !== swings.at(-1)?.side) swings.push({ side, ply: c.ply });
+  }
+  if (swings.length >= 3) {
+    const steps = swings.slice(0, 5).map((w, k) => `${w.side === 'win' ? 'winning' : 'worse'} ${k === 0 ? 'around' : 'by'} move ${mv(w.ply)}`);
+    parts.unshift(`This game swung back and forth: you were ${joinList(steps)}.`);
+  }
   if (phases.kingPressurePlies.length >= 3) parts.push(`Your king came under pressure around move ${mv(phases.kingPressurePlies[0])}.`);
   if (phases.raceFrom) parts.push(`From move ${mv(phases.raceFrom)} it was a race between passed pawns.`);
   else if (phases.endgameFrom && phases.endgameFrom < plies.length - 6) parts.push(`The game reached an endgame around move ${mv(phases.endgameFrom)}.`);
@@ -393,7 +412,8 @@ export function buildReport(input: ReportInput): GameReport {
     headline = `${wonMaterial ? 'You picked up free material early and built a winning position' : 'You built a winning position'}, but ${THEMES.conversion.clause}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else {
     const opener = solidOpening ? 'Your opening fundamentals were mostly solid, but ' : '';
-    const clause = THEMES[lead.theme].clause;
+    const mates = lead.findings.filter((f) => f.facts.mateIn).length;
+    const clause = lead.theme === 'tactics' && mates ? `you missed ${mates >= 2 ? 'checkmates' : 'a checkmate'} on the board` : THEMES[lead.theme].clause;
     headline = `${opener}${opener ? clause : capitalise(clause)}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   }
 

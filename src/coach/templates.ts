@@ -50,7 +50,7 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
     case 'inefficient_moves':
       return `${mv} — there and back again`;
     case 'tactical_blindness':
-      return `${mv} — a chance to win material`;
+      return f.facts.mateIn ? `${mv} — there was checkmate` : `${mv} — a chance to win material`;
     case 'blunder':
       return `${mv} — a piece left unprotected`;
     case 'missed_threat':
@@ -68,7 +68,7 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
     case 'punished_mistake':
       return `${mv} — you took what was offered`;
     case 'allowed_counterplay':
-      return `${mv} — letting your opponent back into the game`;
+      return f.facts.perpetual ? `${mv} — a winning game turned into a draw` : `${mv} — letting your opponent back into the game`;
     case 'gave_back_material':
       return `${mv} — giving material back`;
     case 'hunting_material':
@@ -168,12 +168,13 @@ function buildCategoryText(input: MomentTextInput): MomentText {
       };
     case 'tactical_blindness': {
       if (facts.mateIn) {
+        const ask = facts.mateIn === 1 ? `There's checkmate in one here. Can you find it?` : `There's a forced checkmate here. Can you find the first move?`;
         return {
           ...base,
           intent: `You played ${played.san}, ${doing}. But there was something much stronger.`,
-          question: `There's a forced checkmate here. Can you find the first move?`,
-          betterPrompt: `There's a forced checkmate here. Can you find the first move?`,
-          betterCorrect: `Yes! ${bestSan} starts the mating attack.`,
+          question: ask,
+          betterPrompt: ask,
+          betterCorrect: facts.mateIn === 1 ? `Yes! ${bestSan} is checkmate.` : `Yes! ${bestSan} starts the mating attack.`,
           betterOther: `Not this time. ${bestSan} forces mate: ${list(facts.bestLine)}.`,
           reveal: `${bestSan} leads to mate: ${list(facts.bestLine)}.`,
           lesson: 'Always check every check. Forcing moves against the king come first in your search.',
@@ -287,7 +288,7 @@ function buildCategoryText(input: MomentTextInput): MomentText {
       const line = Array.isArray(facts.replyLine) ? (facts.replyLine as string[]) : [];
       return {
         ...base,
-        intent: `You were up ${lead}. You played ${played.san}, ${doing}.`,
+        intent: `${facts.perpetual ? 'You were winning' : `You were up ${lead}`}. You played ${played.san}, ${doing}.`,
         question: `After ${played.san}, what is ${opp}'s most dangerous reply? Look for checks. Play it on the board.`,
         predictCorrect: `Exactly — ${line[0] ?? 'that'} starts ${opp}'s counterplay.`,
         predictOther: `Look for checks first: ${line[0] ?? ''} is the dangerous one.`,
@@ -296,8 +297,9 @@ function buildCategoryText(input: MomentTextInput): MomentText {
           : `${list(line.slice(0, 4))}: ${opp}'s pieces become active around your king, and your lead starts to matter less.`,
         betterPrompt: `What would keep everything under control here?`,
         betterCorrect: 'Yes — that keeps your king safe and your lead intact.',
-        lesson:
-          "When you're well ahead, the main way to throw it away is counterplay. Before each move, check your opponent's checks and captures, keep your king covered, and trade off attacking pieces.",
+        lesson: facts.perpetual
+          ? "When you're winning and your opponent only has a queen left to check with, every king move matters. Before moving your king, follow the checks: pick the square where they run out."
+          : "When you're well ahead, the main way to throw it away is counterplay. Before each move, check your opponent's checks and captures, keep your king covered, and trade off attacking pieces.",
       };
     }
     case 'gave_back_material':

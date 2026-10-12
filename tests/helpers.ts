@@ -33,7 +33,7 @@ export function storedFromPgn(pgn: string, userColor: 'w' | 'b', id = 'g1', impo
 
 export const sampleStored = (id = 'g1', importedAt?: number) => storedFromPgn(SAMPLE_PGN, 'w', id, importedAt);
 
-export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
+export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game' | 'chaotic-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
   const color = name === 'knight-trip-game' ? 'b' : 'w';
   return {
     game: storedFromPgn(readFileSync(join(here, 'fixtures', `${name}.pgn`), 'utf8'), color, id, importedAt),

@@ -135,8 +135,10 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
   // When already well ahead, even a smaller practical loss of material matters:
   // giving material back is how won games get away.
   const threshold = c?.ahead ? 4 : 12;
-  if (lost < 2 || avoidable < 2 || d < threshold) return [];
   const cap = firstOpponentCapture(p.fenAfter, e.replyLineUci, ctx.userColor);
+  // A pawn pushed to a square where it is simply taken, at a real cost.
+  const hungPawn = p.piece === 'p' && !c?.ahead && cap?.index === 0 && cap.square === p.to && lost >= 1 && avoidable >= 1 && d >= 15;
+  if (!hungPawn && (lost < 2 || avoidable < 2 || d < threshold)) return [];
   const facts = {
     lost,
     replyLine: e.replyLineSan.slice(0, 5),
@@ -472,6 +474,29 @@ function detectHuntingMaterial(ctx: DetectorContext, i: number): Finding[] {
 }
 
 /** Ahead, but the move lets the opponent's pieces become active against your king or force a draw. */
+/** From a winning position, the move lets the opponent check forever and force a draw. */
+function detectPerpetual(ctx: DetectorContext, i: number): Finding[] {
+  const p = ctx.plies[i];
+  const e = ctx.evals[i];
+  const c = cx(ctx, p);
+  if (e.winBefore < 70 || Math.abs(e.cpAfter) > 60 || pd(e) < 20) return [];
+  const theirs = e.replyLineSan.filter((_, k) => k % 2 === 0);
+  if (theirs.length < 3 || !theirs.every(isCheckMove)) return [];
+  const opp = COLOR_NAME[other(ctx.userColor)];
+  const line = e.replyLineSan.slice(0, 5);
+  return [
+    {
+      kind: 'weakness',
+      category: 'allowed_counterplay',
+      ply: p.ply,
+      severity: 3,
+      confidence: 'high',
+      evidence: `You were winning, but after ${label(p)} ${opp} could force a draw by checking your king again and again (${line.join(' ')}). ${e.bestSan} kept your king out of the checks.`,
+      facts: { bestSan: e.bestSan, replyLine: line, drawish: true, perpetual: true, material: c?.material ?? e.materialBefore, context: tags(c) },
+    },
+  ];
+}
+
 function detectAllowedCounterplay(ctx: DetectorContext, i: number, here: Finding[]): Finding[] {
   const p = ctx.plies[i];
   const e = ctx.evals[i];
@@ -764,7 +789,9 @@ function detectPawnStructure(ctx: DetectorContext, i: number, already: Finding[]
   const p = ctx.plies[i];
   const e = ctx.evals[i];
   const d = pd(e);
-  if (d < 3 || already.some((f) => f.kind === 'weakness' && f.severity >= 2)) return [];
+  // Only pawn moves and captures change your own structure; a big drop is rarely about structure.
+  if (d < 3 || d >= 15 || already.some((f) => f.kind === 'weakness' && f.severity >= 2)) return [];
+  if (p.piece !== 'p' && !p.captured) return [];
   const us = ctx.userColor;
   // Compare after the opponent's best reply, so recaptures settle.
   const settle = (fen: string, pv: string[]) => playLine(fen, pv, 1).at(-1)?.fen ?? fen;
@@ -776,8 +803,13 @@ function detectPawnStructure(ctx: DetectorContext, i: number, already: Finding[]
   const before = structureScore(p.fenBefore, us);
   const playedScore = structureScore(playedEnd, us);
   if (playedScore <= before || structureScore(bestEnd, us) > before) return [];
+  // Name a weakness the move created, not one that was already there.
+  const was = pawnWeaknesses(p.fenBefore, us);
   const w = pawnWeaknesses(playedEnd, us);
-  const what = w.doubled.length ? `doubled pawns on the ${w.doubled[0][0]}-file` : `an isolated pawn on ${w.isolated[0]}`;
+  const newDoubled = w.doubled.filter((sq) => !was.doubled.some((x) => x[0] === sq[0]));
+  const newIsolated = w.isolated.filter((sq) => !was.isolated.includes(sq));
+  if (!newDoubled.length && !newIsolated.length) return [];
+  const what = newDoubled.length ? `doubled pawns on the ${newDoubled[0][0]}-file` : `an isolated pawn on ${newIsolated[0]}`;
   return [
     {
       kind: 'weakness',
@@ -923,6 +955,7 @@ function detectRookOnOpenFile(ctx: DetectorContext): Finding[] {
     if (p.color !== ctx.userColor || p.piece !== 'r' || p.moveNumber < 10 || p.from[0] === p.to[0]) continue;
     if (pd(ctx.evals[i]) > 3) continue;
     if (fileStatus(p.fenAfter, p.to[0], ctx.userColor) !== 'open') continue;
+    if (ctx.plies[i + 1]?.to === p.to) continue; // traded off at once, not a rook on a file
     return [
       {
         kind: 'strength',
@@ -1099,7 +1132,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
 
     // A forcing defensive resource: under pressure or behind, the only move that holds.
     const pos = ctx.positions[i];
-    if ((c?.kingPressure || c?.behind || e.cpBefore <= -150) && pos.lines.length >= 2 && d <= 2) {
+    if ((c?.kingPressure || c?.behind || e.cpBefore <= -150) && e.winBefore <= 60 && pos.lines.length >= 2 && d <= 2) {
       const gap = winPercent(scoreToCp(pos.lines[0].score)) - winPercent(scoreToCp(pos.lines[1].score));
       const recapture = i > 0 && !!ctx.plies[i - 1].captured && ctx.plies[i - 1].to === p.to;
       const forcing = !recapture && (isCheckMove(p.san) || !!p.captured || p.piece === 'k' || inCheck(p.fenBefore));
@@ -1196,7 +1229,8 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     const inherited = findings.filter((f) => f.relatedPlies?.includes(p.ply) && f.kind === 'weakness');
     const here: Finding[] = [];
     const seen = () => [...inherited, ...here];
-    here.push(...detectMaterialLoss(ctx, i));
+    here.push(...detectPerpetual(ctx, i));
+    if (!here.length) here.push(...detectMaterialLoss(ctx, i));
     here.push(...detectMissedTactic(ctx, i));
     here.push(...detectAllowedCounterplay(ctx, i, here));
     here.push(...detectHuntingMaterial(ctx, i));
