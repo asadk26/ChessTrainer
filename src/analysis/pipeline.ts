@@ -4,11 +4,15 @@ import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
 import { buildContexts } from './context';
+import { explainMove } from './explain';
+import type { MoveExplanation } from '../domain/types';
 import { buildMoments, type PriorGameFindings } from './moments';
 import { buildReport } from '../coach/report';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
+
+const STATE_CATEGORIES = new Set(['development', 'passive_piece', 'time_management']);
 
 /** Chronological key: PGN date when available, import time otherwise. */
 export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'>): number {
@@ -37,7 +41,18 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
     { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: game.headers.result, contexts },
     game.headers.timeControl,
   );
-  const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior });
+  // Three-part explanations for every credible mistake / missed chance of the user.
+  const explanations: Record<number, MoveExplanation> = {};
+  for (const f of findings) {
+    if (f.kind !== 'weakness' || f.ply <= 0 || f.confidence === 'low' || explanations[f.ply]) continue;
+    // Findings about the state of the game (development by move 10, a passive piece, the clock)
+    // aren't about one move, so they don't get a move explanation.
+    if (STATE_CATEGORIES.has(f.category) || (f.category === 'king_safety' && f.facts.notCastled)) continue;
+    if (game.plies[f.ply - 1]?.color !== game.userColor) continue;
+    const betterPly = Number(f.facts.worsePly ?? f.ply);
+    explanations[f.ply] = explainMove({ plies: game.plies, evals: moves, positions, contexts, ply: f.ply, betterPly, findings });
+  }
+  const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
   const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts });
   const drills = generateDrills(game.id, moments);
   return {
@@ -53,6 +68,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
         moves,
       },
       findings,
+      explanations,
       moments,
       report,
       drillIds: drills.map((d) => d.id),

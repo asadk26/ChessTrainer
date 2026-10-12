@@ -273,11 +273,15 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
       ) : v === 'checking' ? (
         <Verdict tone="neutral" title={`Checking ${better.san}…`} />
       ) : v === 'correct' ? (
-        <Verdict tone="good" title={`Correct — ${better.san}`} text={t.betterCorrect} />
+        <Verdict tone="good" title={`Correct — ${better.san}`} text={t.why ?? t.betterCorrect} />
       ) : v === 'ok' ? (
-        <Verdict tone="neutral" title={`Better than the game — but not the best`} text={`${better.san} improves on the game. The strongest was ${m.bestSan} (green arrow).`} />
+        <Verdict
+          tone="neutral"
+          title={`Better than the game — but not the best`}
+          text={`${better.san} improves on the game. The strongest was ${m.bestSan} (green arrow)${t.why ? `: ${t.why}` : '.'}`}
+        />
       ) : v === 'shown' ? (
-        <Verdict tone="neutral" title={`The move to find: ${m.bestSan}`} text={t.betterCorrect} />
+        <Verdict tone="neutral" title={`The move to find: ${m.bestSan}`} text={t.why ?? t.betterCorrect} />
       ) : v === 'same' ? (
         <Verdict tone="bad" title={`That's the game move (${better.san})`} text="Look for something different — try again." />
       ) : (
@@ -351,7 +355,42 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
           <CoachText text={t.lesson} />
         </div>
       );
-      banner = <div className="actions">{btn('Continue the game →', next)}</div>;
+      const x = m.explanation;
+      banner = (
+        <>
+          {x && m.kind === 'mistake' && (
+            <dl className="three-part">
+              {x.intent && (
+                <>
+                  <dt>What you were going for</dt>
+                  <dd>
+                    <CoachText text={`${m.playedSan} ${x.intent}.`} />
+                  </dd>
+                </>
+              )}
+              <dt>{x.kind === 'mistake' ? 'What went wrong' : 'What you missed'}</dt>
+              <dd>
+                <CoachText
+                  text={
+                    x.kind === 'mistake' && x.problem
+                      ? `${x.problem.charAt(0).toUpperCase()}${x.problem.slice(1)}.`
+                      : `Nothing went wrong right away — but ${m.bestSan ?? 'a stronger move'} was available.`
+                  }
+                />
+              </dd>
+              {t.why && (
+                <>
+                  <dt>Why {x.betterSan ?? m.bestSan} is better</dt>
+                  <dd>
+                    <CoachText text={t.why} />
+                  </dd>
+                </>
+              )}
+            </dl>
+          )}
+          <div className="actions">{btn('Continue the game →', next)}</div>
+        </>
+      );
       break;
     }
   }
@@ -378,7 +417,11 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
 
   const head = (
     <div className="moment-head">
-      <span className={`tag ${m.kind === 'good_idea' ? 'tag-good' : ''}`}>{m.kind === 'good_idea' ? '★ Good idea' : `Guided moment · ${categoryLabel(m.category)}`}</span>
+      <span className={`tag ${m.kind === 'good_idea' ? 'tag-good' : m.explanation?.kind === 'missed_opportunity' ? 'tag-missed' : ''}`}>
+        {m.kind === 'good_idea'
+          ? '★ Good idea'
+          : `${m.explanation?.kind === 'missed_opportunity' ? 'Missed chance' : 'Mistake'} · ${categoryLabel(m.category)}`}
+      </span>
       <div className="steps" aria-label={`Step ${stepIdx + 1} of ${m.steps.length}`}>
         {m.steps.map((s, i) => (
           <span key={s + i} className={`dot ${i < stepIdx ? 'done' : i === stepIdx ? 'on' : ''}`} />

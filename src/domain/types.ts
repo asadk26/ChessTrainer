@@ -87,7 +87,9 @@ export type CategoryId =
   | 'gave_back_material'
   | 'unnecessary_complications'
   | 'hunting_material'
-  | 'allowed_counterplay';
+  | 'allowed_counterplay'
+  | 'pawn_structure'
+  | 'passive_piece';
 
 export type StrengthId =
   | 'castled_early'
@@ -101,7 +103,8 @@ export type StrengthId =
   | 'simplified_when_ahead'
   | 'defensive_resource'
   | 'passed_pawn'
-  | 'neutralized_counterplay';
+  | 'neutralized_counterplay'
+  | 'rook_open_file';
 
 /**
  * How sure the coach is that a finding is real and instructive. Low-confidence
@@ -244,8 +247,27 @@ export interface TeachingMoment {
     /** Centipawns (mover) of the best move in that position; optional for older saves. */
     betterBestCp?: number;
   };
+  explanation?: MoveExplanation;
   /** For good_idea moments: multiple choice "why is this good?" */
   choice?: { prompt: string; options: string[]; correct: number; explanation: string };
+}
+
+/** Three-part explanation of a move, from board facts (see analysis/explain.ts). */
+export interface MoveExplanation {
+  ply: number;
+  /** A mistake caused a concrete problem; a missed opportunity didn't, but something better was there. */
+  kind: 'mistake' | 'missed_opportunity';
+  /** What the move does, without the move: "attacks the loose queen on e6". */
+  intent?: string;
+  /** "it lets Black start checking your king with Qg4+". */
+  problem?: string;
+  /** "exd6 wins the bishop on d6" — only when the reason is reliable. */
+  better?: string;
+  betterSan?: string;
+  betterPly: number;
+  /** A few moves of the engine line, only when they make the reason concrete. */
+  support?: string[];
+  purposes: string[];
 }
 
 export interface MomentText {
@@ -259,6 +281,8 @@ export interface MomentText {
   betterCorrect: string;
   betterOther: string;
   lesson: string;
+  /** Why the better move is better, in plain words (when it can be said reliably). */
+  why?: string;
 }
 
 // ---------------------------------------------------------------- report ---
@@ -296,7 +320,9 @@ export type ThemeId =
   | 'trades'
   | 'conversion'
   | 'clock'
-  | 'endgame';
+  | 'endgame'
+  | 'structure'
+  | 'activity';
 
 // ---------------------------------------------------------------- drills ---
 
@@ -355,6 +381,8 @@ export interface StoredGame {
     moves: MoveEval[];
   };
   findings: Finding[];
+  /** Three-part explanations keyed by ply, for credible mistakes and missed chances. */
+  explanations?: Record<number, MoveExplanation>;
   moments: TeachingMoment[];
   report?: GameReport;
   drillIds: string[];

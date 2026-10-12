@@ -220,6 +220,35 @@ far ahead, a check that merely wasn't the best move, a "missed attack" with a sm
 findings are stored but **never** appear in the summary, teaching moments, focus, or cross-game
 pattern counts.
 
+**Why the better move is better** (`src/analysis/movePurpose.ts`, `src/analysis/explain.ts`). For every
+credible mistake the coach builds a three-part explanation from board facts:
+
+1. *What your move was going for* — only what is visible on the board after the move (it attacks the
+   loose queen on e6, it gives check, it takes the pawn on a7).
+2. *What went wrong* — a concrete problem (Black wins your bishop with Qxd4; Black can start checking
+   your king with Qg4+; the knight had to go back; pawns in front of your king loosened; a doubled or
+   isolated pawn) → a **mistake**. If nothing concrete went wrong but a stronger move existed, it's a
+   **missed chance**.
+3. *Why the better move is better* — the engine move's purposes, stated in plain words: wins material
+   (net of recaptures), double attack, removes the defender, moves a loose piece to safety or protects
+   it, takes away a threat that already existed, gives the king an escape square so the checks run out,
+   develops / castles, rook to an open or half-open file, a pawn move that opens a file or a bishop's
+   diagonal, brings a passive piece into play, trades queens or pieces when ahead (only if no material is
+   lost), trades off an active enemy piece, leaves the opponent without checks, pushes / creates /
+   supports a passed pawn, blockades theirs. Each purpose has a confidence; only what the better move
+   does *that your move didn't* is mentioned, and if nothing reliable distinguishes them, the reason is
+   omitted rather than guessed. A short engine line (≤3 moves) is shown only when it makes the reason
+   concrete (e.g. a fork that wins a piece two moves later).
+
+The guided review shows the verdict with this "why", the lesson step lays out all three parts, the
+moment tag says *Mistake* or *Missed chance*, and summary diagrams use them as captions.
+
+**Positional detectors** (conservative): a pawn capture/recapture that leaves doubled or isolated pawns
+when the engine's choice didn't (and it cost something), a piece with ≤2 squares for 5+ moves while the
+engine repeatedly wanted to activate it, loosened king cover, passed pawns, and credit for rooks on open
+files. Space/activity *comparisons* between the two sides were left out: they weren't reliable enough
+to coach from.
+
 **Significance layer** (`src/analysis/moments.ts`): `score = Σ category weight × severity × 10 ×
 (1 for high confidence, 0.75 for medium) + 0.8 × practical drop (ignored below 6) + 5 × prior games with
 the same category (max 3)`, counting only credible findings. Moments need a

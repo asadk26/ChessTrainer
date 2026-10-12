@@ -1,6 +1,7 @@
 // The significance layer: decides which moves are worth teaching. Engine
 // evaluation loss is one input, not the definition of "important".
 import type {
+  MoveExplanation,
   CategoryId,
   Color,
   Finding,
@@ -120,6 +121,7 @@ export interface MomentInput {
   findings: Finding[];
   userColor: Color;
   prior: PriorGameFindings[];
+  explanations?: Record<number, MoveExplanation>;
 }
 
 export function buildMoments(input: MomentInput): TeachingMoment[] {
@@ -176,6 +178,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
       mover: userColor,
       bestSan: evals[worsePly - 1]?.bestSan,
       betterPly,
+      explain: input.explanations?.[ply],
     });
 
     const targetSquares = (primary.facts.targetSquares as string[] | undefined) ?? [];
@@ -212,6 +215,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
         ],
       },
       text,
+      explanation: input.explanations?.[ply],
       numbers: {
         winBefore: evals[idx].winBefore,
         winAfter: evals[idx].winAfter,

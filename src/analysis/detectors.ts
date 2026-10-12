@@ -27,6 +27,10 @@ import {
   relativeRank,
   attackedSquares,
   materialPhrase,
+  fileStatus,
+  mobility,
+  pawnWeaknesses,
+  structureScore,
 } from '../chess/board';
 import { COLOR_NAME } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
@@ -742,6 +746,112 @@ function detectCatchAll(ctx: DetectorContext, i: number, already: Finding[]): Fi
   ];
 }
 
+// ------------------------------------------------------ positional (conservative)
+
+/** A pawn move/capture that leaves you with a doubled or isolated pawn the better move avoided. */
+function detectPawnStructure(ctx: DetectorContext, i: number, already: Finding[]): Finding[] {
+  const p = ctx.plies[i];
+  const e = ctx.evals[i];
+  const d = pd(e);
+  if (d < 3 || already.some((f) => f.kind === 'weakness' && f.severity >= 2)) return [];
+  const us = ctx.userColor;
+  // Compare after the opponent's best reply, so recaptures settle.
+  const settle = (fen: string, pv: string[]) => playLine(fen, pv, 1).at(-1)?.fen ?? fen;
+  const playedEnd = settle(p.fenAfter, e.replyLineUci);
+  const best = ctx.positions[i].lines[0];
+  if (!best) return [];
+  const bestFrames = playLine(p.fenBefore, best.pv, 2);
+  const bestEnd = bestFrames.at(-1)?.fen ?? p.fenBefore;
+  const before = structureScore(p.fenBefore, us);
+  const playedScore = structureScore(playedEnd, us);
+  if (playedScore <= before || structureScore(bestEnd, us) > before) return [];
+  const w = pawnWeaknesses(playedEnd, us);
+  const what = w.doubled.length ? `doubled pawns on the ${w.doubled[0][0]}-file` : `an isolated pawn on ${w.isolated[0]}`;
+  return [
+    {
+      kind: 'weakness',
+      category: 'pawn_structure',
+      ply: p.ply,
+      severity: d >= 8 ? 2 : 1,
+      confidence: 'medium',
+      evidence: `After ${label(p)} you're left with ${what}; ${e.bestSan} kept your pawns healthy.`,
+      facts: { bestSan: e.bestSan, weakness: what },
+    },
+  ];
+}
+
+/** A piece with almost no squares for many moves, while the engine kept wanting to activate it. */
+function detectPassivePieces(ctx: DetectorContext): Finding[] {
+  const us = ctx.userColor;
+  const mine = ctx.plies.map((p, i) => ({ p, i })).filter(({ p }) => p.color === us && p.moveNumber >= 8 && p.moveNumber <= 35);
+  const out: Finding[] = [];
+  const reported = new Set<string>();
+  for (let a = 0; a < mine.length; a++) {
+    const start = mine[a];
+    const pieces = new Chess(start.p.fenBefore)
+      .board()
+      .flat()
+      .filter((x) => x && x.color === us && (x.type === 'b' || x.type === 'r' || x.type === 'n'));
+    for (const piece of pieces) {
+      const sqr = piece!.square;
+      if (reported.has(sqr) || mobility(start.p.fenBefore, sqr) > 2) continue;
+      // The same piece stays put and passive for ≥5 of our moves...
+      let len = 0;
+      let wanted = 0;
+      let wantedSan: string | undefined;
+      for (let b = a; b < mine.length; b++) {
+        const { p, i } = mine[b];
+        const here = pieceAt(p.fenBefore, sqr);
+        if (!here || here.type !== piece!.type || here.color !== us || mobility(p.fenBefore, sqr) > 2) break;
+        len++;
+        // ...while the engine's best move would have moved it (or freed it).
+        const bestUci = ctx.positions[i].lines[0]?.pv[0];
+        if (bestUci?.startsWith(sqr) && p.uci !== bestUci) {
+          wanted++;
+          wantedSan ??= ctx.evals[i].bestSan;
+        }
+        if (p.from === sqr) break;
+      }
+      if (len >= 5 && wanted >= 2) {
+        reported.add(sqr);
+        const name = PIECE_NAME[piece!.type as keyof typeof PIECE_NAME];
+        out.push({
+          kind: 'weakness',
+          category: 'passive_piece',
+          ply: start.p.ply,
+          severity: 2,
+          confidence: 'medium',
+          evidence: `Your ${name} on ${sqr} had almost no squares for ${len} moves (from move ${start.p.moveNumber}); bringing it into play${wantedSan ? ` (e.g. ${wantedSan})` : ''} was overdue.`,
+          facts: { square: sqr, piece: name, moves: len, bestSan: wantedSan },
+        });
+      }
+    }
+  }
+  return out.slice(0, 1);
+}
+
+/** Credit: a rook placed on an open file. */
+function detectRookOnOpenFile(ctx: DetectorContext): Finding[] {
+  for (let i = 0; i < ctx.plies.length; i++) {
+    const p = ctx.plies[i];
+    if (p.color !== ctx.userColor || p.piece !== 'r' || p.moveNumber < 10 || p.from[0] === p.to[0]) continue;
+    if (pd(ctx.evals[i]) > 3) continue;
+    if (fileStatus(p.fenAfter, p.to[0], ctx.userColor) !== 'open') continue;
+    return [
+      {
+        kind: 'strength',
+        category: 'rook_open_file',
+        ply: p.ply,
+        severity: 1,
+        confidence: 'high',
+        evidence: `${label(p)} put your rook on the open ${p.to[0]}-file.`,
+        facts: { file: p.to[0] },
+      },
+    ];
+  }
+  return [];
+}
+
 // ------------------------------------------------------------- game-level
 
 function parseTimeControl(tc?: string): { base: number; inc: number } | undefined {
@@ -1016,10 +1126,13 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     here.push(...detectMissedKingAttack(ctx, i, seen()));
     here.push(...detectKingShelter(ctx, i, seen()));
     here.push(...detectCaptureDecisions(ctx, i, seen()));
+    here.push(...detectPawnStructure(ctx, i, seen()));
     here.push(...detectCatchAll(ctx, i, here));
     findings.push(...here);
   }
   findings.push(...detectClock(ctx, timeControl));
+  findings.push(...detectPassivePieces(ctx));
+  findings.push(...detectRookOnOpenFile(ctx));
   findings.push(...detectGameLevel(ctx, findings));
   return findings;
 }

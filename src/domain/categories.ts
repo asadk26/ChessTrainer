@@ -27,6 +27,8 @@ export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   unnecessary_complications: { label: 'Unnecessary complications when ahead', weight: 0.6, theme: 'conversion' },
   hunting_material: { label: 'Hunting material instead of consolidating', weight: 0.6, theme: 'conversion' },
   allowed_counterplay: { label: 'Allowing avoidable counterplay', weight: 0.85, theme: 'conversion' },
+  pawn_structure: { label: 'Weakening your own pawn structure', weight: 0.35, theme: 'structure' },
+  passive_piece: { label: 'Leaving a piece passive', weight: 0.45, theme: 'activity' },
   time_management: { label: 'Time management', weight: 0.5, theme: 'clock' },
   endgame: { label: 'Endgame technique', weight: 0.5, theme: 'endgame' },
 };
@@ -43,6 +45,7 @@ export const STRENGTHS: Record<StrengthId, { label: string; phrase: string }> = 
   defensive_resource: { label: 'Finding defensive resources', phrase: 'Under pressure, you found the forcing move that held.' },
   passed_pawn: { label: 'Creating passed pawns', phrase: 'You created a dangerous passed pawn and used it.' },
   neutralized_counterplay: { label: "Neutralising counterplay", phrase: "You took the sting out of your opponent's counterplay." },
+  rook_open_file: { label: 'Rooks on open files', phrase: 'You put a rook on an open file.' },
   converted_advantage: { label: 'Converting advantages', phrase: 'You converted your advantage into a win.' },
 };
 
@@ -56,6 +59,18 @@ export interface ThemeMeta {
 }
 
 export const THEMES: Record<ThemeId, ThemeMeta> = {
+  structure: {
+    label: 'Pawn structure',
+    focusTitle: 'Before a pawn capture or recapture, check whether it leaves you with doubled or isolated pawns.',
+    focusDetail: 'Recapture toward the center when you can, and avoid pawn moves that leave a pawn with no neighbours to protect it.',
+    clause: 'some pawn moves left you with a weaker structure than necessary',
+  },
+  activity: {
+    label: 'Piece activity',
+    focusTitle: 'Every few moves, find your worst piece and give it a job.',
+    focusDetail: 'A bishop or rook that has no squares is like playing a piece down. Open a pawn or move it to a square where it sees more of the board.',
+    clause: 'a piece stayed passive for too long',
+  },
   active_without_followup: {
     label: 'Active-looking moves without a follow-up',
     focusTitle: "Before an attacking or forcing move, name your opponent's most obvious reply.",

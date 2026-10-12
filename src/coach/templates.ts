@@ -1,7 +1,9 @@
 // Deterministic coaching language. This is the voice the app uses when no LLM
 // is configured, and the fallback for any field an LLM response leaves out.
 // Tone: a calm human coach talking to a ~850 player. Engine numbers stay out.
-import type { Color, Finding, MomentText, PlyRecord } from '../domain/types';
+import type { Color, Finding, MomentText, MoveExplanation, PlyRecord } from '../domain/types';
+import { gerundPhrase } from '../analysis/movePurpose';
+import { betterSentence } from '../analysis/explain';
 import { COLOR_NAME, PIECE_NAME, attackedEnemyPieces, isCheckMove, materialPhrase, other, pieceAt, squareName, undevelopedMinors } from '../chess/board';
 
 type F = Finding['facts'];
@@ -35,6 +37,7 @@ export interface MomentTextInput {
   mover: Color;
   bestSan?: string;
   betterPly: PlyRecord;
+  explain?: MoveExplanation;
 }
 
 export function momentTitle(f: Finding, played: PlyRecord): string {
@@ -81,8 +84,18 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
   }
 }
 
+/** Moment text, with the board-based "what you were going for" and "why the better move is better" woven in. */
 export function buildMomentText(input: MomentTextInput): MomentText {
+  const t = buildCategoryText(input);
+  const why = input.explain ? betterSentence(input.explain) : undefined;
+  if (!why) return t;
+  return { ...t, why, betterOther: `Not quite. ${why}` };
+}
+
+function buildCategoryText(input: MomentTextInput): MomentText {
   const { primary: f, played, reply, mover, bestSan, betterPly } = input;
+  // What the move visibly does, from the board ("attacking the loose queen on e6").
+  const doing = input.explain?.intent ? gerundPhrase(input.explain.intent) : guessIntent(played);
   const opp = COLOR_NAME[other(mover)];
   const facts: F = f.facts;
   const piece = s(facts.piece) || PIECE_NAME[played.piece];
@@ -96,7 +109,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
 
   const base: MomentText = {
     title,
-    intent: `You played ${played.san}, probably ${guessIntent(played)}.`,
+    intent: input.explain?.intent ? `You played ${played.san}, which ${input.explain.intent}.` : `You played ${played.san}, probably ${doing}.`,
     question: `What would you play here instead of ${played.san}?`,
     predictCorrect: `Yes — that's ${opp}'s most natural answer.`,
     predictOther: `That's possible, but ${opp}'s simplest answer is ${reply?.san ?? 'shown on the board'}.`,
@@ -157,7 +170,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
       if (facts.mateIn) {
         return {
           ...base,
-          intent: `You played ${played.san}, ${guessIntent(played)}. But there was something much stronger.`,
+          intent: `You played ${played.san}, ${doing}. But there was something much stronger.`,
           question: `There's a forced checkmate here. Can you find the first move?`,
           betterPrompt: `There's a forced checkmate here. Can you find the first move?`,
           betterCorrect: `Yes! ${bestSan} starts the mating attack.`,
@@ -170,7 +183,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
       const by = facts.attackerPiece ? ` with your ${s(facts.attackerPiece)}` : '';
       return {
         ...base,
-        intent: `You played ${played.san}, ${guessIntent(played)}. It's a natural move — but there was something better on the board.`,
+        intent: `You played ${played.san}, ${doing}. It's a natural move — but there was something better on the board.`,
         question: `There's a way to win material right now. Can you find it?`,
         betterPrompt: `There's a way to win material right now. Can you find it?`,
         betterCorrect: `Yes! ${bestSan} wins ${target}.`,
@@ -196,7 +209,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
     case 'missed_threat':
       return {
         ...base,
-        intent: `${opp}'s last move${facts.threatMove ? `, ${s(facts.threatMove)},` : ''} created a threat. You played ${played.san}, ${guessIntent(played)}.`,
+        intent: `${opp}'s last move${facts.threatMove ? `, ${s(facts.threatMove)},` : ''} created a threat. You played ${played.san}, ${doing}.`,
         question: `What was ${opp} threatening? Play ${opp}'s threat on the board.`,
         predictCorrect: `Yes — ${s(facts.captureSan)} was the threat.`,
         predictOther: `The real threat was ${s(facts.captureSan)}, winning the ${s(facts.victimPiece)}.`,
@@ -249,7 +262,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
     case 'failure_to_simplify':
       return {
         ...base,
-        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        intent: `You were up ${lead}. You played ${played.san}, ${doing}.`,
         betterPrompt: `You're well ahead. Is there a way to trade pieces — ideally queens — here?`,
         betterCorrect: 'Yes — trades make a material lead easier to convert.',
         reveal: Array.isArray(facts.tradeLine) && facts.tradeLine.length
@@ -274,7 +287,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
       const line = Array.isArray(facts.replyLine) ? (facts.replyLine as string[]) : [];
       return {
         ...base,
-        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        intent: `You were up ${lead}. You played ${played.san}, ${doing}.`,
         question: `After ${played.san}, what is ${opp}'s most dangerous reply? Look for checks. Play it on the board.`,
         predictCorrect: `Exactly — ${line[0] ?? 'that'} starts ${opp}'s counterplay.`,
         predictOther: `Look for checks first: ${line[0] ?? ''} is the dangerous one.`,
@@ -290,7 +303,7 @@ export function buildMomentText(input: MomentTextInput): MomentText {
     case 'gave_back_material':
       return {
         ...base,
-        intent: `You were up ${lead}. You played ${played.san}, ${guessIntent(played)}.`,
+        intent: `You were up ${lead}. You played ${played.san}, ${doing}.`,
         question: `After ${played.san}, what can ${opp} take? Play it on the board.`,
         predictCorrect: `Exactly — ${s(facts.captureSan)} wins material.`,
         predictOther: `Look again: ${s(facts.captureSan) || s(Array.isArray(facts.replyLine) ? facts.replyLine[0] : '')} wins material.`,

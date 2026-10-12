@@ -9,6 +9,7 @@ export interface DiagramSpec {
   fen: string;
   arrows: Arrow[];
   title: string;
+  kindLabel?: string;
   caption?: string;
 }
 
@@ -28,6 +29,13 @@ export function diagramFor(game: StoredGame, ply: number, kind: 'mistake' | 'goo
     title += ` · better: ${e.bestSan}`;
   }
   const finding = game.findings.find((f) => f.ply === ply && f.confidence !== 'low' && (kind === 'good' ? f.kind === 'strength' : f.kind === 'weakness'));
+  const x = kind === 'mistake' ? game.explanations?.[ply] : undefined;
+  if (x) {
+    const label = x.kind === 'missed_opportunity' ? 'Missed chance' : 'Mistake';
+    const why = x.better ? `${x.better}.` : undefined;
+    const problem = x.problem ? `${x.problem.charAt(0).toUpperCase()}${x.problem.slice(1)}.` : undefined;
+    return { ply, fen: p.fenBefore, arrows, title, kindLabel: label, caption: [problem, why].filter(Boolean).join(' ') || finding?.evidence };
+  }
   return { ply, fen: p.fenBefore, arrows, title, caption: finding?.evidence };
 }
 
@@ -61,6 +69,7 @@ export function PositionDiagram({
         />
       </button>
       <figcaption>
+        {spec.kindLabel && <span className={`kind-label ${spec.kindLabel === 'Missed chance' ? 'missed' : ''}`}>{spec.kindLabel}</span>}
         <b>{spec.title}</b>
         {spec.caption && <span>{spec.caption}</span>}
       </figcaption>

@@ -54,6 +54,7 @@ export function buildCoachPrompt(game: StoredGame, profile: ProfileSummary, rati
         engine_eval_before: e ? formatCp(e.cpBefore) : undefined,
         engine_eval_after: e ? formatCp(e.cpAfter) : undefined,
         material_change_after_reply: e ? e.materialAfterReply - e.materialBefore : undefined,
+        board_explanation: m.explanation,
         draft: { intent: m.text.intent, question: m.text.question, reveal: m.text.reveal, lesson: m.text.lesson, betterPrompt: m.text.betterPrompt },
       };
     }),

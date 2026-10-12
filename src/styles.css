@@ -371,3 +371,13 @@ p { margin: 0 0 0.75rem; }
 .theme-btn { background: none; border: 1px solid var(--line); border-radius: 8px; width: 2.1rem; height: 2.1rem; cursor: pointer; font-size: 1rem; margin-left: 0.35rem; line-height: 1; }
 .theme-btn:hover { background: var(--surface-2); }
 .topbar nav { align-items: center; }
+
+/* mistake vs missed chance; three-part explanation */
+.tag-missed { color: var(--note-ink); background: var(--note-bg); }
+.kind-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--warn); }
+.kind-label.missed { color: var(--note-ink); }
+.three-part { margin: 0; display: grid; gap: 0.15rem; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.9rem; }
+.three-part dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted); margin-top: 0.35rem; }
+.three-part dt:first-child { margin-top: 0; }
+.three-part dd { margin: 0; }
+.three-part dd p { margin: 0; }

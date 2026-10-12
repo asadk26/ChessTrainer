@@ -51,14 +51,31 @@ function useAnalysis(game: StoredGame | undefined) {
   return { progress, error, llmState, enrich };
 }
 
-function Items({ items, game, kind, size = 200 }: { items: ReportItem[]; game: StoredGame; kind: 'mistake' | 'good'; size?: number }) {
+function itemPlies(it: ReportItem): number[] {
+  return (it.keyPlies ?? [...new Set(it.plies ?? [])].sort((a, b) => a - b)).filter((p) => p > 0).slice(0, 4);
+}
+
+function Items({
+  items,
+  game,
+  kind,
+  size = 200,
+  shown,
+}: {
+  items: ReportItem[];
+  game: StoredGame;
+  kind: 'mistake' | 'good';
+  size?: number;
+  /** Plies already drawn earlier in the summary — each position is shown once. */
+  shown?: ReadonlySet<number>;
+}) {
   const momentPlies = new Set(game.moments.map((m) => m.ply));
   // Open the review just before the move (or straight into its guided moment).
   const open = (ply: number) => navigate(`/game/${game.id}/review?ply=${momentPlies.has(ply) || kind === 'good' ? ply : Math.max(0, ply - 1)}`);
   return (
     <ul className="report-list">
       {items.map((it, i) => {
-        const plies = (it.keyPlies ?? [...new Set(it.plies ?? [])].sort((a, b) => a - b)).filter((p) => p > 0).slice(0, 4);
+        const plies = itemPlies(it).filter((p) => !shown?.has(p));
         const specs = plies.map((p) => diagramFor(game, p, kind)).filter((d): d is DiagramSpec => !!d);
         return (
           <li key={i}>
@@ -79,6 +96,14 @@ function Items({ items, game, kind, size = 200 }: { items: ReportItem[]; game: S
 
 function Summary({ game }: { game: StoredGame }) {
   const r = game.report!;
+  // Positions drawn under "what hurt you" aren't repeated in the smaller notes,
+  // and an item doesn't repeat a position an earlier item already showed.
+  const hurtShown = new Set<number>();
+  const hurtItems = r.hurt.map((it) => {
+    const keep = { ...it, keyPlies: itemPlies(it).filter((p) => !hurtShown.has(p)) };
+    keep.keyPlies.forEach((p) => hurtShown.add(p));
+    return keep;
+  });
   return (
     <div className="summary">
       <section className="card headline-card">
@@ -94,7 +119,7 @@ function Summary({ game }: { game: StoredGame }) {
         <p className="muted small diagram-key">
           <span className="key orange" /> your move <span className="key green" /> better move · tap a board to replay it
         </p>
-        {r.hurt.length ? <Items items={r.hurt} game={game} kind="mistake" /> : <p className="muted">No significant problems. Nice.</p>}
+        {r.hurt.length ? <Items items={hurtItems} game={game} kind="mistake" /> : <p className="muted">No significant problems. Nice.</p>}
       </section>
       <section className="card">
         <h3>Recurring pattern</h3>
@@ -108,7 +133,7 @@ function Summary({ game }: { game: StoredGame }) {
       {r.minorNotes.length > 0 && (
         <section className="card subtle-card">
           <h3>Smaller notes</h3>
-          <Items items={r.minorNotes} game={game} kind="mistake" size={160} />
+          <Items items={r.minorNotes} game={game} kind="mistake" size={160} shown={hurtShown} />
         </section>
       )}
       <div className="actions">

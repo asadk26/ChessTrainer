@@ -289,3 +289,79 @@ export function materialPhrase(n: number): string {
   if (left > 0) parts.push(left === 1 ? 'a pawn' : `${left} pawns`);
   return parts.join(' and ') || 'nothing';
 }
+
+/** Squares a piece can reach or attack that aren't blocked by its own pieces — a simple activity measure. */
+export function mobility(fen: string, square: string): number {
+  const piece = pieceAt(fen, square);
+  if (!piece) return 0;
+  const c = new Chess(fen);
+  return attackedSquares(fen, square).filter((sq) => {
+    const p = c.get(sq as Square);
+    return !p || p.color !== piece.color;
+  }).length;
+}
+
+/** Doubled and isolated pawns of one side. */
+export function pawnWeaknesses(fen: string, color: Color): { doubled: string[]; isolated: string[] } {
+  const c = new Chess(fen);
+  const files = new Map<number, string[]>();
+  for (const row of c.board()) for (const p of row) if (p && p.type === 'p' && p.color === color) {
+    const f = FILES.indexOf(p.square[0]);
+    files.set(f, [...(files.get(f) ?? []), p.square]);
+  }
+  const doubled: string[] = [];
+  const isolated: string[] = [];
+  for (const [f, sqs] of files) {
+    if (sqs.length > 1) doubled.push(...sqs);
+    if (!files.has(f - 1) && !files.has(f + 1)) isolated.push(...sqs);
+  }
+  return { doubled, isolated };
+}
+
+export function structureScore(fen: string, color: Color): number {
+  const w = pawnWeaknesses(fen, color);
+  return new Set([...w.doubled, ...w.isolated]).size;
+}
+
+/** 'open' (no pawns), 'half-open' (no own pawns) or 'closed' for `color` on a file. */
+export function fileStatus(fen: string, file: string, color: Color): 'open' | 'half-open' | 'closed' {
+  const c = new Chess(fen);
+  let own = 0;
+  let theirs = 0;
+  for (let r = 1; r <= 8; r++) {
+    const p = c.get(`${file}${r}` as Square);
+    if (p?.type === 'p') p.color === color ? own++ : theirs++;
+  }
+  return own === 0 && theirs === 0 ? 'open' : own === 0 ? 'half-open' : 'closed';
+}
+
+/** Number of checking moves available to the side to move. */
+export function checksAvailable(fen: string): number {
+  try {
+    return new Chess(fen).moves().filter((m) => m.includes('+') || m.includes('#')).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Own pieces (not king) that are loose — attacked and under-defended. */
+export function loosePieces(fen: string, color: Color): { square: string; type: PieceType }[] {
+  const c = new Chess(fen);
+  const out: { square: string; type: PieceType }[] = [];
+  for (const row of c.board()) for (const p of row) if (p && p.color === color && p.type !== 'k' && isLoose(fen, p.square)) out.push({ square: p.square, type: p.type as PieceType });
+  return out;
+}
+
+/** A FEN with the side to move flipped (en-passant cleared) — to ask "what would they threaten?". */
+export function passTurn(fen: string): string | undefined {
+  const parts = fen.split(' ');
+  parts[1] = parts[1] === 'w' ? 'b' : 'w';
+  parts[3] = '-';
+  const flipped = parts.join(' ');
+  try {
+    const c = new Chess(flipped);
+    return c.inCheck() ? undefined : flipped;
+  } catch {
+    return undefined;
+  }
+}
