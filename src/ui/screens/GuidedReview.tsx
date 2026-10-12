@@ -466,11 +466,16 @@ export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPl
       firstRender.current = false;
       return;
     }
+    const initial = firstRender.current;
     firstRender.current = false;
-    const el = topRef.current;
-    if (!el || window.innerWidth > 860) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - 6;
-    if (Math.abs(window.scrollY - top) > 3) window.scrollTo({ top, behavior: 'smooth' });
+    // Wait a frame so the board has its final size (matters when arriving from the summary).
+    const id = window.setTimeout(() => {
+      const el = topRef.current;
+      if (!el || window.innerWidth > 860) return;
+      const top = el.getBoundingClientRect().top + window.scrollY - 6;
+      if (Math.abs(window.scrollY - top) > 3) window.scrollTo({ top, behavior: initial ? 'auto' : 'smooth' });
+    }, initial ? 120 : 30);
+    return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateKey]);
 

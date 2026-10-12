@@ -76,7 +76,7 @@ export function Dashboard() {
           Moving from another device? Export your data there (Dashboard → Settings), then restore it here: {importButton}
         </p>
         {importMsg && <div className={`feedback ${importMsg.ok ? 'good' : 'bad'}`}>{importMsg.text}</div>}
-        <p className="muted small">Stockfish runs in your browser. {llm.provider ? `AI coach voice: ${llm.provider} (${llm.model}).` : 'No AI key configured — coaching uses built-in explanations.'}</p>
+        <p className="muted small">Stockfish runs in your browser — free, private, and nothing to set up.</p>
       </div>
     );
   }
@@ -199,10 +199,12 @@ export function Dashboard() {
                 <option value={16}>16 — slow</option>
               </select>
             </label>
+            {llm.provider && (
             <label className="check">
-              <input type="checkbox" checked={settings.useLlm} disabled={!llm.provider} onChange={(e) => updateSettings({ useLlm: e.target.checked })} />
-              AI coach voice {llm.provider ? `(${llm.provider} · ${llm.model})` : '(not configured — see README)'}
+              <input type="checkbox" checked={settings.useLlm} onChange={(e) => updateSettings({ useLlm: e.target.checked })} />
+              AI coach voice ({llm.provider} · {llm.model})
             </label>
+            )}
             {llm.reason && <div className="muted small">{llm.reason}</div>}
             {llm.requiresToken && (
               <label>

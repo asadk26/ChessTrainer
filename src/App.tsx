@@ -3,6 +3,8 @@ import { Dashboard } from './ui/screens/Dashboard';
 import { ImportScreen } from './ui/screens/ImportScreen';
 import { GameScreen } from './ui/screens/GameScreen';
 import { DrillsScreen } from './ui/screens/DrillsScreen';
+import { useState } from 'react';
+import { getThemePref, setThemePref, type ThemePref } from './ui/theme';
 
 function Routes() {
   const { loaded } = useApp();
@@ -34,8 +36,31 @@ function Nav() {
         {link('/', 'Dashboard')}
         {link('/import', 'Import')}
         {link('/drills', 'Drills')}
+        <ThemeToggle />
       </nav>
     </header>
+  );
+}
+
+const NEXT: Record<ThemePref, ThemePref> = { system: 'light', light: 'dark', dark: 'system' };
+const ICON: Record<ThemePref, string> = { system: '◐', light: '☀', dark: '☾' };
+const LABEL: Record<ThemePref, string> = { system: 'Theme: automatic', light: 'Theme: light', dark: 'Theme: dark' };
+
+function ThemeToggle() {
+  const [pref, setPref] = useState<ThemePref>(getThemePref);
+  return (
+    <button
+      className="theme-btn"
+      title={`${LABEL[pref]} (tap to change)`}
+      aria-label={`${LABEL[pref]}. Change theme`}
+      onClick={() => {
+        const next = NEXT[pref];
+        setThemePref(next);
+        setPref(next);
+      }}
+    >
+      {ICON[pref]}
+    </button>
   );
 }
 

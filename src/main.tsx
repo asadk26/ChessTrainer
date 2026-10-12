@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
+import { applyTheme, getThemePref, watchSystemTheme } from './ui/theme';
+
+applyTheme(getThemePref());
+watchSystemTheme();
 
 // The app uses hash routes (#/game/...), which survive refreshes on any static
 // host. If someone opens a path-style URL (/game/...), convert it to the hash form.

@@ -91,9 +91,9 @@ export function Board({ fen, orientation, arrows = [], highlights = [], lastMove
         areArrowsAllowed={false}
         customArrows={arrows.map((a) => [a.from as Square, a.to as Square, ARROW_COLORS[a.color]])}
         customSquareStyles={squareStyles}
-        customLightSquareStyle={{ backgroundColor: '#ece7db' }}
-        customDarkSquareStyle={{ backgroundColor: '#9fb19a' }}
-        customBoardStyle={{ borderRadius: 6, boxShadow: '0 2px 14px rgba(30,40,30,0.12)' }}
+        customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
+        customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
+        customBoardStyle={{ borderRadius: 6, boxShadow: '0 2px 14px var(--shadow)' }}
         animationDuration={220}
       />
     </div>

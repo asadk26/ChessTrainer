@@ -55,8 +55,8 @@ export function PositionDiagram({
           showBoardNotation={false}
           animationDuration={0}
           customArrows={spec.arrows.map((a) => [a.from as Square, a.to as Square, ARROW_COLORS[a.color]])}
-          customLightSquareStyle={{ backgroundColor: '#ece7db' }}
-          customDarkSquareStyle={{ backgroundColor: '#9fb19a' }}
+          customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
+          customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
           customBoardStyle={{ borderRadius: 4 }}
         />
       </button>

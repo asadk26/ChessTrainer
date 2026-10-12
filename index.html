@@ -14,6 +14,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Chess Coach" />
     <title>Chess Coach</title>
+    <script>
+      // Apply a saved light/dark choice before first paint (no flash).
+      try {
+        var t = localStorage.getItem('chesscoach:theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
