@@ -1,0 +1,37 @@
+{
+  "name": "chess-coach",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-first personal chess coach: Stockfish for facts, a coaching layer for patterns and lessons.",
+  "scripts": {
+    "postinstall": "node scripts/copy-stockfish.mjs",
+    "predev": "node scripts/copy-stockfish.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-stockfish.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "analyze-sample": "tsx scripts/analyze-sample.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "chess.js": "1.4.0",
+    "react": "18.3.1",
+    "react-chessboard": "4.7.3",
+    "react-dom": "18.3.1",
+    "stockfish": "17.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "4.7.0",
+    "tsx": "4.19.2",
+    "typescript": "5.9.3",
+    "vite": "6.4.4",
+    "vitest": "3.2.7"
+  }
+}
