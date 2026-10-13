@@ -294,3 +294,31 @@ describe('the Beta prompt', () => {
     expect(system).toBe(BETA_COACH_SYSTEM_PROMPT);
   });
 });
+
+// Second real game: a win as White with a shaky opening (2.e5, then 11.Bf4 leaving b2 and a1).
+describe('Beta evidence for the Sicilian win', () => {
+  const { game: g0, positions } = fixtureGame('sicilian-win-game');
+  const win: StoredGame = { ...coachFromPositions(g0, positions, []).game, status: 'analyzed', aiCoachEval: JSON.parse(readFileSync(join(here, 'fixtures', 'sicilian-win-game-beta-eval.json'), 'utf8')) };
+  const wctx = buildBetaContext(win, [win], 960)!;
+  const wf = wctx.facts as any;
+
+  it('shows the opening slip and the 11.Bf4 blunder, then Black handing it back', () => {
+    expect(wf.evaluationTimeline[2]).toMatch(/^2\.e5 \(you\): .* · inaccuracy · Stockfish preferred \w+/);
+    expect(wf.evaluationTimeline[20]).toMatch(/^11\.Bf4 \(you\): .* · blunder/);
+    const shifts = wf.evaluationShifts.map((s: any) => [s.moves, s.direction]);
+    expect(shifts[0]).toEqual(['11.Bf4 … 12.Bxd6', 'against you']);
+    expect(shifts[1]).toEqual(['12...Bxa1 … 13...Kf8', 'in your favour']);
+  });
+
+  it('only keeps a consequence that comes after its decision', () => {
+    const r = parseBetaReview(
+      JSON.stringify({ story: 'x', chapters: [
+        { title: 'Opening', kind: 'opening', fromPly: 1, toPly: 20, anchorPly: 3, narrative: 'You developed and castled.' },
+        { title: 'The b2 pawn', kind: 'turning_point', fromPly: 21, toPly: 26, anchorPly: 21, decisionPly: 21, consequencePly: 19, narrative: 'Your bishop left b2 behind.' },
+      ] }),
+      wctx,
+      win,
+    );
+    expect(r.chapters[1]).toMatchObject({ decisionPly: 21, consequencePly: undefined });
+  });
+});

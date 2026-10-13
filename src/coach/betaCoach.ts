@@ -796,7 +796,8 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
         diagram: str(c?.kind, 40) !== 'opening' || c?.diagram === true,
         explore: !!c?.explore,
         decisionPly: ply(c?.decisionPly),
-        consequencePly: ply(c?.consequencePly),
+        // A consequence comes after its decision.
+        consequencePly: (ply(c?.consequencePly) ?? 0) > (ply(c?.decisionPly) ?? Infinity) ? ply(c?.consequencePly) : undefined,
       };
     })
     .filter((c): c is BetaChapter => !!c)
@@ -818,7 +819,7 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
         startPly: Math.min(startPly, decisionPly),
         endPly: Math.max(endPly, decisionPly),
         decisionPly,
-        consequencePly: ply(q?.consequencePly),
+        consequencePly: (ply(q?.consequencePly) ?? 0) > decisionPly ? ply(q?.consequencePly) : undefined,
         title: check(q?.title, 90) || `Moves ${moveLabel(game.plies[startPly - 1])} – ${moveLabel(game.plies[endPly - 1])}`,
         explanation,
       };

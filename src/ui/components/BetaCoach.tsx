@@ -199,7 +199,7 @@ function Review({
                 {c.decisionPly && c.consequencePly && c.decisionPly !== c.consequencePly && (
                   <p className="beta-cause small">
                     <span>
-                      Decision:{' '}
+                      {game.plies[c.decisionPly - 1].color === game.userColor ? 'Decision' : `${game.userColor === 'w' ? 'Black' : 'White'}'s decision`}:{' '}
                       <button className="link" onClick={() => explore(c.decisionPly!)}>
                         {label(c.decisionPly)}
                       </button>

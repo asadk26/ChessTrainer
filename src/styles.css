@@ -524,3 +524,4 @@ p { margin: 0 0 0.75rem; }
 .walk-practice { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
 .walk-actions { margin-top: 0.4rem; }
 .walk-progress { min-height: 1.2rem; }
+.walk-replay { margin: 0 0 0.35rem; padding: 0.35rem 0.6rem; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }

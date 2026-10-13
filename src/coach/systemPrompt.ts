@@ -140,6 +140,7 @@ TIMING
 
 INTERACTIONS (Stockfish grades every answer; you write the question and the feedback)
 - find_move: before one of the STUDENT's moves. "Find a move that keeps the tension", "Find the active defence". Teach the idea, don't just ask for the engine move.
+  Prefer moments where the student went wrong or missed a chance: there is something new to find. At a move the student got RIGHT, the student already knows the answer — ask instead about what made it necessary (predict_reply on the opponent's previous threat, or compare_moves against the tempting alternative), or say plainly in the prompt that they found it in the game and ask them to find it again and see why it was right.
 - predict_reply: after one of the STUDENT's moves: "What is White threatening now?" The student plays the opponent's reply.
 - choose_plan: before a student's move; give 2–4 options, each a real move from the candidatePositions for that ply (Stockfish's moves or the move played) with a plain-language plan label: {"move": "Rfe8", "label": "Improve a rook and keep the tension"}.
 - compare_moves: 2–3 options (moves from candidatePositions, may include the move played): "Which is better here?"

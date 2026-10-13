@@ -111,6 +111,13 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
   const anim = useRef(0);
   const [moving, setMoving] = useState(false);
 
+  /** At a "find your move" question: did the student already play a move as good as Stockfish's here? */
+  const playedWell = (e: WalkEvent) => {
+    if (!e.interaction || e.interaction.kind === 'predict_reply' || e.interaction.kind === 'evaluate_position') return false;
+    const p = game.plies[e.ply - 1];
+    const q = knownQuality(positions[e.ply - 1], p.uci)?.quality;
+    return p.color === user && (q === 'best' || q === 'equal');
+  };
   const ev: WalkEvent | undefined = !moving && stopIdx >= 0 && stopIdx < stops.length && stopPos(stops[stopIdx]) === pos ? stops[stopIdx] : undefined;
   const waiting = ev?.type === 'interactive' && !answer;
   const fen = pos === 0 ? game.plies[0].fenBefore : game.plies[pos - 1].fenAfter;
@@ -200,9 +207,10 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
         const bestSan = best ? sanAt(fenAt, best) : undefined;
         const who = ev.interaction!.kind === 'predict_reply' ? `${user === 'w' ? 'Black' : 'White'}'s` : 'your';
         const note = `Stockfish rates ${san}: ${QUALITY_LABEL[r.quality].toLowerCase()}${bestSan && bestSan !== san ? ` — ${who === 'your' ? 'its first choice' : `${who} strongest`} was ${bestSan}` : ''}.`;
+        const asPlayed = ev.interaction!.kind !== 'predict_reply' && uci === game.plies[ev.ply - 1].uci;
         const arrows: Arrow[] = [{ from: uci.slice(0, 2), to: uci.slice(2, 4), color: 'guess' }];
         if (best && best !== uci) arrows.push({ from: best.slice(0, 2), to: best.slice(2, 4), color: 'best' });
-        respond(ev, gradeOf(r.quality), note, arrows);
+        respond(ev, gradeOf(r.quality), asPlayed ? `${note} That's what you played in the game.` : note, arrows);
       })
       .catch((err: Error) => respond(ev, null, err.message))
       .finally(() => setChecking(false));
@@ -294,7 +302,9 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
         </div>
         {seq && (
           <p className="beta-cause small">
-            <span>Decision: {moveLabel(game.plies[seq.decisionPly - 1])}</span>
+            <span>
+              {game.plies[seq.decisionPly - 1].color === user ? 'Decision' : `${user === 'w' ? 'Black' : 'White'}'s decision`}: {moveLabel(game.plies[seq.decisionPly - 1])}
+            </span>
             {seq.consequencePly && (
               <>
                 <span aria-hidden="true">→</span>
@@ -306,6 +316,7 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
         {ev.narration && <CoachText text={ev.narration} className="beta-para" />}
         {ev.interaction && (
           <div className="walk-question">
+            {playedWell(ev) && <p className="walk-replay small">You found this in the game ({moveLabel(game.plies[ev.ply - 1])}). Find it again, and look for why it was right.</p>}
             <p>
               <strong>{ev.interaction.prompt}</strong>
             </p>
