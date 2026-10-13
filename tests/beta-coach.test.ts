@@ -228,7 +228,7 @@ describe('parsing a review', () => {
   const r = parseBetaReview(JSON.stringify(MOCK), ctx, game, 'gemini-test');
 
   it('keeps chapters in order with their causal decision and consequence', () => {
-    expect(r.version).toBe(3);
+    expect(r.version).toBe(4);
     expect(r.chapters.map((c) => c.title)).toEqual(['A solid, equal opening', 'You force the position too soon', 'White misses Ng5', 'Active rook defence', 'Holding the draw']);
     const c = r.chapters[1];
     expect(c).toMatchObject({ decisionPly: 38, consequencePly: 41, anchorPly: 38, assessment: 'poorly', explore: true, diagram: true });

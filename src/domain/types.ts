@@ -422,6 +422,8 @@ export interface StoredGame {
    * Kept apart from the built-in coach's analysis.
    */
   aiCoachEval?: { depth: number; positions: PositionEval[] };
+  /** The AI walkthrough derived from the Beta lesson plan. */
+  aiWalkthrough?: AiWalkthrough;
 }
 
 export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
@@ -541,8 +543,27 @@ export interface BetaChapter {
  * and turning points — from the whole game's Stockfish evidence. Concrete claims
  * the engine data contradicts are removed before it is stored (and listed in `removed`).
  */
+/** Gemini's reported token counts for one call. */
+export interface TokenUsage {
+  input: number;
+  output: number;
+  /** Tokens spent "thinking" (Gemini 2.5+), billed as output. */
+  thinking?: number;
+}
+
+/** A multi-move lesson: the decision that caused a shift and where its consequence showed. */
+export interface TeachingSequence {
+  id: string;
+  startPly: number;
+  endPly: number;
+  decisionPly: number;
+  consequencePly?: number;
+  title: string;
+  explanation: string;
+}
+
 export interface BetaCoachReview {
-  version: 3;
+  version: 4;
   /** The game's arc in 2–3 sentences. */
   story: string;
   chapters: BetaChapter[];
@@ -550,8 +571,59 @@ export interface BetaCoachReview {
   lessons: string[];
   /** Positions worth revisiting: the position before the student's move at `ply`. */
   practice: { ply: number; why: string }[];
+  /** The rest of the Game Lesson Plan, shared with the AI walkthrough. */
+  strengths: string[];
+  mistakes: string[];
+  patterns: string[];
+  sequences: TeachingSequence[];
+  /** Moments the planner wants the student to work out for themselves. */
+  interactive: { ply: number; kind: WalkInteractionKind; why: string }[];
   removed: { text: string; reason: string }[];
   model?: string;
+  usage?: TokenUsage;
   createdAt: number;
+  grounding: string;
+}
+
+export type WalkInteractionKind = 'find_move' | 'predict_reply' | 'choose_plan' | 'evaluate_position' | 'compare_moves';
+
+export interface WalkInteraction {
+  kind: WalkInteractionKind;
+  prompt: string;
+  hint?: string;
+  /** choose_plan / compare_moves: each option is a real move (UCI), graded by Stockfish. */
+  options?: { uci: string; san: string; label: string }[];
+  /** Feedback per Stockfish grade. */
+  feedback: { correct: string; reasonable: string; misses: string };
+  /** The explanation shown once the student has answered. */
+  reveal: string;
+}
+
+/**
+ * One stop in the AI walkthrough. Moves without an event are skipped through.
+ * 'before' pauses at the position before move `ply` (a decision); 'after' comments once it's played.
+ */
+export interface WalkEvent {
+  ply: number;
+  timing: 'before' | 'after';
+  type: 'brief' | 'explain' | 'interactive';
+  title?: string;
+  narration: string;
+  sequenceId?: string;
+  interaction?: WalkInteraction;
+  /** Lines worth trying from this position: Stockfish's candidates, with the coach's labels. */
+  explore?: { uci: string; san: string; label: string }[];
+  takeaway?: string;
+}
+
+/** The AI walkthrough for Guided Review: written once from the lesson plan, replayed with no AI calls. */
+export interface AiWalkthrough {
+  version: 1;
+  events: WalkEvent[];
+  removed: { text: string; reason: string }[];
+  model?: string;
+  usage?: TokenUsage;
+  createdAt: number;
+  /** The plan's createdAt plus the engine grounding: a new plan or analysis makes this stale. */
   grounding: string;
 }

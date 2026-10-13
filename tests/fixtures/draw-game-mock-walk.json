@@ -1,0 +1,167 @@
+{
+ "_note": "Hand-written mock of a Gemini walkthrough for tests and UI checks. NOT real model output.",
+ "events": [
+  {
+   "ply": 8,
+   "timing": "after",
+   "type": "brief",
+   "narration": "4...d5 claims the centre straight away."
+  },
+  {
+   "ply": 20,
+   "timing": "after",
+   "type": "brief",
+   "narration": "Both kings are castled and every piece is out: a healthy start."
+  },
+  {
+   "ply": 21,
+   "timing": "after",
+   "type": "interactive",
+   "narration": "White plays 11.c3.",
+   "interaction": {
+    "kind": "find_move",
+    "prompt": "Find White's idea.",
+    "feedback": {
+     "correct": "a",
+     "reasonable": "b",
+     "misses": "c"
+    },
+    "reveal": "x"
+   }
+  },
+  {
+   "ply": 36,
+   "timing": "after",
+   "type": "brief",
+   "narration": "18...f5 prepares a central break. Hold that thought."
+  },
+  {
+   "ply": 38,
+   "timing": "before",
+   "type": "interactive",
+   "title": "Keep the tension or break?",
+   "sequenceId": "break",
+   "narration": "This is the decision of the game. Your pieces are active, but the centre is closed and White has nothing to attack.",
+   "interaction": {
+    "kind": "choose_plan",
+    "prompt": "Which plan would you choose here?",
+    "options": [
+     {
+      "move": "Rfe8",
+      "label": "Bring the last rook to the e-file and keep the tension"
+     },
+     {
+      "move": "e4",
+      "label": "Force the centre open now"
+     },
+     {
+      "move": "Qd7",
+      "label": "Reposition the queen"
+     },
+     {
+      "move": "Bd6",
+      "label": "Improve the bishop"
+     }
+    ],
+    "feedback": {
+     "correct": "Yes. Keeping the tension costs nothing, and your pieces get better every move.",
+     "reasonable": "Playable, but it doesn't use your extra activity.",
+     "misses": "Forcing it open now hands White the e4 square after the exchanges."
+    },
+    "reveal": "In the game you played 19...e4. After 20.dxe4 fxe4 21.Nxe4 the pawn falls: Nxe4 is the consequence, the break was the decision."
+   },
+   "explore": [
+    {
+     "move": "Rfe8",
+     "label": "keeps the tension, Stockfish's choice"
+    },
+    {
+     "move": "Bf6",
+     "label": "also keeps the balance"
+    },
+    {
+     "move": "Qh5",
+     "label": "not a Stockfish move"
+    }
+   ],
+   "takeaway": "Before a pawn break, check what the opened lines give your opponent."
+  },
+  {
+   "ply": 41,
+   "timing": "after",
+   "type": "explain",
+   "sequenceId": "break",
+   "narration": "21.Nxe4 collects the pawn. 19...e4 was a strong central break."
+  },
+  {
+   "ply": 48,
+   "timing": "after",
+   "type": "interactive",
+   "title": "What does White have now?",
+   "narration": "24...b5 looks active.",
+   "interaction": {
+    "kind": "predict_reply",
+    "prompt": "What is White's strongest reply?",
+    "feedback": {
+     "correct": "Yes: Ng5 hits h7 and your queen is overloaded.",
+     "reasonable": "Playable, but White had more.",
+     "misses": "Look at h7: Ng5 was the big chance."
+    },
+    "reveal": "White missed Ng5 and played 25.c5 instead."
+   }
+  },
+  {
+   "ply": 50,
+   "timing": "before",
+   "type": "interactive",
+   "title": "Save the bishop",
+   "narration": "25.c5 attacks your bishop on d6.",
+   "interaction": {
+    "kind": "find_move",
+    "prompt": "Find the only move that keeps you in the game.",
+    "hint": "Where is the bishop safe and still useful?",
+    "feedback": {
+     "correct": "Exactly: 25...Be7 keeps the bishop and covers your king.",
+     "reasonable": "It saves the bishop, but leaves it passive.",
+     "misses": "This loses more: the bishop needs a safe square that still defends."
+    },
+    "reveal": "You found 25...Be7 in the game."
+   }
+  },
+  {
+   "ply": 58,
+   "timing": "after",
+   "type": "brief",
+   "narration": "Queens come off. The ending is worse for you, but there is still play."
+  },
+  {
+   "ply": 66,
+   "timing": "after",
+   "type": "explain",
+   "narration": "33...Re2+ is the start of active defence: your rook gets behind White's pawns instead of waiting."
+  },
+  {
+   "ply": 76,
+   "timing": "before",
+   "type": "interactive",
+   "title": "Stop the pawn",
+   "narration": "White's c-pawn has reached c7.",
+   "interaction": {
+    "kind": "find_move",
+    "prompt": "Find the move that stops the pawn.",
+    "feedback": {
+     "correct": "Yes: 38...Rc3 gets behind the pawn.",
+     "reasonable": "Close, but the pawn is still dangerous.",
+     "misses": "The pawn is one step from queening: your rook must get behind it now."
+    },
+    "reveal": "38...Rc3 won the pawn on the next move."
+   }
+  },
+  {
+   "ply": 97,
+   "timing": "after",
+   "type": "brief",
+   "narration": "White repeats the position: a good practical result for you."
+  }
+ ]
+}

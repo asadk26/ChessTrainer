@@ -12,7 +12,7 @@
 // recommending a move Stockfish didn't consider — must agree with the engine data.
 // Broad instructional judgements ("you became impatient") are left free.
 import { Chess } from 'chess.js';
-import type { BetaChapter, BetaCoachReview, Color, MoveEval, PositionEval, StoredGame } from '../domain/types';
+import type { BetaChapter, BetaCoachReview, Color, MoveEval, PositionEval, StoredGame, TeachingSequence, WalkInteractionKind } from '../domain/types';
 import { COLOR_NAME, kingInCenter, kingSquare, materialBalance, materialPhrase, nonPawnMaterial, other, passedPawns, pawnWeaknesses, sideToMove, undevelopedMinors } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { MATE_CP, positionCp, scoreToCp, winPercent } from '../analysis/evaluation';
@@ -26,7 +26,7 @@ import { gamePlayedAt, priorGames } from '../analysis/pipeline';
 import { extractJson } from './llmCoach';
 import { recurringPatterns, UngroundedError } from './momentContext';
 
-export const BETA_VERSION = 3;
+export const BETA_VERSION = 4;
 /** One consistent depth for every position of the Beta evidence (about a minute per game). */
 export const BETA_DEPTH = 16;
 
@@ -290,7 +290,7 @@ export function betaGrounding(game: StoredGame): string {
   return `v${BETA_VERSION}|${a?.analyzedAt}|${game.aiCoachEval?.depth ?? 'base'}|${game.aiCoachEval?.positions.length ?? 0}|${game.userColor}|${userOutcome(game) ?? ''}`;
 }
 
-export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: number): BetaContext | undefined {
+export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: number, opts: { extraPlies?: number[] } = {}): BetaContext | undefined {
   const s = series(game);
   if (!s || !game.plies.length) return undefined;
   const user = game.userColor;
@@ -347,11 +347,19 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
       change: delta > 0 ? `you gained ${materialPhrase(delta)}` : `you lost ${materialPhrase(-delta)}`,
       balance: bal[i] === 0 ? 'level' : bal[i] > 0 ? `you are up ${materialPhrase(bal[i])}` : `you are down ${materialPhrase(-bal[i])}`,
     });
-    for (let k = Math.max(1, i - 4); k <= i; k++) if (game.plies[k - 1].captured || bal[k] !== bal[k - 1]) support.materialPlies.add(k);
-    if (i >= 2) support.materialPlies.add(i - 1); // the move that allowed it
+    // The moves leading into a real material change can be named in a claim about it
+    // ("38...Rc3 won the pawn on the next move"), not just the capture itself.
+    for (let k = Math.max(1, i - 4); k <= i; k++) support.materialPlies.add(k);
     support.anyMaterial = true;
     settled = bal[i];
   }
+  // Every capture in the game is a fact too, even when material later evens out: the capture
+  // and the same side's move before it ("38...Rc3 won the pawn on the next move").
+  game.plies.forEach((p) => {
+    if (!p.captured) return;
+    support.materialPlies.add(p.ply);
+    if (p.ply > 2) support.materialPlies.add(p.ply - 2);
+  });
   if (s.positions[game.plies.length]?.terminal === 'checkmate') {
     support.matePlies.add(game.plies.length);
     support.anyMate = true;
@@ -377,7 +385,8 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
   };
 
   // --- Stockfish's candidates around the moves that matter (both sides).
-  const candidatePositions = candidatePlies(game, s, shifts).map((k) => {
+  const focus = [...new Set([...candidatePlies(game, s, shifts), ...(opts.extraPlies ?? [])])].filter((k) => k >= 1 && k <= game.plies.length).sort((a, b) => a - b);
+  const candidatePositions = focus.map((k) => {
     const p = game.plies[k - 1];
     const before = s.positions[k - 1];
     const after = s.positions[k];
@@ -753,6 +762,11 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
     const n = typeof v === 'string' ? Number(v) : v;
     return Number.isInteger(n) && (n as number) >= 1 && (n as number) <= ctx.plyCount ? (n as number) : undefined;
   };
+  const list = (v: unknown, n: number) =>
+    arr(v)
+      .slice(0, n)
+      .map((x) => check(x, 400))
+      .filter(Boolean);
 
   const chapters: BetaChapter[] = arr(raw.chapters)
     .slice(0, 8)
@@ -789,8 +803,37 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
     .sort((x, y) => x.fromPly - y.fromPly);
   if (chapters.length < 2) throw new UngroundedError('The AI review had too few chapters that agreed with the engine analysis.');
 
+  const KINDS: WalkInteractionKind[] = ['find_move', 'predict_reply', 'choose_plan', 'evaluate_position', 'compare_moves'];
+  const sequences: TeachingSequence[] = arr(raw.sequences)
+    .slice(0, 6)
+    .map((q: any, i: number): TeachingSequence | undefined => {
+      const decisionPly = ply(q?.decisionPly);
+      let startPly = ply(q?.startPly) ?? decisionPly;
+      let endPly = ply(q?.endPly) ?? decisionPly;
+      const explanation = check(q?.explanation, 900);
+      if (!decisionPly || !startPly || !endPly || !explanation) return undefined;
+      if (endPly < startPly) [startPly, endPly] = [endPly, startPly];
+      return {
+        id: str(q?.id, 30) || `seq${i + 1}`,
+        startPly: Math.min(startPly, decisionPly),
+        endPly: Math.max(endPly, decisionPly),
+        decisionPly,
+        consequencePly: ply(q?.consequencePly),
+        title: check(q?.title, 90) || `Moves ${moveLabel(game.plies[startPly - 1])} – ${moveLabel(game.plies[endPly - 1])}`,
+        explanation,
+      };
+    })
+    .filter((q): q is TeachingSequence => !!q);
   return {
-    version: 3,
+    version: 4,
+    strengths: list(raw.strengths, 4),
+    mistakes: list(raw.mistakes, 4),
+    patterns: list(raw.patterns, 3),
+    sequences,
+    interactive: arr(raw.interactiveMoments)
+      .slice(0, 4)
+      .map((m: any) => ({ ply: ply(m?.ply), kind: KINDS.includes(m?.kind) ? (m.kind as WalkInteractionKind) : 'find_move', why: check(m?.why, 300) }))
+      .filter((m): m is { ply: number; kind: WalkInteractionKind; why: string } => !!m.ply),
     story: check(raw.story, 900),
     chapters,
     lessons: arr(raw.lessons)

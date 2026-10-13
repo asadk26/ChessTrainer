@@ -1,5 +1,5 @@
 // App-level operations that combine storage, engine and coaching.
-import type { AiExplanation, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
+import type { AiExplanation, AiWalkthrough, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
 import { BETA_DEPTH, betaPrompt, buildBetaContext, currentReview, evaluateForBeta, needsBetaEval, parseBetaReview } from '../coach/betaCoach';
@@ -14,7 +14,8 @@ import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames } from '../an
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
 import { buildCoachPrompt, extractJson, mergeLlmOutput } from '../coach/llmCoach';
-import { getLlmStatus, llmComplete } from '../coach/llmClient';
+import { getLlmStatus, llmComplete, llmCompleteWithUsage } from '../coach/llmClient';
+import { buildWalkContext, currentWalkthrough, parseWalkthrough, walkGrounding, walkPrompt } from '../coach/walkthrough';
 import { positionCp, winPercent } from '../analysis/evaluation';
 
 function newId() {
@@ -376,15 +377,46 @@ export function betaReview(
     if (!ctx) throw new Error('No engine analysis for this game yet.');
     const status = await getLlmStatus();
     if (!status.provider) throw new Error('No AI coach is configured.');
-    opts.onProgress?.('The coach is reading the whole game… (usually 20–60 seconds)');
-    const text = await llmComplete(betaPrompt(ctx), settings.coachToken, 16000, 'beta');
-    const review = parseBetaReview(text, ctx, game, status.model);
+    opts.onProgress?.('The coach is reading the whole game and planning the lessons… (usually 20–60 seconds)');
+    const { text, usage } = await llmCompleteWithUsage(betaPrompt(ctx), settings.coachToken, 32000, 'beta');
+    const review = { ...parseBetaReview(text, ctx, game, status.model), usage };
     const fresh = (await repo.getGame(gameId)) ?? game;
     await repo.saveGame({ ...fresh, aiCoach: review });
     return review;
   })();
   betaInflight.set(gameId, job);
   const clear = () => void betaInflight.delete(gameId);
+  job.then(clear, clear);
+  return job;
+}
+
+const walkInflight = new Map<string, Promise<AiWalkthrough>>();
+
+/**
+ * The AI walkthrough for Guided Review, written from the game's lesson plan (pass 2).
+ * Makes the plan first if there isn't one. Cached; replaying it needs no AI call.
+ */
+export function aiWalkthrough(gameId: string, opts: { force?: boolean; onProgress?: (stage: string) => void } = {}): Promise<AiWalkthrough> {
+  const running = walkInflight.get(gameId);
+  if (running) return running;
+  const job = (async () => {
+    const plan = await betaReview(gameId, { onProgress: opts.onProgress });
+    const game = (await repo.getGame(gameId))!;
+    const cached = currentWalkthrough(game, plan);
+    if (cached && !opts.force && cached.grounding === walkGrounding(plan)) return cached;
+    const settings = await repo.getSettings();
+    const ctx = buildWalkContext(game, await repo.listGames(), settings.rating, plan);
+    if (!ctx) throw new Error('No engine analysis for this game yet.');
+    const status = await getLlmStatus();
+    opts.onProgress?.('The coach is planning the walkthrough… (usually 20–60 seconds)');
+    const { text, usage } = await llmCompleteWithUsage(walkPrompt(ctx), settings.coachToken, 32000, 'guided');
+    const walk = { ...parseWalkthrough(text, ctx, game, plan, status.model), usage };
+    const fresh = (await repo.getGame(gameId)) ?? game;
+    await repo.saveGame({ ...fresh, aiWalkthrough: walk });
+    return walk;
+  })();
+  walkInflight.set(gameId, job);
+  const clear = () => void walkInflight.delete(gameId);
   job.then(clear, clear);
   return job;
 }

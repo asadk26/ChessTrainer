@@ -507,3 +507,20 @@ p { margin: 0 0 0.75rem; }
   .beta-chapter-body.with-diagram { grid-template-columns: 1fr; justify-items: center; }
   .beta-chapter-text { justify-self: stretch; }
 }
+
+/* AI walkthrough */
+.beta-modes { margin: 0 0 0.9rem; }
+.walk .walk-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 0.95rem; margin-bottom: 0.6rem; }
+.walk .walk-card.explain { border-left: 4px solid var(--accent); }
+.walk .walk-card.interactive { border-left: 4px solid rgb(60, 108, 196); }
+.walk-head { display: flex; flex-wrap: wrap; gap: 0.35rem 0.6rem; align-items: baseline; margin-bottom: 0.35rem; }
+.walk-move { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+.walk-question { margin-top: 0.4rem; }
+.walk-options { display: grid; gap: 0.4rem; margin: 0.4rem 0; }
+.walk-options .btn { text-align: left; }
+.walk-controls { display: flex; gap: 0.4rem; align-items: center; }
+.walk-controls .btn.primary { flex: 1; }
+.walk-explore ul { margin: 0.3rem 0 0.5rem; padding-left: 1.1rem; }
+.walk-practice { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+.walk-actions { margin-top: 0.4rem; }
+.walk-progress { min-height: 1.2rem; }

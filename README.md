@@ -134,58 +134,90 @@ Without the access code those places show a reminder instead.
 ### Beta AI Coach (experimental)
 
 A separate **AI Coach · Beta** tab on each game (it can be switched off in Settings), shown next to the
-unchanged built-in coach so the two can be compared. The roles are split:
+unchanged built-in Summary and Guided Review so they can be compared. The roles are split:
 
 - **Stockfish is the evidence and the referee.** It decides legality, evaluations, best moves,
-  tactics, material and mates.
-- **The model is the instructor.** It decides what the game's story and turning points were.
-  Nothing tells it which moments are the lessons.
+  tactics, material and mates, and it grades every answer.
+- **The model is the instructor.** It decides the story, the turning points, the pacing and the
+  questions.
 
-**What happens when you open the tab** (`src/coach/betaCoach.ts`):
+The tab has two views built from **one Game Lesson Plan**, so they always agree:
 
-1. **Re-check.** Stockfish re-analyses the positions around the evaluation shifts at depth 18,
-   once per analysis. These results are kept apart from the built-in coach's analysis.
-2. **Evidence sent to the model:**
-   - the PGN, your colour, rating, level and the result;
-   - every half-move with the evaluation after it, its effect, Stockfish's verdict and preferred move;
-   - the evaluation shifts, as runs of moves that moved the trend, with lead-up;
-   - Stockfish's top 3 moves and short lines around the moves that mattered, for both sides,
-     with where each line's material settles;
-   - the material timeline, phase markers and positional checkpoints;
-   - notable moves, the rule-based detections, labelled "context, not lessons";
-   - your recent tendencies, labelled "context only".
-3. **Instructions.** The fixed server-side prompt (`BETA_COACH_SYSTEM_PROMPT`) asks the model to
-   judge moves by the evaluation timeline, not by how active they look. It asks it to find the
-   earliest decision behind each shift, separate the decision from its consequence, credit strong
-   phases, and write a game story plus 4–7 chapters, the lessons and practice positions.
-4. **Referee.** Each sentence is checked against the engine data and removed when it:
-   - names a move that isn't in the game, Stockfish's lines, or legal at that point;
-   - claims material, a tactic, a mate, an unstoppable pawn or a "losing" position the data
-     doesn't show;
-   - praises a move Stockfish rates a mistake;
+- **Game story:** the written review, with chapters, diagrams, lessons and practice positions.
+- **Guided walkthrough:** the game replayed on the board with a coach's pacing:
+  - most moves play straight through;
+  - *brief* one-liners, and *explain* pauses at real decisions;
+  - 2–4 *interactive* questions:
+    - "find the move", "what is White threatening", or "which plan";
+    - "which move is better", or "who is better here".
+
+  Multi-move lessons pause *before* the decision and comment *after* the consequence ("Decision:
+  19...e4 → Consequence: 21.Nxe4"). Answers are graded by Stockfish as correct / reasonable /
+  misses the idea; several good moves count. "Explore this decision" opens the practice board, with
+  the coach's labelled Stockfish lines.
+
+**How it's built** (`src/coach/betaCoach.ts`, `src/coach/walkthrough.ts`):
+
+1. **One consistent Stockfish pass.** Every position is evaluated once at depth 16, once per game
+   (about a minute), kept apart from the built-in coach's analysis. Every move's effect therefore
+   compares like with like.
+   - A move is marked **engine unsure** where a second, faster pass disagrees by 1.5+ pawns, or
+     where Stockfish's own first choice seems to swing the evaluation. That happens most in rook
+     endings.
+   - Unsure moves are kept out of the evaluation shifts, and no evaluative claim about them is allowed.
+2. **Pass 1: the lesson planner** (`BETA_COACH_SYSTEM_PROMPT`). It receives:
+   - the PGN, colour, level and result;
+   - every half-move's evaluation and effect;
+   - the evaluation shifts with their lead-up;
+   - Stockfish's top 3 moves and lines around the moves that mattered;
+   - the material, phase and structure timelines, and context from earlier games.
+
+   It returns the plan: story, chapters, causal sequences, strengths, mistakes, lessons, interactive
+   moments and practice positions. Nothing pre-selects the lessons. The prompt asks it to judge by
+   the evaluation timeline (not by how active a move looks), separate decision from consequence,
+   check *whose* move improved the evaluation, and credit strong play.
+3. **Pass 2: the walkthrough writer** (`GUIDED_REVIEW_SYSTEM_PROMPT`). It receives the plan, the
+   timeline and Stockfish's candidates at the plan's moments, and returns only the stops.
+   - Options and suggested lines must be Stockfish's candidates (or the move played).
+   - Pacing is capped: at most 12 brief, 7 explain and 4 interactive stops.
+   - Every causal sequence in the plan gets a stop before its decision.
+4. **Referee.** Each sentence of either pass is checked and removed when it:
+   - names a move that isn't in the game, in Stockfish's lines, or legal at that point;
+   - makes a material, tactic, mate, unstoppable-pawn or "losing" claim the data doesn't show;
+   - praises a move that made the position worse, including small concessions inside a run going
+     against you;
    - calls Stockfish's best move a mistake;
-   - recommends a move Stockfish never put forward there.
+   - recommends a move Stockfish never put forward;
+   - quotes an evaluation figure that doesn't match the timeline;
+   - judges an engine-unsure move;
+   - calls a draw "forced" when the opponent had better.
 
-   High-level judgements ("you became impatient", "your rook activity saved the ending") are left
-   free. The tab lists what was removed and why.
-5. **Display.** Each chapter gets a board diagram of the position before the move it turns on,
-   with the move played, Stockfish's choice and its evaluations. Tapping the diagram opens the
-   practice board at that move. "Show the Stockfish evidence the AI is given" displays the exact
-   JSON sent to the model.
+   Chapter titles are checked too. High-level judgements are left free.
 
-The review is cached per game and regenerated only on request.
+Both passes are cached on the game: replaying the walkthrough makes no AI calls, and only
+Regenerate or a change in the engine analysis writes them again. Gemini's reported token counts are
+shown on the tab. "Show the Stockfish evidence the AI is given" shows the exact JSON sent in pass 1.
 
-**Running it from the command line** with your own key (in `.env.local` or the environment):
+**Command line**, with your own key (in `.env.local` or the environment), or with recorded answers:
 
 ```bash
 npm run beta-review -- game.pgn b --rating 900 --out beta-out
-# reuse recorded analysis instead of running Stockfish:
-npm run beta-review -- tests/fixtures/draw-game.pgn b --positions tests/fixtures/draw-game-positions.json
+# no key needed: reuse recorded analysis and recorded model answers
+npm run beta-review -- tests/fixtures/draw-game.pgn b --positions tests/fixtures/draw-game-positions.json \
+  --plan-answer tests/fixtures/draw-game-mock-plan.json --walk-answer tests/fixtures/draw-game-mock-walk.json
 ```
 
-This writes `context.json` and `prompt.txt` (exactly what the model receives) and, with
-`GEMINI_API_KEY` set, `raw-answer.json`, `review.json` and `review.md` (including what the referee
-removed). The regression game is `tests/fixtures/draw-game.pgn` (`tests/beta-coach.test.ts`).
+This writes:
+- `context.json` and `prompt.txt`: the pass-1 evidence and the exact pass-1 prompt;
+- `walk-prompt.txt`: the exact pass-2 prompt;
+- `review.md`: the plan;
+- `walkthrough.json` and `walkthrough.md`: every move as skip / brief / explain / interactive, with
+  the board position and Stockfish's evidence;
+- `tokens.txt`: the token counts.
+
+The regression game is `tests/fixtures/draw-game.pgn` (`tests/beta-coach.test.ts`,
+`tests/walkthrough.test.ts`). The `draw-game-mock-*.json` answers are hand-written test fixtures,
+not real model output.
 
 ## Lessons: the instructor loop
 

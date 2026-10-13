@@ -1,6 +1,7 @@
 // CLI for the Beta AI Coach experiment: run the whole chain on one PGN in Node.
 //
 //   npm run beta-review -- game.pgn b [--rating 900] [--out beta-out] [--positions recorded-positions.json]
+//                         [--plan-answer recorded.json --walk-answer recorded.json]   (no key needed)
 //
 // 1. Stockfish analyses every position (depth 12, MultiPV 3) and re-checks the
 //    built-in coach's critical positions at depth 18, exactly as the app does.
@@ -16,7 +17,8 @@ import { GeminiProvider, DEFAULT_GEMINI_MODEL } from '../server/llm.ts';
 import { analyzeGame, coachFromPositions } from '../src/analysis/pipeline.ts';
 import { parsePgn, moveLabel } from '../src/chess/pgn.ts';
 import { BETA_DEPTH, betaPrompt, buildBetaContext, evaluateForBeta, parseBetaReview } from '../src/coach/betaCoach.ts';
-import { BETA_COACH_SYSTEM_PROMPT } from '../src/coach/systemPrompt.ts';
+import { BETA_COACH_SYSTEM_PROMPT, GUIDED_REVIEW_SYSTEM_PROMPT } from '../src/coach/systemPrompt.ts';
+import { buildWalkContext, parseWalkthrough, walkPrompt, walkSteps } from '../src/coach/walkthrough.ts';
 import type { BetaCoachReview, PositionEval, StoredGame } from '../src/domain/types.ts';
 
 const args = process.argv.slice(2);
@@ -84,20 +86,70 @@ writeFileSync(join(out, 'context.json'), JSON.stringify(ctx.facts, null, 1));
 writeFileSync(join(out, 'prompt.txt'), `=== SYSTEM (fixed, server-side) ===\n${BETA_COACH_SYSTEM_PROMPT}\n\n=== USER ===\n${betaPrompt(ctx)}\n`);
 console.log(`Wrote ${out}/context.json and ${out}/prompt.txt (${betaPrompt(ctx).length} characters of evidence).`);
 
+// The two model calls: real Gemini with a key, or recorded answers (--plan-answer / --walk-answer)
+// so the whole pipeline can be inspected without one.
 const key = process.env.GEMINI_API_KEY;
-if (!key) {
-  console.log('No GEMINI_API_KEY set: stopping before the model call.');
+const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+const provider = key ? new GeminiProvider(key, model) : undefined;
+const ask = async (system: string, prompt: string, recorded: string, label: string) => {
+  if (recorded) return { text: readFileSync(recorded, 'utf8'), usage: undefined, source: `recorded answer ${recorded}` };
+  if (!provider) return undefined;
+  console.log(`Asking ${model} for the ${label}…`);
+  const text = await provider.complete({ system, prompt, maxTokens: 32000 });
+  return { text, usage: provider.lastUsage, source: model };
+};
+const estimate = (chars: number) => `~${Math.round(chars / 4).toLocaleString()} tokens`;
+
+const planAnswer = await ask(BETA_COACH_SYSTEM_PROMPT, betaPrompt(ctx), opt('plan-answer', ''), 'lesson plan');
+if (!planAnswer) {
+  console.log(`No GEMINI_API_KEY set: stopping before the model call. Plan prompt is ${estimate(betaPrompt(ctx).length + BETA_COACH_SYSTEM_PROMPT.length)}.`);
   process.exit(0);
 }
-const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
-const provider = new GeminiProvider(key, model);
-console.log(`Asking ${model}…`);
-const text = await provider.complete({ system: BETA_COACH_SYSTEM_PROMPT, prompt: betaPrompt(ctx), maxTokens: 16000 });
-writeFileSync(join(out, 'raw-answer.json'), text);
-const review = parseBetaReview(text, ctx, game, model);
+writeFileSync(join(out, 'raw-plan.json'), planAnswer.text);
+const review = { ...parseBetaReview(planAnswer.text, ctx, game, planAnswer.source), usage: planAnswer.usage };
 writeFileSync(join(out, 'review.json'), JSON.stringify(review, null, 1));
 writeFileSync(join(out, 'review.md'), toMarkdown(review, game));
 console.log(`Wrote ${out}/review.md (${review.chapters.length} chapters, ${review.removed.length} statements removed by the referee).`);
+
+const wctx = buildWalkContext(game, [game], rating, review)!;
+writeFileSync(join(out, 'walk-prompt.txt'), `=== SYSTEM (fixed, server-side) ===\n${GUIDED_REVIEW_SYSTEM_PROMPT}\n\n=== USER ===\n${walkPrompt(wctx)}\n`);
+const walkAnswer = await ask(GUIDED_REVIEW_SYSTEM_PROMPT, walkPrompt(wctx), opt('walk-answer', ''), 'walkthrough');
+if (!walkAnswer) process.exit(0);
+writeFileSync(join(out, 'raw-walk.json'), walkAnswer.text);
+const walk = { ...parseWalkthrough(walkAnswer.text, wctx, game, review, walkAnswer.source), usage: walkAnswer.usage };
+const steps = walkSteps(game, walk);
+writeFileSync(join(out, 'walkthrough.json'), JSON.stringify(steps, null, 1));
+writeFileSync(join(out, 'walkthrough.md'), walkMarkdown(steps, walk.removed));
+const tokens = [
+  `Plan prompt: ${estimate(betaPrompt(ctx).length + BETA_COACH_SYSTEM_PROMPT.length)} in${review.usage ? ` (Gemini reported ${review.usage.input} in / ${review.usage.output} out / ${review.usage.thinking ?? 0} thinking)` : ''}, answer ${estimate(planAnswer.text.length)}`,
+  `Walkthrough prompt: ${estimate(walkPrompt(wctx).length + GUIDED_REVIEW_SYSTEM_PROMPT.length)} in${walk.usage ? ` (Gemini reported ${walk.usage.input} in / ${walk.usage.output} out / ${walk.usage.thinking ?? 0} thinking)` : ''}, answer ${estimate(walkAnswer.text.length)}`,
+];
+writeFileSync(join(out, 'tokens.txt'), tokens.join('\n') + '\n');
+console.log(`Wrote ${out}/walkthrough.md (${walk.events.length} stops). ${tokens.join(' · ')}`);
+
+function walkMarkdown(steps: ReturnType<typeof walkSteps>, removed: { text: string; reason: string }[]): string {
+  const lines = ['# AI walkthrough', '', '| ply | move | type | timing | board | Stockfish (for you) |', '|---|---|---|---|---|---|'];
+  for (const s of steps) {
+    if (s.type === 'skip') continue;
+    lines.push(`| ${s.ply} | ${s.move} | ${s.type}${s.interaction ? ` (${s.interaction.kind})` : ''} | ${s.timing} | ${s.timing === 'before' ? 'before the move' : 'after the move'} | ${s.engineEvidence.evalBefore} → ${s.engineEvidence.evalAfter}; best ${s.engineEvidence.bestMove} |`);
+  }
+  const skipped = steps.filter((s) => s.type === 'skip').map((s) => s.move);
+  lines.push('', `**Skipped (${skipped.length} moves):** ${skipped.join(' ')}`, '');
+  for (const s of steps) {
+    if (s.type === 'skip') continue;
+    lines.push(`## ${s.timing === 'before' ? 'Before ' : ''}${s.move} — ${s.type}${s.title ? `: ${s.title}` : ''}`, '', s.narration ?? '', '');
+    if (s.interaction) {
+      const i = s.interaction;
+      lines.push(`**${i.kind}:** ${i.prompt}`, '');
+      if (i.options) lines.push(...i.options.map((o) => `- option ${o.san}: ${o.label}`), '');
+      lines.push(`- correct: ${i.feedback.correct}`, `- reasonable: ${i.feedback.reasonable}`, `- misses: ${i.feedback.misses}`, `- reveal: ${i.reveal}`, '');
+    }
+    if (s.explore) lines.push(...s.explore.map((x) => `- explore ${x.san}: ${x.label}`), '');
+    if (s.takeaway) lines.push(`**Takeaway:** ${s.takeaway}`, '');
+  }
+  lines.push('## Removed by the Stockfish referee', ...(removed.length ? removed.map((x) => `- "${x.text}" — ${x.reason}`) : ['- nothing']));
+  return lines.join('\n');
+}
 
 function toMarkdown(r: BetaCoachReview, g: StoredGame): string {
   const l = (ply?: number) => (ply && g.plies[ply - 1] ? moveLabel(g.plies[ply - 1]) : '?');

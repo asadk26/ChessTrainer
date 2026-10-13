@@ -1,0 +1,130 @@
+{
+ "_note": "Hand-written mock of a Gemini lesson plan for tests and UI checks. NOT real model output.",
+ "story": "A clean opening gave you a comfortable, slightly better position until you forced the centre open with 18...f5 and 19...e4. White won a pawn and pressed hard, missed a big chance after 24...b5, and you then defended a worse rook ending actively until White settled for a repetition.",
+ "chapters": [
+  {
+   "title": "A healthy opening",
+   "kind": "opening",
+   "fromPly": 1,
+   "toPly": 34,
+   "anchorPly": 8,
+   "assessment": "well",
+   "narrative": "You claimed the centre with 4...d5, developed every piece and castled. By move 18 you were slightly better.",
+   "evidence": [
+    "the evaluation stayed between equal and slightly better for you"
+   ],
+   "lesson": "",
+   "diagram": false,
+   "explore": false
+  },
+  {
+   "title": "You force the position too soon",
+   "kind": "strategic_decision",
+   "fromPly": 36,
+   "toPly": 41,
+   "anchorPly": 38,
+   "decisionPly": 38,
+   "consequencePly": 41,
+   "assessment": "poorly",
+   "narrative": "In a quiet position you chose 18...f5 and then 19...e4 to force action. After 20.dxe4 fxe4 21.Nxe4 White's knight lands on e4 and your pawn is gone. Nxe4 is the consequence; the pawn break was the decision.",
+   "evidence": [
+    "after 19...e4 the evaluation went from slightly better for you to slightly worse"
+   ],
+   "lesson": "Before a pawn break, check what the opened lines give your opponent.",
+   "diagram": true,
+   "explore": true
+  },
+  {
+   "title": "White misses Ng5",
+   "kind": "missed_chance",
+   "fromPly": 48,
+   "toPly": 50,
+   "anchorPly": 49,
+   "assessment": "mixed",
+   "narrative": "24...b5 was a serious mistake, but White missed Ng5 and played 25.c5. You answered with 25...Be7, the only good move.",
+   "evidence": [
+    "Ng5 was Stockfish's choice for White"
+   ],
+   "lesson": "",
+   "diagram": true,
+   "explore": true
+  },
+  {
+   "title": "Active rook defence",
+   "kind": "defence",
+   "fromPly": 61,
+   "toPly": 80,
+   "anchorPly": 76,
+   "assessment": "well",
+   "narrative": "Instead of waiting, 33...Re2+ and 34...Ra2 activated your rook, and 38...Rc3 stopped the c-pawn.",
+   "evidence": [],
+   "lesson": "In a worse rook ending, an active rook is your best defender.",
+   "diagram": true,
+   "explore": false
+  },
+  {
+   "title": "White settles for a repetition",
+   "kind": "result",
+   "fromPly": 81,
+   "toPly": 98,
+   "anchorPly": 90,
+   "assessment": "mixed",
+   "narrative": "You stayed worse, but your king and rook kept enough activity that White chose to repeat.",
+   "evidence": [],
+   "lesson": "",
+   "diagram": true,
+   "explore": false
+  }
+ ],
+ "sequences": [
+  {
+   "id": "break",
+   "startPly": 36,
+   "endPly": 41,
+   "decisionPly": 38,
+   "consequencePly": 41,
+   "title": "The central break",
+   "explanation": "19...e4 forced the centre open before your pieces were ready. After the exchanges 21.Nxe4 picked up the pawn: that was the consequence, the break was the decision."
+  }
+ ],
+ "strengths": [
+  "A clean, well-developed opening.",
+  "Finding 25...Be7 and 38...Rc3 under pressure."
+ ],
+ "mistakes": [
+  "19...e4: forcing the centre open in a quiet position.",
+  "24...b5: a pawn push that gave White a tactical chance."
+ ],
+ "patterns": [],
+ "lessons": [
+  "A pawn break is a commitment: check what the opened lines give your opponent first.",
+  "In a worse rook ending, keep your rook active."
+ ],
+ "interactiveMoments": [
+  {
+   "ply": 38,
+   "kind": "choose_plan",
+   "why": "Keep the tension or break?"
+  },
+  {
+   "ply": 50,
+   "kind": "find_move",
+   "why": "Save the bishop"
+  },
+  {
+   "ply": 76,
+   "kind": "find_move",
+   "why": "Stop the c-pawn"
+  }
+ ],
+ "practice": [
+  {
+   "ply": 38,
+   "why": "Find a move that keeps the tension."
+  },
+  {
+   "ply": 76,
+   "why": "Stop the c-pawn."
+  }
+ ]
+}

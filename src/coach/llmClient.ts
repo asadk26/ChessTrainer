@@ -23,7 +23,19 @@ export function getLlmStatus(): Promise<LlmStatus> {
   return cached;
 }
 
-export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: 'report' | 'moment' | 'beta' = 'report'): Promise<string> {
+export type LlmTask = 'report' | 'moment' | 'beta' | 'guided';
+
+export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: LlmTask = 'report'): Promise<string> {
+  return (await llmCompleteWithUsage(prompt, token, maxTokens, task)).text;
+}
+
+/** Same, with the provider's token counts when it reports them. */
+export async function llmCompleteWithUsage(
+  prompt: string,
+  token?: string,
+  maxTokens = 16000,
+  task: LlmTask = 'report',
+): Promise<{ text: string; usage?: { input: number; output: number; thinking?: number } }> {
   const res = await fetch('/api/coach/complete', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { 'x-coach-token': token } : {}) },
@@ -31,7 +43,7 @@ export async function llmComplete(prompt: string, token?: string, maxTokens = 16
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `LLM request failed (${res.status})`);
-  return String(data.text ?? '');
+  return { text: String(data.text ?? ''), usage: data.usage };
 }
 
 /** Settings' "Test AI connection": a fixed tiny request through the whole chain (code, key, model). */

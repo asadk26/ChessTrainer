@@ -12,6 +12,8 @@ export interface LlmProvider {
   readonly name: 'anthropic' | 'openai' | 'gemini';
   readonly model: string;
   complete(req: LlmRequest): Promise<string>;
+  /** Token counts of the last completion, when the provider reports them. */
+  lastUsage?: { input: number; output: number; thinking?: number };
 }
 
 export type Env = Record<string, string | undefined>;
@@ -80,6 +82,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
  */
 export class GeminiProvider implements LlmProvider {
   readonly name = 'gemini' as const;
+  lastUsage?: { input: number; output: number; thinking?: number };
   constructor(
     private apiKey: string,
     readonly model: string,
@@ -101,7 +104,10 @@ export class GeminiProvider implements LlmProvider {
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
       promptFeedback?: { blockReason?: string };
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
     };
+    const u = data.usageMetadata;
+    if (u) this.lastUsage = { input: u.promptTokenCount ?? 0, output: u.candidatesTokenCount ?? 0, thinking: u.thoughtsTokenCount };
     if (data.promptFeedback?.blockReason) throw new Error(`Gemini declined this request (${data.promptFeedback.blockReason}).`);
     const c = data.candidates?.[0];
     const text = c?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';

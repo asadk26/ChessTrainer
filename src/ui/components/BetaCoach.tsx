@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Arrow, BetaChapter, BetaCoachReview, StoredGame } from '../../domain/types';
 import { betaReview } from '../actions';
-import { navigate, useApp } from '../store';
+import { navigate, useApp, useRoute } from '../store';
+import { AiWalkthroughView } from './AiWalkthroughView';
+import type { TokenUsage } from '../../domain/types';
 import { betaGrounding, betaPositions, buildBetaContext, currentReview, fmtEval } from '../../coach/betaCoach';
 import { buildMoveEvals } from '../../analysis/analyzeGame';
 import { positionCp } from '../../analysis/evaluation';
@@ -49,6 +51,8 @@ export function BetaCoach({ game }: { game: StoredGame }) {
   const [error, setError] = useState('');
   const [showContext, setShowContext] = useState(false);
   const view = useEngineView(game);
+  const { query } = useRoute();
+  const mode = query.get('view') === 'walk' ? 'walk' : 'story';
 
   const run = async (force: boolean) => {
     setState('loading');
@@ -114,7 +118,27 @@ export function BetaCoach({ game }: { game: StoredGame }) {
           {stale && <p className="muted small">The engine analysis or result changed since this was written — regenerate to update it.</p>}
         </section>
 
-        {r && <Review r={r} game={game} label={label} diagram={diagram} explore={explore} browse={browse} />}
+        <nav className="seg beta-modes" aria-label="AI Coach view">
+          <button className={`seg-btn ${mode === 'story' ? 'on' : ''}`} onClick={() => navigate(`/game/${game.id}/ai`)}>
+            Game story
+          </button>
+          <button className={`seg-btn ${mode === 'walk' ? 'on' : ''}`} onClick={() => navigate(`/game/${game.id}/ai?view=walk`)}>
+            Guided walkthrough
+          </button>
+        </nav>
+
+        {mode === 'walk' ? (
+          <AiWalkthroughView game={game} plan={r} />
+        ) : (
+          r && <Review r={r} game={game} label={label} diagram={diagram} explore={explore} browse={browse} />
+        )}
+        {(r?.usage || game.aiWalkthrough?.usage) && (
+          <p className="muted small">
+            Gemini usage for this game: {r?.usage && <>lesson plan {usageText(r.usage)}</>}
+            {r?.usage && game.aiWalkthrough?.usage && '; '}
+            {game.aiWalkthrough?.usage && <>walkthrough {usageText(game.aiWalkthrough.usage)}</>}. Replaying uses none.
+          </p>
+        )}
 
         <details className="small muted beta-context" open={showContext} onToggle={(e) => setShowContext((e.target as HTMLDetailsElement).open)}>
           <summary>Show the Stockfish evidence the AI is given</summary>
@@ -124,6 +148,9 @@ export function BetaCoach({ game }: { game: StoredGame }) {
     </HoverProvider>
   );
 }
+
+const usageText = (u: TokenUsage) =>
+  `${u.input.toLocaleString()} in / ${u.output.toLocaleString()} out${u.thinking ? ` (+${u.thinking.toLocaleString()} thinking)` : ''} tokens`;
 
 function Review({
   r,
