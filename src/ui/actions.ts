@@ -1,7 +1,8 @@
 // App-level operations that combine storage, engine and coaching.
-import type { AiExplanation, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
+import type { AiExplanation, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
+import { betaPrompt, buildBetaContext, parseBetaReview } from '../coach/betaCoach';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { findDuplicate } from '../chess/fingerprint';
 import { planSync, syncSummary, SyncError, type ChessComFetch } from '../sync/chesscom';
@@ -340,4 +341,34 @@ export async function explainLessons(gameId: string): Promise<number> {
     }
   }
   return n;
+}
+
+const betaInflight = new Map<string, Promise<BetaCoachReview>>();
+
+/**
+ * The Beta AI Coach's whole-game review (summary, insights, one training priority).
+ * Cached on the game; only regenerated when asked (`force`).
+ */
+export function betaReview(gameId: string, opts: { force?: boolean } = {}): Promise<BetaCoachReview> {
+  const running = betaInflight.get(gameId);
+  if (running) return running;
+  const job = (async () => {
+    const game = await repo.getGame(gameId);
+    if (!game) throw new Error('Game not found');
+    if (game.aiCoach && !opts.force) return game.aiCoach;
+    const settings = await repo.getSettings();
+    const ctx = buildBetaContext(game, await repo.listGames(), settings.rating);
+    if (!ctx) throw new Error('No engine analysis for this game yet.');
+    const status = await getLlmStatus();
+    if (!status.provider) throw new Error('No AI coach is configured.');
+    const text = await llmComplete(betaPrompt(ctx), settings.coachToken, 12000, 'beta');
+    const review = parseBetaReview(text, ctx, game, status.model);
+    const fresh = (await repo.getGame(gameId)) ?? game;
+    await repo.saveGame({ ...fresh, aiCoach: review });
+    return review;
+  })();
+  betaInflight.set(gameId, job);
+  const clear = () => void betaInflight.delete(gameId);
+  job.then(clear, clear);
+  return job;
 }

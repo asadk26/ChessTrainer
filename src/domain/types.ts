@@ -414,6 +414,8 @@ export interface StoredGame {
   aiExplanations?: Record<number, AiExplanation>;
   /** "This seems wrong" notes the player left on the coaching. */
   feedback?: CoachFeedback[];
+  /** The Beta AI Coach's whole-game review, cached until regenerated on request. */
+  aiCoach?: BetaCoachReview;
 }
 
 export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
@@ -445,6 +447,8 @@ export interface PlayerSettings {
   coachToken?: string;
   /** Optional Chess.com syncing (public API, no login). */
   chesscom?: ChessComSettings;
+  /** Beta AI Coach tab (Gemini's own whole-game review). On unless switched off. */
+  betaCoach?: boolean;
 }
 
 export type ChessComTimeClass = 'rapid' | 'blitz' | 'bullet' | 'daily';
@@ -501,5 +505,31 @@ export interface AiExplanation {
   model?: string;
   createdAt: number;
   /** Identifies the engine analysis it was based on; if the analysis changes, the explanation is stale. */
+  grounding: string;
+}
+
+/**
+ * The Beta AI Coach: the model's own instructional reading of a whole game,
+ * with Stockfish as evidence. Concrete tactical claims the engine data doesn't
+ * support are removed before it is stored (and listed in `removed`).
+ */
+export interface BetaCoachReview {
+  /** AI Game Summary: 2–4 paragraphs. */
+  summary: string[];
+  /** AI Insights. */
+  insights: { strengths: string[]; weaknesses: string[]; trend: string; observations: string[] };
+  /** AI Instructor: one training priority. */
+  instructor: {
+    priority: string;
+    whyItMatters: string;
+    moments: { ply: number; note: string }[];
+    thinkDifferently: string;
+    practice: { ply: number; why: string }[];
+  };
+  /** Statements dropped by the engine checks, with the reason. */
+  removed: { text: string; reason: string }[];
+  model?: string;
+  createdAt: number;
+  /** Identifies the engine analysis it was based on. */
   grounding: string;
 }

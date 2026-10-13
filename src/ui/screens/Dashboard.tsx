@@ -266,6 +266,14 @@ export function Dashboard() {
               AI instructor explanations ({llm.provider} · {llm.model}) — for each game's 1–2 lessons, and on request
             </label>
             )}
+            {llm.provider && (
+              <label className="check">
+                <input type="checkbox" checked={settings.betaCoach !== false} disabled={!settings.useLlm} onChange={(e) => updateSettings({ betaCoach: e.target.checked })} />
+                <span>
+                  <span className="beta-badge">Beta</span> AI Coach tab — the AI's own whole-game review (summary, insights, one training priority), shown next to the built-in coach for comparison
+                </span>
+              </label>
+            )}
             {llm.reason && <div className="muted small">{llm.reason}</div>}
             {llm.requiresToken && (
               <label>

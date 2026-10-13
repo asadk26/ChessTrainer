@@ -482,3 +482,10 @@ p { margin: 0 0 0.75rem; }
 .ai-box .eyebrow { display: block; margin-bottom: 0.25rem; }
 .ai-sections { margin: 0.2rem 0 0.3rem; }
 .ai-box.compact .ai-sections dd { font-size: 0.9rem; }
+
+/* Beta AI Coach */
+.beta-badge { display: inline-block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.05rem 0.35rem; border-radius: 4px; background: var(--accent); color: var(--card); vertical-align: middle; }
+.beta-coach .beta-para { display: block; margin: 0 0 0.7rem; line-height: 1.55; }
+.beta-coach h4 { margin: 0.9rem 0 0.35rem; font-size: 0.9rem; }
+.beta-practice { max-width: 200px; }
+.beta-coach details ul { padding-left: 1.1rem; }

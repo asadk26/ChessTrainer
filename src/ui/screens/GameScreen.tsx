@@ -11,6 +11,7 @@ import { engineNotes, gameStats } from '../../analysis/engineReview';
 import { repo } from '../../storage/repository';
 import { FlagButton } from '../components/FlagButton';
 import { AiExplain } from '../components/AiExplain';
+import { BetaCoach, useBetaCoachOn } from '../components/BetaCoach';
 import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
 import type { FeedbackWhere } from '../../domain/types';
 
@@ -130,6 +131,7 @@ function ItemAi({ game, plies }: { game: StoredGame; plies: number[] }) {
 
 function Summary({ game }: { game: StoredGame }) {
   const r = game.report!;
+  const betaOn = useBetaCoachOn();
   const lessons = game.moments.filter((m) => m.tier !== 'note').length;
   const stats = gameStats(game);
   const notes = engineNotes(game);
@@ -213,6 +215,11 @@ function Summary({ game }: { game: StoredGame }) {
         <button className="btn ghost" onClick={() => navigate(`/game/${game.id}/drills`)}>
           Drills
         </button>
+        {betaOn && (
+          <button className="btn ghost" onClick={() => navigate(`/game/${game.id}/ai`)}>
+            Compare with the AI Coach <span className="beta-badge">Beta</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -242,10 +249,11 @@ function OutcomeSelect({ game }: { game: StoredGame }) {
   );
 }
 
-export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summary' | 'review' | 'drills'; ply?: number; already?: boolean }) {
+export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summary' | 'review' | 'drills' | 'ai'; ply?: number; already?: boolean }) {
   const { games, refresh, llm } = useApp();
   const game = games.find((g) => g.id === id);
   const { progress, error, llmState, enrich } = useAnalysis(game);
+  const betaOn = useBetaCoachOn();
 
   // Reports from an older app version get re-coached from the stored engine
   // output (seconds, no engine run) so they pick up diagrams and new findings.
@@ -275,9 +283,13 @@ export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summar
       </div>
       {game.status === 'analyzed' && (
         <nav className="tabs">
-          {(['summary', 'review', 'drills'] as const).map((t) => (
+          {(['summary', 'review', 'drills', ...(betaOn ? (['ai'] as const) : [])] as const).map((t) => (
             <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => navigate(t === 'summary' ? `/game/${id}` : `/game/${id}/${t}`)}>
-              {t === 'summary' ? 'Summary' : t === 'review' ? 'Guided review' : 'Drills'}
+              {t === 'summary' ? 'Summary' : t === 'review' ? 'Guided review' : t === 'drills' ? 'Drills' : (
+                <>
+                  AI Coach <span className="beta-badge">Beta</span>
+                </>
+              )}
             </button>
           ))}
         </nav>
@@ -323,6 +335,7 @@ export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summar
       {header}
       {already && <div className="feedback neutral">You'd already imported this game, so here's the existing one (no duplicate added).</div>}
       {tab === 'summary' && <Summary game={game} />}
+      {tab === 'ai' && <BetaCoach game={game} />}
       {tab === 'review' && <GuidedReview key={game.id + (ply ?? '')} game={game} initialPly={ply} />}
       {tab === 'drills' && (
         <HoverProvider>

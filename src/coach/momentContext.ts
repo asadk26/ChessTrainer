@@ -28,7 +28,7 @@ export interface MomentContext {
 }
 
 /** Recurring patterns from recent games: themes with credible findings in 2+ of them. */
-function recurringPatterns(prior: PriorGameFindings[], here: Finding[]) {
+export function recurringPatterns(prior: PriorGameFindings[], here: Finding[]) {
   const recent = [...prior].sort((a, b) => b.playedAt - a.playedAt).slice(0, 8);
   const games = new Map<string, number>();
   for (const g of recent) {

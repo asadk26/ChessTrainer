@@ -23,7 +23,7 @@ export function getLlmStatus(): Promise<LlmStatus> {
   return cached;
 }
 
-export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: 'report' | 'moment' = 'report'): Promise<string> {
+export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: 'report' | 'moment' | 'beta' = 'report'): Promise<string> {
   const res = await fetch('/api/coach/complete', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { 'x-coach-token': token } : {}) },

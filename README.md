@@ -131,6 +131,35 @@ any. "Explain this more deeply" appears under each item in *What hurt you*, in R
 inaccurate moves and on note cards, and in the practice board; the lessons explain themselves.
 Without the access code those places show a reminder instead.
 
+### Beta AI Coach (experimental)
+
+A separate **AI Coach · Beta** tab on each game (switch it off in Settings) lets the model form its
+own instructional view of the whole game instead of rewording the built-in coach, so you can
+compare the two. It produces:
+
+1. **AI Game Summary**: 2–4 paragraphs on what kind of game it was, what you did well, where you
+   made life hard for yourself, and what decided it.
+2. **AI Insights**: strengths, weaknesses or habits, the trend across recent games, and one or two
+   observations that aren't a single engine mistake.
+3. **AI Instructor**: one training priority, why it matters, the moments that show it, how to think
+   differently, and up to two positions from the game to practise. This works after a clean win too.
+
+Grounding (`src/coach/betaCoach.ts`): the model gets the PGN, your colour, rating and level, the
+evaluation timeline, material swings, critical positions with Stockfish's top moves and short
+lines, positional checkpoints, the rule-based findings and your recent games and patterns. The
+fixed server-side prompt (`BETA_COACH_SYSTEM_PROMPT`) says: "Use Stockfish as evidence, but form
+your own instructional interpretation…". Stockfish stays authoritative for legality, evaluations,
+best moves, tactics, material and mates. Before anything is shown, each sentence is checked:
+
+- a sentence naming a move that isn't in the game or in the supplied lines is removed;
+- a material or tactic claim ("wins a piece", "hangs the queen", a fork) is removed unless the
+  engine data shows material changing hands with that move;
+- a mate claim is removed unless the engine data shows a mate.
+
+The review shows how many statements were removed, and why. Reviews are cached on the game and only
+regenerated when you press Regenerate. If the analysis or result changes, the tab says the review
+is stale.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value
