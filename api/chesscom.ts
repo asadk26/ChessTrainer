@@ -1,6 +1,6 @@
 // Vercel Function: GET /api/chesscom?path=player/{name}/games/... — read-only
 // proxy to Chess.com's public API that identifies itself with a User-Agent.
-import { proxyChessCom } from '../server/chesscomProxy';
+import { proxyChessCom } from '../server/chesscomProxy.js';
 
 export async function GET(request: Request): Promise<Response> {
   const r = await proxyChessCom(new URL(request.url).searchParams.get('path'), process.env);

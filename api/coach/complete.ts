@@ -1,7 +1,7 @@
 // Vercel Function: POST /api/coach/complete — asks the configured LLM to phrase
 // the coaching. The API key stays in Vercel's environment variables; callers
 // must present COACH_ACCESS_TOKEN in the x-coach-token header.
-import { coachComplete } from '../../server/coachApi';
+import { coachComplete } from '../../server/coachApi.js';
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;

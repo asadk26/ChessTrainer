@@ -83,7 +83,7 @@ export class GeminiProvider implements LlmProvider {
   constructor(
     private apiKey: string,
     readonly model: string,
-    private fetchImpl: typeof fetch = (...a) => fetch(...a),
+    private fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {}
   async complete(req: LlmRequest): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;

@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
-import type { Env } from './llm';
-import { coachComplete, coachStatus, type ApiResult } from './coachApi';
-import { proxyChessCom } from './chesscomProxy';
+import type { Env } from './llm.js';
+import { coachComplete, coachStatus, type ApiResult } from './coachApi.js';
+import { proxyChessCom } from './chesscomProxy.js';
 
 type Next = (err?: unknown) => void;
 

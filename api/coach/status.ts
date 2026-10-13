@@ -1,5 +1,5 @@
 // Vercel Function: GET /api/coach/status — is an AI coach configured on this deployment?
-import { coachStatus } from '../../server/coachApi';
+import { coachStatus } from '../../server/coachApi.js';
 
 export function GET(): Response {
   const r = coachStatus({ env: process.env, hosted: true });

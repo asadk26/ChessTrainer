@@ -86,6 +86,12 @@ analysis of games you have on both, never deletes anything, and never imports th
 **Other hosts:** `dist/` works on any static host (Netlify, Cloudflare Pages, GitHub Pages at a root
 domain). You only lose the hosted AI coach, and the app falls back to built-in coaching automatically.
 
+
+> **Server code conventions.** `api/` and `server/` run as plain Node ESM on Vercel (`"type": "module"`),
+> so relative imports there must use explicit `.js` extensions (e.g. `'../server/coachApi.js'`).
+> `tsconfig.api.json` checks them with Vercel's settings (NodeNext) as part of `npm run build`, and
+> `tests/api-runtime.test.ts` compiles the functions that way and loads them with plain Node.
+
 ## AI instructor with Gemini (optional, personal use)
 
 The chain stays: **Stockfish → structured chess facts → deterministic lesson selection → AI

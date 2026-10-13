@@ -2,7 +2,7 @@
 // middleware and the Vercel function. It exists to send a descriptive User-Agent
 // (Chess.com asks API clients to identify themselves) and only ever forwards the
 // two endpoints game syncing needs — it is not an open proxy.
-import type { Env } from './llm';
+import type { Env } from './llm.js';
 
 const ALLOWED = /^player\/[a-z0-9_-]{3,25}\/games\/(archives|\d{4}\/\d{2})$/i;
 const UPSTREAM = 'https://api.chess.com/pub/';

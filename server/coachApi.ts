@@ -2,8 +2,8 @@
 // dev/preview middleware (server/coachPlugin.ts) and the Vercel functions
 // (api/coach/*.ts). API keys only ever live here, on the server side.
 import { timingSafeEqual } from 'node:crypto';
-import { COACH_SYSTEM_PROMPT, MOMENT_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
-import { providerFromEnv, type Env, type LlmProvider } from './llm';
+import { COACH_SYSTEM_PROMPT, MOMENT_SYSTEM_PROMPT } from '../src/coach/systemPrompt.js';
+import { providerFromEnv, type Env, type LlmProvider } from './llm.js';
 
 export interface ApiResult {
   status: number;
