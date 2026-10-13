@@ -219,6 +219,63 @@ The regression game is `tests/fixtures/draw-game.pgn` (`tests/beta-coach.test.ts
 `tests/walkthrough.test.ts`). The `draw-game-mock-*.json` answers are hand-written test fixtures,
 not real model output.
 
+### Training from your games (experimental)
+
+AI Coach tab → **Training**. The question is "what weakness did this game reveal that deserves
+practice away from this exact position?", not "what move did Stockfish dislike?".
+
+1. **Diagnosis** (`src/training/diagnosis.ts`). This part is deterministic, from Stockfish's
+   one-depth evaluations and the board, so the same game always gets the same diagnosis. Each
+   game is scored for:
+
+   | Category | What it looks for |
+   |---|---|
+   | Opening development | early drift, an early error, development lagging for the move number, a piece that walked off a guard duty, the same opening going wrong in earlier games |
+   | Blunder check | material lost or a tactic allowed at once |
+   | Missed tactic | a winning line you didn't play |
+   | Strategic decision | the first quiet move that started a run against you, credited with half of what followed |
+   | Conversion | giving back a winning advantage |
+   | Endgame technique | only-moves you found (a strength to reinforce) |
+
+   The top score is the priority; one more lesson is added only if it's a real case on its own.
+
+   **Opening understanding vs one-off error:** an error in the opening while development was
+   unfinished (pieces at home, king uncastled, a piece doing a guard job) is an
+   opening-understanding problem, and you train the opening structure. The same kind of error with
+   development complete is a blunder-check problem.
+2. **Drills.** Each lesson gets only the positions that help, at most four:
+   - the game position;
+   - a position derived from the game's line (e.g. "what does Black take now?");
+   - one position from another of your games with the same signal, when there is one.
+
+   Formats depend on the skill: strategic choice, tactic, predict the threat, compare plans,
+   replay a sequence and decide, why it worked, or the opening lesson. Stockfish grades every
+   answer as correct / reasonable / misses the idea, and several good moves count.
+3. **Opening trainer** (`src/training/opening.ts`). A line built from your own opening:
+   - It keeps your moves while they're sound, and recommends something else only where Stockfish
+     rated yours an inaccuracy or worse.
+   - Among the moves Stockfish rates good or better, it prefers developing moves, castling, the
+     centre and (with Lichess data) what players near your rating play.
+   - It stops at a healthy, castled middlegame.
+
+   You replay it from move 1: your moves are graded, alternatives that are fine are accepted,
+   the idea, what's still at home and which piece is guarding what are explained, and you repeat
+   it until the run is clean.
+4. **Texts.** The AI coach (`TRAINING_SYSTEM_PROMPT`, one call per game, about 2–3k tokens in)
+   chooses among the formats each position allows, may drop drills (never add them), and writes
+   the questions, the graded feedback and the opening's "why". Everything is refereed against
+   Stockfish. Without the AI, templates are used.
+
+**Lichess opening data (optional).** The Lichess opening explorer now needs a free personal API
+token. Create one at <https://lichess.org/account/oauth/token> (no scopes needed) and set
+`LICHESS_TOKEN`; it stays server-side behind `/api/lichess`, which needs the same access code as
+the AI coach when hosted. Responses are cached locally for a month. Rating groups are chosen near
+your Chess.com rating plus about 350. Without a token the trainer uses Stockfish and development
+principles.
+
+From the command line: `npm run beta-review -- game.pgn w --training` writes `training.md`, plus
+`training-prompt.txt` with the exact AI input.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value

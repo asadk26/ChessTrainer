@@ -2,6 +2,7 @@
 //
 //   npm run beta-review -- game.pgn b [--rating 900] [--out beta-out] [--positions recorded-positions.json]
 //                         [--plan-answer recorded.json --walk-answer recorded.json]   (no key needed)
+//                         [--training [--training-answer recorded.json]]   experimental training for the game
 //
 // 1. Stockfish analyses every position (depth 12, MultiPV 3) and re-checks the
 //    built-in coach's critical positions at depth 18, exactly as the app does.
@@ -99,6 +100,32 @@ const ask = async (system: string, prompt: string, recorded: string, label: stri
   return { text, usage: provider.lastUsage, source: model };
 };
 const estimate = (chars: number) => `~${Math.round(chars / 4).toLocaleString()} tokens`;
+
+// Training (experimental): diagnosis, drills and — for opening weaknesses — the opening lesson.
+// Single game, so related positions from other games aren't available here; the app has your history.
+if (args.includes('--training')) {
+  const { diagnose, buildLessons } = await import('../src/training/diagnosis.ts');
+  const { buildOpeningLine, OPENING_DEPTH } = await import('../src/training/opening.ts');
+  const { assemblePlan, trainingFacts, trainingPrompt } = await import('../src/training/plan.ts');
+  const { trainingMarkdown } = await import('../src/training/report.ts');
+  const { TRAINING_SYSTEM_PROMPT } = await import('../src/coach/systemPrompt.ts');
+  const diag = diagnose(game, [game])!;
+  const lessons = buildLessons(game, [game], diag);
+  let line;
+  if (lessons.some((l) => l.drafts.some((d) => d.format === 'opening_lesson'))) {
+    const eng = createNodeEngine();
+    line = await buildOpeningLine(game, { analyse: (fen) => eng.analyse(fen, { depth: OPENING_DEPTH, multiPv: 4 }) });
+    eng.dispose();
+  }
+  const facts = trainingFacts(game, diag, lessons, line, () => game, rating);
+  writeFileSync(join(out, 'training-prompt.txt'), `=== SYSTEM (fixed, server-side) ===\n${TRAINING_SYSTEM_PROMPT}\n\n=== USER ===\n${trainingPrompt(facts)}\n`);
+  const answer = await ask(TRAINING_SYSTEM_PROMPT, trainingPrompt(facts), opt('training-answer', ''), 'training');
+  const t = assemblePlan({ game, all: [game], rating, diag, lessons, line, written: answer?.text, model: answer?.source, usage: answer?.usage });
+  writeFileSync(join(out, 'training.json'), JSON.stringify(t, null, 1));
+  writeFileSync(join(out, 'training.md'), trainingMarkdown(t, game, () => game));
+  console.log(`Wrote ${out}/training.md (priority: ${t.priority.category}; ${t.lessons.length} lesson(s); texts by ${t.writtenBy}).`);
+  process.exit(0);
+}
 
 const planAnswer = await ask(BETA_COACH_SYSTEM_PROMPT, betaPrompt(ctx), opt('plan-answer', ''), 'lesson plan');
 if (!planAnswer) {

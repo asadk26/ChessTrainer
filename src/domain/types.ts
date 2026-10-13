@@ -424,6 +424,8 @@ export interface StoredGame {
   aiCoachEval?: { depth: number; positions: PositionEval[] };
   /** The AI walkthrough derived from the Beta lesson plan. */
   aiWalkthrough?: AiWalkthrough;
+  /** Experimental training built from this game: priority, drills and (when needed) an opening lesson. */
+  aiTraining?: TrainingPlan;
 }
 
 export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
@@ -625,5 +627,131 @@ export interface AiWalkthrough {
   usage?: TokenUsage;
   createdAt: number;
   /** The plan's createdAt plus the engine grounding: a new plan or analysis makes this stale. */
+  grounding: string;
+}
+
+// -------------------------------------------------------------- training ---
+
+/** The kind of weakness (or strength) a game revealed, as something to practise away from the game. */
+export type TrainingCategory =
+  | 'opening_development'
+  | 'blunder_check'
+  | 'missed_tactic'
+  | 'strategic_decision'
+  | 'conversion'
+  | 'endgame_technique';
+
+export type DrillFormat =
+  | 'tactical_puzzle'
+  | 'strategic_choice'
+  | 'predict_threat'
+  | 'compare_plans'
+  | 'replay_sequence'
+  | 'endgame_technique'
+  | 'why_good'
+  | 'opening_lesson';
+
+/** One piece of evidence behind a training priority (from Stockfish and the board, not the model). */
+export interface TrainingSignal {
+  kind: string;
+  ply?: number;
+  text: string;
+}
+
+export interface GradedMove {
+  uci: string;
+  san: string;
+  quality: 'best' | 'equal' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
+}
+
+export interface TrainingDrill {
+  id: string;
+  format: DrillFormat;
+  /** Formats the position supports; the coach may pick any of them. */
+  formats: DrillFormat[];
+  source: 'this_game' | 'other_game' | 'derived';
+  gameId: string;
+  gameLabel: string;
+  /** The game move this position comes before (or, for predict_threat, after). */
+  ply: number;
+  fen: string;
+  orientation: Color;
+  /** Side to move in `fen` (the side whose move is asked for). */
+  toMove: Color;
+  /** Stockfish's graded candidates at `fen`: best / equal / good count. */
+  graded: GradedMove[];
+  /** For choice formats: the moves to choose between (Stockfish-graded). */
+  options?: GradedMove[];
+  /** For replay_sequence: the plies played through, and where to stop and decide. */
+  sequence?: { fromPly: number; toPly: number; decisionPly: number };
+  /** Deterministic engine facts shown with the drill. */
+  facts: string[];
+  prompt: string;
+  hint?: string;
+  feedback: { correct: string; reasonable: string; misses: string };
+  explanation: string;
+}
+
+export interface TrainingLesson {
+  id: string;
+  category: TrainingCategory;
+  title: string;
+  /** The skill being trained, as a habit. */
+  skill: string;
+  why: string;
+  signals: TrainingSignal[];
+  drills: TrainingDrill[];
+}
+
+export interface OpeningStep {
+  ply: number;
+  color: Color;
+  /** Position before the move. */
+  fen: string;
+  side: 'yours' | 'theirs';
+  move: { uci: string; san: string };
+  /** Your moves: every move Stockfish rates good or better, graded. */
+  acceptable?: GradedMove[];
+  /** Your moves: Stockfish's view (for you) and, when known, how often players near your rating choose them. */
+  candidates?: { uci: string; san: string; quality: GradedMove['quality']; evalForYou: string; share?: number }[];
+  /** Their moves: how often players near your rating choose them. */
+  popular?: { san: string; share: number }[];
+  /** What happened in your game at this point, while the line still follows it. */
+  inGame?: { san: string; quality: GradedMove['quality'] };
+  undeveloped: string[];
+  castled: boolean;
+  /** "Bc1 is the only guard of b2 (attacked by the bishop on f6)". */
+  duties: string[];
+  idea: string;
+}
+
+export interface OpeningLesson {
+  name: string;
+  userColor: Color;
+  steps: OpeningStep[];
+  endReason: string;
+  /** Where your game left the recommended plan, if it did. */
+  deviation?: { ply: number; played: string; recommended: string };
+  title: string;
+  summary: string;
+  principles: string[];
+  middlegamePlan: string;
+  traps: string[];
+  /** Whether Lichess frequencies were available when it was built. */
+  lichess: boolean;
+}
+
+export interface TrainingPlan {
+  version: 1;
+  priority: { category: TrainingCategory; title: string; why: string; signals: TrainingSignal[] };
+  /** The other candidates the diagnosis considered, with their scores (for transparency). */
+  considered: { category: TrainingCategory; score: number; reason: string }[];
+  lessons: TrainingLesson[];
+  opening?: OpeningLesson;
+  /** 'template' when no AI wrote the texts. */
+  writtenBy: string;
+  usage?: TokenUsage;
+  removed: { text: string; reason: string }[];
+  createdAt: number;
   grounding: string;
 }

@@ -3,6 +3,7 @@ import type { Plugin } from 'vite';
 import type { Env } from './llm.js';
 import { coachComplete, coachStatus, type ApiResult } from './coachApi.js';
 import { proxyChessCom } from './chesscomProxy.js';
+import { proxyLichess } from './lichessProxy.js';
 
 type Next = (err?: unknown) => void;
 
@@ -24,13 +25,19 @@ function send(res: ServerResponse, r: ApiResult) {
   res.end(JSON.stringify(r.body));
 }
 
-/** Adds /api/coach/status, /api/coach/complete and /api/chesscom to the local dev and preview servers. */
+/** Adds /api/coach/status, /api/coach/complete, /api/chesscom and /api/lichess to the local dev and preview servers. */
 export function coachApiPlugin(env: Env): Plugin {
   // Locally there's no open-proxy risk, so an access token is optional.
   const opts = { env, hosted: false };
   const handler = async (req: IncomingMessage, res: ServerResponse, next: Next) => {
     if (req.url?.startsWith('/api/chesscom')) {
       const r = await proxyChessCom(new URL(req.url, 'http://local').searchParams.get('path'), env);
+      res.statusCode = r.status;
+      for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v);
+      return res.end(r.body);
+    }
+    if (req.url?.startsWith('/api/lichess')) {
+      const r = await proxyLichess(new URL(req.url, 'http://local').searchParams, env, { hosted: false });
       res.statusCode = r.status;
       for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v);
       return res.end(r.body);

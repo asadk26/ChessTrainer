@@ -1,5 +1,5 @@
 // App-level operations that combine storage, engine and coaching.
-import type { AiExplanation, AiWalkthrough, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
+import type { AiExplanation, AiWalkthrough, BetaCoachReview, TrainingPlan, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
 import { BETA_DEPTH, betaPrompt, buildBetaContext, currentReview, evaluateForBeta, needsBetaEval, parseBetaReview } from '../coach/betaCoach';
@@ -15,6 +15,10 @@ import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
 import { buildCoachPrompt, extractJson, mergeLlmOutput } from '../coach/llmCoach';
 import { getLlmStatus, llmComplete, llmCompleteWithUsage } from '../coach/llmClient';
+import { diagnose, buildLessons } from '../training/diagnosis';
+import { buildOpeningLine, OPENING_DEPTH } from '../training/opening';
+import { assemblePlan, trainingFacts, trainingGrounding, trainingPrompt } from '../training/plan';
+import { lichessExplorer } from '../training/lichessClient';
 import { buildWalkContext, currentWalkthrough, parseWalkthrough, walkGrounding, walkPrompt } from '../coach/walkthrough';
 import { positionCp, winPercent } from '../analysis/evaluation';
 
@@ -346,6 +350,19 @@ export async function explainLessons(gameId: string): Promise<number> {
 
 const betaInflight = new Map<string, Promise<BetaCoachReview>>();
 
+/** The Beta evidence's one-depth Stockfish pass, made once per game in the browser. */
+async function ensureBetaEval(game: StoredGame, onProgress?: (stage: string) => void): Promise<StoredGame> {
+  if (!needsBetaEval(game)) return game;
+  const engine = await getBrowserEngine();
+  if (!engine) throw new Error('Stockfish could not start in this browser.');
+  const own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), (done, total) =>
+    onProgress?.(`Stockfish is checking every move at depth ${BETA_DEPTH} (${done}/${total})… this happens once per game`),
+  );
+  const next = { ...((await repo.getGame(game.id)) ?? game), aiCoachEval: own };
+  await repo.saveGame(next);
+  return next;
+}
+
 /**
  * The Beta AI Coach's whole-game review. First Stockfish evaluates every position
  * once at one depth (kept apart from the built-in coach's analysis), then the model
@@ -363,15 +380,7 @@ export function betaReview(
     if (!game) throw new Error('Game not found');
     const cached = currentReview(game);
     if (cached && !opts.force) return cached;
-    if (needsBetaEval(game)) {
-      const engine = await getBrowserEngine();
-      if (!engine) throw new Error('Stockfish could not start in this browser.');
-      const own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), (done, total) =>
-        opts.onProgress?.(`Stockfish is checking every move at depth ${BETA_DEPTH} (${done}/${total})… this happens once per game`),
-      );
-      game = { ...((await repo.getGame(gameId)) ?? game), aiCoachEval: own };
-      await repo.saveGame(game);
-    }
+    game = await ensureBetaEval(game, opts.onProgress);
     const settings = await repo.getSettings();
     const ctx = buildBetaContext(game, await repo.listGames(), settings.rating);
     if (!ctx) throw new Error('No engine analysis for this game yet.');
@@ -417,6 +426,64 @@ export function aiWalkthrough(gameId: string, opts: { force?: boolean; onProgres
   })();
   walkInflight.set(gameId, job);
   const clear = () => void walkInflight.delete(gameId);
+  job.then(clear, clear);
+  return job;
+}
+
+const trainingInflight = new Map<string, Promise<TrainingPlan>>();
+
+/**
+ * Experimental training for one game: the diagnosis and drills (from Stockfish), an opening
+ * lesson when the weakness is in the opening (Stockfish + Lichess data when available), and
+ * the coaching texts (AI coach when available, templates otherwise). Cached on the game.
+ */
+export function buildTraining(gameId: string, opts: { force?: boolean; onProgress?: (stage: string) => void } = {}): Promise<TrainingPlan> {
+  const running = trainingInflight.get(gameId);
+  if (running) return running;
+  const job = (async () => {
+    let game = await repo.getGame(gameId);
+    if (!game) throw new Error('Game not found');
+    game = await ensureBetaEval(game, opts.onProgress);
+    const all = await repo.listGames();
+    const settings = await repo.getSettings();
+    const plan = currentReview(game);
+    const grounding = trainingGrounding(game, all, plan?.createdAt);
+    if (game.aiTraining && !opts.force && game.aiTraining.grounding === grounding) return game.aiTraining;
+    opts.onProgress?.('Looking for what this game revealed…');
+    const diag = diagnose(game, all);
+    if (!diag) throw new Error('No engine analysis for this game yet.');
+    const lessons = buildLessons(game, all, diag);
+    let line;
+    if (lessons.some((l) => l.drafts.some((d) => d.format === 'opening_lesson'))) {
+      const engine = await getBrowserEngine();
+      if (!engine) throw new Error('Stockfish could not start in this browser.');
+      line = await buildOpeningLine(game, {
+        analyse: (fen) => engine.analyse(fen, { depth: OPENING_DEPTH, multiPv: 4 }),
+        explorer: lichessExplorer(settings.rating, settings.coachToken),
+        onProgress: (ply) => opts.onProgress?.(`Building your opening lesson (move ${Math.ceil(ply / 2)})…`),
+      });
+    }
+    let written: string | undefined;
+    let usage;
+    const status = await getLlmStatus();
+    if (status.provider && settings.useLlm && (!status.requiresToken || settings.coachToken)) {
+      opts.onProgress?.('The coach is writing your training… (usually 20–40 seconds)');
+      const gameOf = (id: string) => all.find((g) => g.id === id) ?? (id === game!.id ? game : undefined);
+      try {
+        const r = await llmCompleteWithUsage(trainingPrompt(trainingFacts(game, diag, lessons, line, gameOf, settings.rating, plan?.story)), settings.coachToken, 32000, 'training');
+        written = r.text;
+        usage = r.usage;
+      } catch (e) {
+        console.warn('AI training texts failed; using templates.', e);
+      }
+    }
+    const training = assemblePlan({ game, all, rating: settings.rating, diag, lessons, line, written, model: status.model, usage, planCreatedAt: plan?.createdAt });
+    const fresh = (await repo.getGame(gameId)) ?? game;
+    await repo.saveGame({ ...fresh, aiTraining: training });
+    return training;
+  })();
+  trainingInflight.set(gameId, job);
+  const clear = () => void trainingInflight.delete(gameId);
   job.then(clear, clear);
   return job;
 }

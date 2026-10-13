@@ -2,7 +2,7 @@
 // dev/preview middleware (server/coachPlugin.ts) and the Vercel functions
 // (api/coach/*.ts). API keys only ever live here, on the server side.
 import { timingSafeEqual } from 'node:crypto';
-import { BETA_COACH_SYSTEM_PROMPT, COACH_SYSTEM_PROMPT, GUIDED_REVIEW_SYSTEM_PROMPT, MOMENT_SYSTEM_PROMPT } from '../src/coach/systemPrompt.js';
+import { BETA_COACH_SYSTEM_PROMPT, COACH_SYSTEM_PROMPT, GUIDED_REVIEW_SYSTEM_PROMPT, MOMENT_SYSTEM_PROMPT, TRAINING_SYSTEM_PROMPT } from '../src/coach/systemPrompt.js';
 import { providerFromEnv, type Env, type LlmProvider } from './llm.js';
 
 export interface ApiResult {
@@ -66,7 +66,15 @@ export async function coachComplete(opts: ApiOptions, givenToken: string | null 
     // The system prompt is fixed server-side; the browser only supplies game facts.
     // Which fixed prompt: the whole-game summary, one teaching moment, or the Beta AI Coach.
     const system =
-      body.task === 'moment' ? MOMENT_SYSTEM_PROMPT : body.task === 'beta' ? BETA_COACH_SYSTEM_PROMPT : body.task === 'guided' ? GUIDED_REVIEW_SYSTEM_PROMPT : COACH_SYSTEM_PROMPT;
+      body.task === 'moment'
+        ? MOMENT_SYSTEM_PROMPT
+        : body.task === 'beta'
+          ? BETA_COACH_SYSTEM_PROMPT
+          : body.task === 'guided'
+            ? GUIDED_REVIEW_SYSTEM_PROMPT
+            : body.task === 'training'
+              ? TRAINING_SYSTEM_PROMPT
+              : COACH_SYSTEM_PROMPT;
     const text = await provider.complete({ system, prompt: body.prompt, maxTokens });
     return { status: 200, body: provider.lastUsage ? { text, usage: provider.lastUsage } : { text } };
   } catch (e) {

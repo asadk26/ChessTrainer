@@ -3,6 +3,7 @@ import type { Arrow, BetaChapter, BetaCoachReview, StoredGame } from '../../doma
 import { betaReview } from '../actions';
 import { navigate, useApp, useRoute } from '../store';
 import { AiWalkthroughView } from './AiWalkthroughView';
+import { TrainingView } from './TrainingView';
 import type { TokenUsage } from '../../domain/types';
 import { betaGrounding, betaPositions, buildBetaContext, currentReview, fmtEval } from '../../coach/betaCoach';
 import { buildMoveEvals } from '../../analysis/analyzeGame';
@@ -52,7 +53,7 @@ export function BetaCoach({ game }: { game: StoredGame }) {
   const [showContext, setShowContext] = useState(false);
   const view = useEngineView(game);
   const { query } = useRoute();
-  const mode = query.get('view') === 'walk' ? 'walk' : 'story';
+  const mode = query.get('view') === 'walk' ? 'walk' : query.get('view') === 'train' ? 'train' : 'story';
 
   const run = async (force: boolean) => {
     setState('loading');
@@ -125,10 +126,15 @@ export function BetaCoach({ game }: { game: StoredGame }) {
           <button className={`seg-btn ${mode === 'walk' ? 'on' : ''}`} onClick={() => navigate(`/game/${game.id}/ai?view=walk`)}>
             Guided walkthrough
           </button>
+          <button className={`seg-btn ${mode === 'train' ? 'on' : ''}`} onClick={() => navigate(`/game/${game.id}/ai?view=train`)}>
+            Training <span className="beta-badge">Exp</span>
+          </button>
         </nav>
 
         {mode === 'walk' ? (
           <AiWalkthroughView game={game} plan={r} />
+        ) : mode === 'train' ? (
+          <TrainingView game={game} />
         ) : (
           r && <Review r={r} game={game} label={label} diagram={diagram} explore={explore} browse={browse} />
         )}

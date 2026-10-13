@@ -126,7 +126,7 @@ export async function evaluateForBeta(
   return { depth: BETA_DEPTH, positions };
 }
 
-interface Series {
+export interface Series {
   positions: PositionEval[];
   moves: MoveEval[];
   /** Student-POV centipawns after i plies. */
@@ -138,6 +138,11 @@ interface Series {
 }
 
 const capCp = (c: number) => Math.max(-1500, Math.min(1500, c));
+
+/** The Beta evidence series (consistent-depth evaluations, student POV), shared with the training builder. */
+export function betaSeries(game: StoredGame): Series | undefined {
+  return series(game);
+}
 
 function series(game: StoredGame): Series | undefined {
   const positions = betaPositions(game);

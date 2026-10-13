@@ -23,7 +23,7 @@ export function getLlmStatus(): Promise<LlmStatus> {
   return cached;
 }
 
-export type LlmTask = 'report' | 'moment' | 'beta' | 'guided';
+export type LlmTask = 'report' | 'moment' | 'beta' | 'guided' | 'training';
 
 export async function llmComplete(prompt: string, token?: string, maxTokens = 16000, task: LlmTask = 'report'): Promise<string> {
   return (await llmCompleteWithUsage(prompt, token, maxTokens, task)).text;

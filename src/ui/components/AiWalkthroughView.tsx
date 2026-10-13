@@ -14,6 +14,7 @@ import { CoachText, HoverProvider } from './CoachText';
 import { Verdict } from './reviewParts';
 import { usePracticeBoard } from './PracticeBoard';
 import { useAiAvailable } from './AiExplain';
+import { useKeepTop } from './useKeepTop';
 
 /** Walkthroughs whose automatic first write failed this session (not retried on every visit). */
 const failed = new Set<string>();
@@ -250,6 +251,7 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
         : other(user)
       : undefined;
 
+  const keepTop = useKeepTop<HTMLDivElement>(`${stopIdx}|${!!answer}|${moving}`);
   const marks = Object.fromEntries(stops.map((e) => [e.ply, e.type === 'interactive' ? ('good' as const) : ('note' as const)]));
 
   let commentary: React.ReactNode;
@@ -423,7 +425,7 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
 
   return (
     <HoverProvider>
-      <div className="rv walk">
+      <div className="rv walk" ref={keepTop}>
         <MoveStrip plies={game.plies} current={pos} marks={marks} onSelect={stepTo} />
         <div className="rv-grid">
           <div className="rv-prompt walk-progress small muted">
