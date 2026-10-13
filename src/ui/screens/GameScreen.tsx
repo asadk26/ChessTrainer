@@ -249,7 +249,7 @@ function OutcomeSelect({ game }: { game: StoredGame }) {
   );
 }
 
-export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summary' | 'review' | 'drills' | 'ai'; ply?: number; already?: boolean }) {
+export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab: 'summary' | 'review' | 'drills' | 'ai'; ply?: number; explore?: boolean; already?: boolean }) {
   const { games, refresh, llm } = useApp();
   const game = games.find((g) => g.id === id);
   const { progress, error, llmState, enrich } = useAnalysis(game);
@@ -336,7 +336,7 @@ export function GameScreen({ id, tab, ply, already }: { id: string; tab: 'summar
       {already && <div className="feedback neutral">You'd already imported this game, so here's the existing one (no duplicate added).</div>}
       {tab === 'summary' && <Summary game={game} />}
       {tab === 'ai' && <BetaCoach game={game} />}
-      {tab === 'review' && <GuidedReview key={game.id + (ply ?? '')} game={game} initialPly={ply} />}
+      {tab === 'review' && <GuidedReview key={game.id + (ply ?? '') + (explore ? 'x' : '')} game={game} initialPly={ply} explore={explore} />}
       {tab === 'drills' && (
         <HoverProvider>
           <DrillList gameId={game.id} />

@@ -414,8 +414,10 @@ export interface StoredGame {
   aiExplanations?: Record<number, AiExplanation>;
   /** "This seems wrong" notes the player left on the coaching. */
   feedback?: CoachFeedback[];
-  /** The Beta AI Coach's whole-game review, cached until regenerated on request. */
-  aiCoach?: BetaCoachReview;
+  /** The Beta AI Coach's whole-game review, cached until regenerated on request (older shapes are ignored). */
+  aiCoach?: BetaCoachReview | { version?: undefined };
+  /** Positions re-checked at depth 18 for the Beta AI Coach, by position index (kept apart from the built-in coach's analysis). */
+  aiCoachDeep?: Record<number, PositionEval>;
 }
 
 export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
@@ -508,28 +510,44 @@ export interface AiExplanation {
   grounding: string;
 }
 
+/** One chapter of the Beta AI Coach's walk through the game. */
+export interface BetaChapter {
+  title: string;
+  /** First and last ply the chapter covers. */
+  fromPly: number;
+  toPly: number;
+  /** The move the chapter turns on; its diagram shows the position before it. */
+  anchorPly: number;
+  /** opening / strategic_decision / turning_point / tactic / conversion / defence / endgame / result … */
+  kind: string;
+  assessment: 'well' | 'mixed' | 'poorly' | 'neutral';
+  narrative: string;
+  /** Stockfish facts the interpretation rests on, in words. */
+  evidence: string[];
+  lesson: string;
+  diagram: boolean;
+  explore: boolean;
+  /** For a causal turning point: the decision that caused it, and where the consequence showed. */
+  decisionPly?: number;
+  consequencePly?: number;
+}
+
 /**
- * The Beta AI Coach: the model's own instructional reading of a whole game,
- * with Stockfish as evidence. Concrete tactical claims the engine data doesn't
- * support are removed before it is stored (and listed in `removed`).
+ * The Beta AI Coach (v2): the model chooses what is instructive — the game's phases
+ * and turning points — from the whole game's Stockfish evidence. Concrete claims
+ * the engine data contradicts are removed before it is stored (and listed in `removed`).
  */
 export interface BetaCoachReview {
-  /** AI Game Summary: 2–4 paragraphs. */
-  summary: string[];
-  /** AI Insights. */
-  insights: { strengths: string[]; weaknesses: string[]; trend: string; observations: string[] };
-  /** AI Instructor: one training priority. */
-  instructor: {
-    priority: string;
-    whyItMatters: string;
-    moments: { ply: number; note: string }[];
-    thinkDifferently: string;
-    practice: { ply: number; why: string }[];
-  };
-  /** Statements dropped by the engine checks, with the reason. */
+  version: 2;
+  /** The game's arc in 2–3 sentences. */
+  story: string;
+  chapters: BetaChapter[];
+  /** What this game teaches: 1–2 transferable principles. */
+  lessons: string[];
+  /** Positions worth revisiting: the position before the student's move at `ply`. */
+  practice: { ply: number; why: string }[];
   removed: { text: string; reason: string }[];
   model?: string;
   createdAt: number;
-  /** Identifies the engine analysis it was based on. */
   grounding: string;
 }

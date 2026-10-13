@@ -5,3 +5,4 @@ dist
 .env.local
 public/stockfish/
 coverage
+beta-out/

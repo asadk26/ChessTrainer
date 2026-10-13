@@ -492,15 +492,17 @@ function useSeenBefore(game: StoredGame, m: TeachingMoment | undefined) {
   }, [games, game, m]);
 }
 
-export function GuidedReview({ game, initialPly }: { game: StoredGame; initialPly?: number }) {
+export function GuidedReview({ game, initialPly, explore = false }: { game: StoredGame; initialPly?: number; explore?: boolean }) {
   const moments = game.moments;
   const momentAt = useMemo(() => new Map(moments.map((m) => [m.ply, m])), [moments]);
-  const startMoment = initialPly !== undefined ? momentAt.get(initialPly) : undefined;
+  // `explore`: open straight onto the practice board for the move at `initialPly` (from the AI Coach's diagrams).
+  const exploring = explore && initialPly !== undefined && initialPly >= 1 && initialPly <= game.plies.length;
+  const startMoment = initialPly !== undefined && !exploring ? momentAt.get(initialPly) : undefined;
   const [ply, setPly] = useState(startMoment ? startMoment.ply - 1 : Math.min(initialPly ?? 0, game.plies.length));
   const [active, setActive] = useState<TeachingMoment | undefined>(startMoment);
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set(game.completedMomentIds));
   // The practice board for one decision (position before that move), or null.
-  const [practicePly, setPracticePly] = useState<number | null>(null);
+  const [practicePly, setPracticePly] = useState<number | null>(exploring ? initialPly! : null);
   const practice = usePracticeBoard(game, practicePly, () => setPracticePly(null));
   const topRef = useRef<HTMLDivElement>(null);
 

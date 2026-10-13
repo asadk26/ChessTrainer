@@ -2,7 +2,7 @@
 import type { AiExplanation, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
-import { betaPrompt, buildBetaContext, parseBetaReview } from '../coach/betaCoach';
+import { BETA_DEEP_DEPTH, betaDeepTargets, betaPrompt, buildBetaContext, currentReview, deepenForBeta, parseBetaReview } from '../coach/betaCoach';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { findDuplicate } from '../chess/fingerprint';
 import { planSync, syncSummary, SyncError, type ChessComFetch } from '../sync/chesscom';
@@ -346,22 +346,40 @@ export async function explainLessons(gameId: string): Promise<number> {
 const betaInflight = new Map<string, Promise<BetaCoachReview>>();
 
 /**
- * The Beta AI Coach's whole-game review (summary, insights, one training priority).
- * Cached on the game; only regenerated when asked (`force`).
+ * The Beta AI Coach's whole-game review. First Stockfish re-checks the positions
+ * around the evaluation shifts at depth 18 (kept apart from the built-in coach's
+ * analysis), then the model writes the review, which is refereed and cached.
+ * Only regenerated when asked (`force`).
  */
-export function betaReview(gameId: string, opts: { force?: boolean } = {}): Promise<BetaCoachReview> {
+export function betaReview(
+  gameId: string,
+  opts: { force?: boolean; onProgress?: (stage: string) => void } = {},
+): Promise<BetaCoachReview> {
   const running = betaInflight.get(gameId);
   if (running) return running;
   const job = (async () => {
-    const game = await repo.getGame(gameId);
+    let game = await repo.getGame(gameId);
     if (!game) throw new Error('Game not found');
-    if (game.aiCoach && !opts.force) return game.aiCoach;
+    const cached = currentReview(game);
+    if (cached && !opts.force) return cached;
+    const targets = betaDeepTargets(game);
+    if (targets.length) {
+      const engine = await getBrowserEngine();
+      if (engine) {
+        const deep = await deepenForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEEP_DEPTH, multiPv: 3 }), (done, total) =>
+          opts.onProgress?.(`Stockfish is double-checking the key positions (${done}/${total})…`),
+        );
+        game = { ...((await repo.getGame(gameId)) ?? game), aiCoachDeep: deep };
+        await repo.saveGame(game);
+      }
+    }
     const settings = await repo.getSettings();
     const ctx = buildBetaContext(game, await repo.listGames(), settings.rating);
     if (!ctx) throw new Error('No engine analysis for this game yet.');
     const status = await getLlmStatus();
     if (!status.provider) throw new Error('No AI coach is configured.');
-    const text = await llmComplete(betaPrompt(ctx), settings.coachToken, 12000, 'beta');
+    opts.onProgress?.('The coach is reading the whole game… (usually 20–60 seconds)');
+    const text = await llmComplete(betaPrompt(ctx), settings.coachToken, 16000, 'beta');
     const review = parseBetaReview(text, ctx, game, status.model);
     const fresh = (await repo.getGame(gameId)) ?? game;
     await repo.saveGame({ ...fresh, aiCoach: review });

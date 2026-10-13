@@ -133,32 +133,59 @@ Without the access code those places show a reminder instead.
 
 ### Beta AI Coach (experimental)
 
-A separate **AI Coach · Beta** tab on each game (switch it off in Settings) lets the model form its
-own instructional view of the whole game instead of rewording the built-in coach, so you can
-compare the two. It produces:
+A separate **AI Coach · Beta** tab on each game (it can be switched off in Settings), shown next to the
+unchanged built-in coach so the two can be compared. The roles are split:
 
-1. **AI Game Summary**: 2–4 paragraphs on what kind of game it was, what you did well, where you
-   made life hard for yourself, and what decided it.
-2. **AI Insights**: strengths, weaknesses or habits, the trend across recent games, and one or two
-   observations that aren't a single engine mistake.
-3. **AI Instructor**: one training priority, why it matters, the moments that show it, how to think
-   differently, and up to two positions from the game to practise. This works after a clean win too.
+- **Stockfish is the evidence and the referee.** It decides legality, evaluations, best moves,
+  tactics, material and mates.
+- **The model is the instructor.** It decides what the game's story and turning points were.
+  Nothing tells it which moments are the lessons.
 
-Grounding (`src/coach/betaCoach.ts`): the model gets the PGN, your colour, rating and level, the
-evaluation timeline, material swings, critical positions with Stockfish's top moves and short
-lines, positional checkpoints, the rule-based findings and your recent games and patterns. The
-fixed server-side prompt (`BETA_COACH_SYSTEM_PROMPT`) says: "Use Stockfish as evidence, but form
-your own instructional interpretation…". Stockfish stays authoritative for legality, evaluations,
-best moves, tactics, material and mates. Before anything is shown, each sentence is checked:
+**What happens when you open the tab** (`src/coach/betaCoach.ts`):
 
-- a sentence naming a move that isn't in the game or in the supplied lines is removed;
-- a material or tactic claim ("wins a piece", "hangs the queen", a fork) is removed unless the
-  engine data shows material changing hands with that move;
-- a mate claim is removed unless the engine data shows a mate.
+1. **Re-check.** Stockfish re-analyses the positions around the evaluation shifts at depth 18,
+   once per analysis. These results are kept apart from the built-in coach's analysis.
+2. **Evidence sent to the model:**
+   - the PGN, your colour, rating, level and the result;
+   - every half-move with the evaluation after it, its effect, Stockfish's verdict and preferred move;
+   - the evaluation shifts, as runs of moves that moved the trend, with lead-up;
+   - Stockfish's top 3 moves and short lines around the moves that mattered, for both sides,
+     with where each line's material settles;
+   - the material timeline, phase markers and positional checkpoints;
+   - notable moves, the rule-based detections, labelled "context, not lessons";
+   - your recent tendencies, labelled "context only".
+3. **Instructions.** The fixed server-side prompt (`BETA_COACH_SYSTEM_PROMPT`) asks the model to
+   judge moves by the evaluation timeline, not by how active they look. It asks it to find the
+   earliest decision behind each shift, separate the decision from its consequence, credit strong
+   phases, and write a game story plus 4–7 chapters, the lessons and practice positions.
+4. **Referee.** Each sentence is checked against the engine data and removed when it:
+   - names a move that isn't in the game, Stockfish's lines, or legal at that point;
+   - claims material, a tactic, a mate, an unstoppable pawn or a "losing" position the data
+     doesn't show;
+   - praises a move Stockfish rates a mistake;
+   - calls Stockfish's best move a mistake;
+   - recommends a move Stockfish never put forward there.
 
-The review shows how many statements were removed, and why. Reviews are cached on the game and only
-regenerated when you press Regenerate. If the analysis or result changes, the tab says the review
-is stale.
+   High-level judgements ("you became impatient", "your rook activity saved the ending") are left
+   free. The tab lists what was removed and why.
+5. **Display.** Each chapter gets a board diagram of the position before the move it turns on,
+   with the move played, Stockfish's choice and its evaluations. Tapping the diagram opens the
+   practice board at that move. "Show the Stockfish evidence the AI is given" displays the exact
+   JSON sent to the model.
+
+The review is cached per game and regenerated only on request.
+
+**Running it from the command line** with your own key (in `.env.local` or the environment):
+
+```bash
+npm run beta-review -- game.pgn b --rating 900 --out beta-out
+# reuse recorded analysis instead of running Stockfish:
+npm run beta-review -- tests/fixtures/draw-game.pgn b --positions tests/fixtures/draw-game-positions.json
+```
+
+This writes `context.json` and `prompt.txt` (exactly what the model receives) and, with
+`GEMINI_API_KEY` set, `raw-answer.json`, `review.json` and `review.md` (including what the referee
+removed). The regression game is `tests/fixtures/draw-game.pgn` (`tests/beta-coach.test.ts`).
 
 ## Lessons: the instructor loop
 

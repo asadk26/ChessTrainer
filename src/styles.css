@@ -486,6 +486,24 @@ p { margin: 0 0 0.75rem; }
 /* Beta AI Coach */
 .beta-badge { display: inline-block; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.05rem 0.35rem; border-radius: 4px; background: var(--accent); color: var(--card); vertical-align: middle; }
 .beta-coach .beta-para { display: block; margin: 0 0 0.7rem; line-height: 1.55; }
-.beta-coach h4 { margin: 0.9rem 0 0.35rem; font-size: 0.9rem; }
+.beta-coach .story-text { font-size: 1.05rem; margin: 0.35rem 0 0; }
+.beta-chapter-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.75rem; margin-bottom: 0.6rem; }
+.beta-chapter-head h3 { margin: 0; }
+.beta-pill { font-size: 0.72rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); }
+.beta-pill.good { color: var(--accent); border-color: var(--accent); }
+.beta-pill.bad { color: var(--warn); border-color: var(--warn); }
+.beta-chapter.good { border-left: 4px solid var(--accent); }
+.beta-chapter.bad { border-left: 4px solid var(--warn); }
+.beta-chapter-body.with-diagram { display: grid; grid-template-columns: 240px 1fr; gap: 1rem; align-items: start; }
+.beta-chapter-text { min-width: 0; }
+.beta-cause { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; margin: 0 0 0.5rem; }
+.beta-lesson { margin: 0 0 0.6rem; padding: 0.5rem 0.7rem; border-radius: 8px; background: var(--bg); }
+.beta-evidence { margin: 0 0 0.6rem; padding-left: 1.1rem; }
 .beta-practice { max-width: 200px; }
+.beta-context pre { max-height: 420px; overflow: auto; font-size: 0.72rem; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; white-space: pre-wrap; word-break: break-word; }
 .beta-coach details ul { padding-left: 1.1rem; }
+@media (max-width: 640px) {
+  /* On phones the board sits right above the explanation it belongs to. */
+  .beta-chapter-body.with-diagram { grid-template-columns: 1fr; justify-items: center; }
+  .beta-chapter-text { justify-self: stretch; }
+}

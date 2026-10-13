@@ -17,7 +17,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "analyze-sample": "tsx scripts/analyze-sample.ts"
+    "analyze-sample": "tsx scripts/analyze-sample.ts",
+    "beta-review": "tsx scripts/beta-review.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

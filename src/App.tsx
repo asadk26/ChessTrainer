@@ -15,7 +15,7 @@ function Routes() {
   if (parts[0] === 'game' && parts[1]) {
     const tab = parts[2] === 'review' ? 'review' : parts[2] === 'drills' ? 'drills' : parts[2] === 'ai' ? 'ai' : 'summary';
     const ply = query.get('ply');
-    return <GameScreen key={parts[1]} id={parts[1]} tab={tab} ply={ply ? Number(ply) : undefined} already={query.get('already') === '1'} />;
+    return <GameScreen key={parts[1]} id={parts[1]} tab={tab} ply={ply ? Number(ply) : undefined} explore={query.get('explore') === '1'} already={query.get('already') === '1'} />;
   }
   return <Dashboard />;
 }

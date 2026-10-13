@@ -1,109 +1,238 @@
-// Beta AI Coach: the whole-game facts the model gets, and the checks that keep its
-// broader judgements from turning into invented tactics.
+// Beta AI Coach (v2): the whole-game Stockfish evidence the model gets, and the
+// referee that keeps its free interpretation from teaching false chess.
+// Regression game: the student's draw as Black, where 19...e4 (prepared by 18...f5)
+// turned a slightly better position into a worse one, 21.Nxe4 was only the
+// consequence, and the later rook-ending defence held the draw.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { coachFromPositions } from '../src/analysis/pipeline';
-import { betaPrompt, buildBetaContext, checkText, parseBetaReview } from '../src/coach/betaCoach';
+import { betaDeepTargets, betaPrompt, buildBetaContext, checkText, currentReview, evaluationShifts, parseBetaReview } from '../src/coach/betaCoach';
 import { UngroundedError } from '../src/coach/momentContext';
 import { BETA_COACH_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
 import { coachComplete } from '../server/coachApi';
+import type { StoredGame } from '../src/domain/types';
 import { fixtureGame } from './helpers';
 
-const coached = (n: Parameters<typeof fixtureGame>[0]) => {
-  const { game, positions } = fixtureGame(n);
-  return coachFromPositions(game, positions, []).game;
+const here = dirname(fileURLToPath(import.meta.url));
+
+function drawGame(): StoredGame {
+  const { game, positions } = fixtureGame('draw-game');
+  const coached = coachFromPositions(game, positions, []).game;
+  // The depth-18 re-checks the app makes before the review (recorded with Node Stockfish).
+  const deep = JSON.parse(readFileSync(join(here, 'fixtures', 'draw-game-beta-deep.json'), 'utf8'));
+  return { ...coached, status: 'analyzed', aiCoachDeep: deep };
+}
+
+const game = drawGame();
+const ctx = buildBetaContext(game, [game], 900)!;
+const f = ctx.facts as any;
+
+describe('Beta AI Coach evidence (draw game)', () => {
+  it('gives the whole game: PGN, colour, result and every half-move with its evaluation', () => {
+    expect(f.student).toMatchObject({ color: 'Black', rating: 900, result: 'draw' });
+    expect(f.pgn).toContain('18. Qe2 f5 19. Nc3 e4 20. dxe4 fxe4 21. Nxe4');
+    expect(f.evaluationTimeline).toHaveLength(game.plies.length);
+    const e4 = f.evaluationTimeline.find((r: string) => r.startsWith('19...e4'));
+    expect(e4).toMatch(/19\.\.\.e4 \(you\): -0\.\d \(−1\.\d\) · mistake · Stockfish preferred \w+/);
+    expect(f.evaluationTimeline.find((r: string) => r.startsWith('18...f5'))).not.toMatch(/mistake|blunder/);
+  });
+
+  it('does not pre-select lessons: no moments, focus or rule-based explanations', () => {
+    const json = JSON.stringify(f);
+    for (const key of ['moments', 'focus', 'builtInCoach', 'ruleBasedNote', 'lesson']) expect(json).not.toContain(`"${key}"`);
+    expect(f.ruleBasedDetections.note).toMatch(/not a list of lessons/);
+    expect(f.playerProfile.note).toMatch(/context/i);
+  });
+
+  it('finds the evaluation shift through the …f5/…e4 sequence, with the lead-up and each move’s effect', () => {
+    const shift = f.evaluationShifts.find((s: any) => s.fromPly <= 38 && s.toPly >= 38);
+    expect(shift.direction).toBe('against you');
+    expect(shift.moveByMove[0]).toMatch(/^18\.\.\.f5 \(you\)/);
+    const effects = shift.moveByMove.map((m: string) => [m.split(' ')[0], Number(m.split(' ').pop()!.replace('−', '-'))]);
+    const worst = effects.filter(([mv]: [string]) => mv.includes('...')).sort((a: any, b: any) => a[1] - b[1]);
+    // 19...e4 is the student's biggest single drop before 24...b5.
+    expect(effects.find(([mv]: [string]) => mv === '19...e4')[1]).toBeLessThan(-1);
+    expect(worst.slice(0, 2).map((x: any) => x[0])).toContain('19...e4');
+  });
+
+  it('shows Stockfish’s candidates at 19...e4, and that the pawn is lost once the line settles', () => {
+    const at = f.candidatePositions.find((p: any) => p.beforeMove === '19...e4');
+    expect(at.depth).toBe(18);
+    expect(at.stockfishTop.map((t: any) => t.move)).toContain('Rfe8');
+    expect(at.played.afterFullLine).toMatch(/you are down a pawn once the line settles/);
+  });
+
+  it('includes the opponent’s missed chance after 24...b5 and the endgame defence', () => {
+    expect(f.notableMoves.opponentMistakesAndBlunders.some((m: string) => m.startsWith('25.c5'))).toBe(true);
+    const c5 = f.candidatePositions.find((p: any) => p.beforeMove === '25.c5');
+    expect(c5.stockfishTop[0].move).toBe('Ng5');
+    expect(f.notableMoves.yourOnlyMoveFinds.join(' ')).toMatch(/38\.\.\.Rc3|39\.\.\.Rxc7/);
+    expect(f.phaseMarkers.endgameFrom).toBe('30...hxg6');
+  });
+
+  it('counts a recapture from before the capture (30...hxg6 is not "winning a queen")', () => {
+    const at = f.candidatePositions.find((p: any) => p.beforeMove === '30...hxg6');
+    expect(at.note).toMatch(/30\.Qxg6 was a capture/);
+    expect(at.played.whatHappens).toBeUndefined();
+    expect(at.played.afterFullLine).toMatch(/level in material/);
+  });
+
+  it('reads castling from the moves, not the king’s square', () => {
+    expect(f.positionalCheckpoints[1]).toMatchObject({ afterMove: '20...fxe4', opponent: { castled: true, king: 'g2' } });
+  });
+
+  it('re-checks the shift positions at depth 18 once per analysis', () => {
+    expect(betaDeepTargets({ ...game, aiCoachDeep: undefined }).length).toBeGreaterThan(0);
+    expect(betaDeepTargets(game)).toEqual([]);
+    expect(evaluationShifts(game).length).toBeGreaterThan(3);
+  });
+
+  it('fits comfortably in one request', () => {
+    expect(betaPrompt(ctx).length).toBeLessThan(60_000);
+  });
+});
+
+describe('the Stockfish referee', () => {
+  const keep = (t: string) => expect(checkText(t, ctx, game)).toEqual({ text: t, removed: [] });
+  const drop = (t: string, reason: RegExp) => {
+    const r = checkText(t, ctx, game);
+    expect(r.text).toBe('');
+    expect(r.removed[0]?.reason).toMatch(reason);
+  };
+
+  it('leaves high-level instructional judgements free', () => {
+    keep('You became impatient in a quiet position and forced the play before your pieces were ready.');
+    keep('This game shows strong defensive patience: your rook activity saved the ending.');
+    keep('Accepting the repetition was a successful defensive result from a worse position.');
+  });
+
+  it('accepts the causal reading the evidence supports', () => {
+    keep('The important decision came earlier: 18...f5 and 19...e4 looked active, but after the exchanges 21.Nxe4 left White better.');
+    keep('Rfe8 was Stockfish’s choice instead of 19...e4.');
+    keep('You lost a pawn on 21.Nxe4, but that was the consequence of the pawn break.');
+  });
+
+  it('removes praise of a move Stockfish rates as a mistake', () => {
+    drop('19...e4 was a strong central break that freed your position.', /19\.\.\.e4 made your position worse \(\+0\.\d → -0\.\d for you\)/);
+  });
+
+  it('judges praise on the evaluation, not the label (an "inaccuracy" that cost a pawn is not praised)', () => {
+    const relabelled = { ...ctx, verdicts: new Map([...ctx.verdicts].map(([k, v]) => [k, k === 38 ? ('inaccuracy' as const) : v])) };
+    expect(checkText('19...e4 was a strong central break.', relabelled, game).text).toBe('');
+    keep('18...f5 was a reasonable move.');
+  });
+
+  it('removes blame of a move Stockfish rates best', () => {
+    drop('25...Be7 was a mistake.', /best move/);
+  });
+
+  it('removes recommendations Stockfish never made', () => {
+    drop('Instead of 19...e4, 19...Qd7 would have been better.', /Qd7 isn't among Stockfish's candidate moves/);
+  });
+
+  it('removes claims about pawns that could not be stopped, mates and material that never happened', () => {
+    drop("White's c-pawn could not be stopped.", /no pawn that couldn't be stopped/);
+    drop('After 33...Re2+ White was getting mated.', /no such mate/);
+    drop('41...Kg8 dropped a rook.', /material change/);
+  });
+
+  it('removes moves that are not in the game, the lines, or legal', () => {
+    drop('19...Nf3 was possible.', /not legal at that point/);
+    drop('52...Kc6 drew.', /not a move number/);
+    drop('Qh1xa8 wins.', /not a move/);
+  });
+});
+
+// A plausible model answer for this game (written for the test, not real Gemini output),
+// with mistakes the referee must catch.
+const MOCK = {
+  story:
+    'A balanced Italian-style opening turned when you forced the centre open with 18...f5 and 19...e4. White came out a pawn up with the better position, but you defended the rook ending actively and held the draw.',
+  chapters: [
+    { title: 'A solid, equal opening', kind: 'opening', fromPly: 1, toPly: 28, anchorPly: 18, assessment: 'well', narrative: 'You developed quickly and castled. The trades on f3 and g2 left an equal position.', evidence: ['the evaluation stayed within half a pawn'], lesson: '', diagram: false, explore: false },
+    {
+      title: 'You force the position too soon',
+      kind: 'strategic_decision',
+      fromPly: 36,
+      toPly: 41,
+      anchorPly: 38,
+      decisionPly: 38,
+      consequencePly: 41,
+      assessment: 'poorly',
+      narrative:
+        'In a quiet position you chose 18...f5 and then 19...e4 to force action. 19...e4 was a strong central break. After 20.dxe4 fxe4 21.Nxe4 White wins the pawn and the knight lands on a great square. Nxe4 is the consequence; the pawn break was the decision.',
+      evidence: ['after 19...e4 the evaluation went from slightly better for you to slightly worse', 'Rfe8 kept the balance'],
+      lesson: 'Before a pawn break, check what the opened lines give your opponent.',
+      diagram: true,
+      explore: true,
+    },
+    { title: 'White misses Ng5', kind: 'missed_chance', fromPly: 48, toPly: 49, anchorPly: 49, assessment: 'mixed', narrative: '24...b5 was a serious mistake, but White missed Ng5 and played 25.c5.', evidence: ['Ng5 was Stockfish’s choice'], lesson: '', diagram: true, explore: true },
+    { title: 'Active rook defence', kind: 'defence', fromPly: 61, toPly: 78, anchorPly: 66, assessment: 'well', narrative: 'Instead of waiting, 33...Re2+ and 34...Ra2 activated your rook. White\'s c-pawn could not be stopped. You stopped it with 38...Rc3 and 39...Rxc7.', evidence: [], lesson: 'In rook endings an active rook is worth a pawn.', diagram: true, explore: false },
+    { title: 'Holding the draw', kind: 'result', fromPly: 79, toPly: 98, anchorPly: 90, assessment: 'well', narrative: 'Your king walked to c6 to support the b-pawn and you accepted the repetition.', evidence: [], lesson: '', diagram: true, explore: false },
+    { title: 'Broken chapter', fromPly: 500, toPly: 600, narrative: 'nothing' },
+  ],
+  lessons: ['A pawn break is a commitment: check the evaluation-changing replies first.', 'Active defence saves worse endgames.'],
+  practice: [
+    { ply: 38, why: 'Find a move that keeps the tension.' },
+    { ply: 49, why: "White's move — not yours." },
+    { ply: 76, why: 'Stop the c-pawn.' },
+  ],
 };
 
-describe('Beta AI Coach context', () => {
-  const game = coached('queen-blunder-game');
-  const ctx = buildBetaContext(game, [game], 900)!;
-  const f = ctx.facts as any;
+describe('parsing a review', () => {
+  const r = parseBetaReview(JSON.stringify(MOCK), ctx, game, 'gemini-test');
 
-  it('carries the whole game and the engine evidence', () => {
-    expect(f.pgn).toMatch(/1\. \w+/);
-    expect(f.pgn).not.toMatch(/%clk/);
-    expect(f.student).toMatchObject({ color: 'Black', rating: 900, result: 'loss' });
-    expect(f.evaluationTimeline.length).toBeGreaterThan(5);
-    expect(f.materialSwings).toEqual([expect.objectContaining({ afterMove: '12.Nxd7', change: 'you lost a queen' })]);
-    const blunder = f.criticalPositions.find((c: any) => c.move === '11...Qd7');
-    expect(blunder.verdict).toBe('Blunder');
-    expect(blunder.stockfishTopMoves[0]).toMatchObject({ move: 'Nd7', quality: 'Best move' });
-    expect(blunder.playedMoveLine.whatHappens).toBe('White wins your queen for a knight');
-    expect(f.positionalCheckpoints[0].you).toHaveProperty('castled', false);
-    expect(f.detectedFeatures.length).toBeGreaterThan(0);
-    expect(betaPrompt(ctx)).toContain('11...Qd7');
+  it('keeps chapters in order with their causal decision and consequence', () => {
+    expect(r.version).toBe(2);
+    expect(r.chapters.map((c) => c.title)).toEqual(['A solid, equal opening', 'You force the position too soon', 'White misses Ng5', 'Active rook defence', 'Holding the draw']);
+    const c = r.chapters[1];
+    expect(c).toMatchObject({ decisionPly: 38, consequencePly: 41, anchorPly: 38, assessment: 'poorly', explore: true, diagram: true });
   });
 
-  it('works for a clean win too: there is still something to learn from good decisions', () => {
-    const win = coached('resign-win-game');
-    const w = buildBetaContext(win, [win], 900)!.facts as any;
-    expect(w.student.result).toBe('win');
-    expect(w.engineStats.yourBlunders).toBe(0);
-    expect(w.criticalPositions.some((c: any) => c.whyCritical.some((x: string) => /only clearly good move|good answer/.test(x)))).toBe(true);
-  });
-});
-
-describe('Beta AI Coach checks', () => {
-  const game = coached('queen-blunder-game');
-  const ctx = buildBetaContext(game, [game], 900)!;
-
-  it('keeps broad coaching judgements', () => {
-    const t = 'This was a quiet, balanced game until one moment decided it. You developed well and kept the position level for ten moves.';
-    expect(checkText(t, ctx, game)).toEqual({ text: t, removed: [] });
+  it('strips the praise of 19...e4 and the unstoppable c-pawn, keeping the rest', () => {
+    expect(r.chapters[1].narrative).not.toMatch(/strong central break/);
+    expect(r.chapters[1].narrative).toMatch(/^In a quiet position you chose 18\.\.\.f5 and then 19\.\.\.e4 to force action\./);
+    expect(r.chapters[1].narrative).toMatch(/Nxe4 is the consequence; the pawn break was the decision\./);
+    expect(r.chapters[3].narrative).not.toMatch(/could not be stopped/);
+    expect(r.chapters[3].narrative).toMatch(/38\.\.\.Rc3/);
+    expect(r.removed.map((x) => x.text)).toEqual(expect.arrayContaining(['19...e4 was a strong central break.', "White's c-pawn could not be stopped."]));
+    expect(r.removed.find((x) => x.text.startsWith('19...e4'))!.reason).toMatch(/made your position worse/);
   });
 
-  it('keeps concrete claims the engine supports', () => {
-    const t = 'After 11...Qd7, Nxd7 simply won your queen for a knight.';
-    expect(checkText(t, ctx, game).removed).toEqual([]);
+  it('keeps only practice positions before the student’s own moves', () => {
+    expect(r.practice.map((p) => p.ply)).toEqual([38, 76]);
   });
 
-  it('removes invented tactics, unknown moves and mates that are not there', () => {
-    const r = checkText('You played well. Earlier, 7...Ba5 hung a bishop. Qh4 would have won material. White had a forced mate after 12.Nxd7.', ctx, game);
-    expect(r.text).toBe('You played well.');
-    expect(r.removed.map((x) => x.reason)).toEqual([
-      expect.stringMatching(/doesn't show that material change/),
-      expect.stringMatching(/Qh4 is not a move/),
-      expect.stringMatching(/no such mate/),
-    ]);
+  it('is the current review once stored; older formats are ignored', () => {
+    expect(currentReview({ ...game, aiCoach: r })).toBe(r);
+    expect(currentReview({ ...game, aiCoach: { summary: ['old'] } as never })).toBeUndefined();
   });
 
-  it('parses the three outputs, dropping bad references', () => {
-    const raw = JSON.stringify({
-      summary: ['A calm opening, then one blunder decided it.', 'Qh4 wins a rook.'],
-      insights: { strengths: ['Good development by move 10.'], weaknesses: ['Checking what your move leaves undefended.'], trend: 'Not enough history yet.', observations: ['You let your bishop get chased.'] },
-      instructor: {
-        priority: 'Blunder-check every queen move',
-        whyItMatters: 'One unchecked move undid ten good ones.',
-        moments: [{ ply: 22, note: '11...Qd7 walked into Nxd7.' }, { ply: 999, note: 'bad ply' }],
-        thinkDifferently: 'Before moving the queen, ask what can capture on that square.',
-        practice: [{ ply: 22, why: 'Find a safe developing move.' }, { ply: 21, why: "the opponent's move" }],
-      },
-    });
-    const r = parseBetaReview(raw, ctx, game, 'gemini-test');
-    expect(r.summary).toEqual(['A calm opening, then one blunder decided it.']);
-    expect(r.removed).toHaveLength(1);
-    expect(r.instructor.moments).toEqual([{ ply: 22, note: '11...Qd7 walked into Nxd7.' }]);
-    expect(r.instructor.practice).toEqual([{ ply: 22, why: 'Find a safe developing move.' }]);
-    expect(r.insights.observations).toHaveLength(1);
-    expect(r.grounding).toBe(ctx.grounding);
-  });
-
-  it('rejects an answer with no usable summary', () => {
-    expect(() => parseBetaReview(JSON.stringify({ summary: ['Qh4 wins a rook.'] }), ctx, game)).toThrow(UngroundedError);
+  it('rejects an answer with too little that agrees with the engine', () => {
+    expect(() => parseBetaReview(JSON.stringify({ story: 'x', chapters: [{ fromPly: 38, toPly: 38, narrative: '19...e4 was a brilliant break.' }] }), ctx, game)).toThrow(UngroundedError);
   });
 });
 
-describe('Beta AI Coach prompt', () => {
-  it('is fixed server-side and tells the model to interpret, not repeat', async () => {
-    expect(BETA_COACH_SYSTEM_PROMPT).toContain('Use Stockfish as evidence, but form your own instructional interpretation of what this player should learn from the game. Do not merely repeat engine labels.');
+describe('the Beta prompt', () => {
+  it('is fixed server-side and asks for causal turning points and an evaluation check', async () => {
+    for (const phrase of [
+      'Use Stockfish as evidence, but form your own instructional interpretation',
+      'Do not judge a move by how active or natural it looks',
+      'earliest meaningful decision that changed the evaluation trend',
+      'Strengths matter as much as mistakes',
+      '4–7 chapters',
+    ])
+      expect(BETA_COACH_SYSTEM_PROMPT).toContain(phrase);
     let system = '';
-    const fake = (async (_u: string, init: RequestInit) => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (_u: string, init: RequestInit) => {
       system = JSON.parse(String(init.body)).systemInstruction.parts[0].text;
       return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{}' }] } }] }));
     }) as unknown as typeof fetch;
-    const real = globalThis.fetch;
-    globalThis.fetch = fake;
     try {
-      await coachComplete({ env: { GEMINI_API_KEY: 'k' }, hosted: false }, null, { prompt: 'facts', task: 'beta', maxTokens: 12000 });
+      await coachComplete({ env: { GEMINI_API_KEY: 'k' }, hosted: false }, null, { prompt: 'facts', task: 'beta', maxTokens: 16000 });
     } finally {
       globalThis.fetch = real;
     }
