@@ -33,3 +33,15 @@ export async function llmComplete(prompt: string, token?: string, maxTokens = 16
   if (!res.ok) throw new Error(data.error ?? `LLM request failed (${res.status})`);
   return String(data.text ?? '');
 }
+
+/** Settings' "Test AI connection": a fixed tiny request through the whole chain (code, key, model). */
+export async function llmPing(token?: string): Promise<string> {
+  const res = await fetch('/api/coach/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(token ? { 'x-coach-token': token } : {}) },
+    body: JSON.stringify({ task: 'ping' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  return String(data.text ?? '');
+}

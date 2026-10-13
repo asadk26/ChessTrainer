@@ -5,6 +5,15 @@ import { useApp } from '../store';
 import { CoachText } from './CoachText';
 
 /** Whether the AI instructor can be used right now (configured, switched on, unlocked). */
+/** Configured on the server, but not usable yet — and why, in words the user can act on. */
+export function useAiBlocker(): string | null {
+  const { llm, settings } = useApp();
+  if (!llm.provider) return null;
+  if (!settings.useLlm) return null; // switched off on purpose: stay quiet
+  if (llm.requiresToken && !settings.coachToken) return 'To get AI explanations here, enter your access code in Dashboard → Show settings.';
+  return null;
+}
+
 export function useAiAvailable(): boolean {
   const { llm, settings } = useApp();
   return !!llm.provider && settings.useLlm && (!llm.requiresToken || !!settings.coachToken);
@@ -60,6 +69,7 @@ export function AiExplain({
 }) {
   const { refresh } = useApp();
   const available = useAiAvailable();
+  const blocker = useAiBlocker();
   const cached = game.aiExplanations?.[ply];
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('');
@@ -84,7 +94,9 @@ export function AiExplain({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auto, available, cached, ply]);
 
-  if (!available && !cached) return null;
+  if (!available && !cached) {
+    return blocker ? <p className={`ai-box muted small ${compact ? 'compact' : ''}`}>{blocker}</p> : null;
+  }
   return (
     <div className={`ai-box ${compact ? 'compact' : ''}`}>
       {cached ? (

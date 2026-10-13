@@ -10,6 +10,7 @@ import { feedbackCount } from '../../coach/feedback';
 import { userOutcome } from '../../chess/outcome';
 import { gameStats, trend } from '../../analysis/engineReview';
 import { ChessComSync } from '../components/ChessComSync';
+import { llmPing } from '../../coach/llmClient';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
 
@@ -274,10 +275,11 @@ export function Dashboard() {
                   autoComplete="off"
                   defaultValue={settings.coachToken ?? ''}
                   placeholder="COACH_ACCESS_TOKEN from your deployment"
-                  onBlur={(e) => updateSettings({ coachToken: e.target.value.trim() || undefined })}
+                  onChange={(e) => updateSettings({ coachToken: e.target.value.trim() || undefined })}
                 />
               </label>
             )}
+            {llm.provider && <AiStatus />}
             <div className="muted small">
               Known usernames: {Object.keys(settings.usernames).join(', ') || '—'} · {profile.gamesAnalyzed} games analyzed
             </div>
@@ -293,6 +295,38 @@ export function Dashboard() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/** Where the AI instructor stands, and a one-click end-to-end test (access code, key, model). */
+function AiStatus() {
+  const { llm, settings } = useApp();
+  const [test, setTest] = useState<{ state: 'idle' | 'running' | 'ok' | 'error'; msg?: string }>({ state: 'idle' });
+  const missingCode = llm.requiresToken && !settings.coachToken;
+  const run = async () => {
+    setTest({ state: 'running' });
+    try {
+      await llmPing(settings.coachToken);
+      setTest({ state: 'ok' });
+    } catch (e) {
+      setTest({ state: 'error', msg: (e as Error).message });
+    }
+  };
+  return (
+    <div className="small">
+      <div className={missingCode || !settings.useLlm ? 'bad-h' : 'muted'}>
+        {!settings.useLlm
+          ? 'AI explanations are switched off.'
+          : missingCode
+            ? 'Access code missing: the "Explain this more deeply" buttons stay hidden until you enter it.'
+            : 'AI explanations are on. Look for "Explain this more deeply" under "What hurt you", in Replay on your inaccurate moves, and in the practice board.'}
+      </div>
+      <button className="btn ghost small" disabled={test.state === 'running'} onClick={run}>
+        {test.state === 'running' ? 'Testing…' : 'Test AI connection'}
+      </button>{' '}
+      {test.state === 'ok' && <span className="good-h">Connected — {llm.provider} · {llm.model} answered.</span>}
+      {test.state === 'error' && <span className="bad-h">Failed: {test.msg}</span>}
     </div>
   );
 }

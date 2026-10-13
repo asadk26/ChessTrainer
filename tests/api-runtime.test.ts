@@ -71,6 +71,28 @@ describe('Vercel functions compiled as Node ESM', () => {
     globalThis.fetch = realFetch;
   });
 
+  it('/api/coach/complete answers the Settings connection test with a fixed server-side prompt', async () => {
+    process.env.GEMINI_API_KEY = 'test-gemini-key';
+    process.env.COACH_ACCESS_TOKEN = 'my-code';
+    const calls: any[] = [];
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      calls.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }] }), { status: 200 });
+    }) as typeof fetch;
+    const req = (headers: Record<string, string>) =>
+      new Request('https://app/api/coach/complete', { method: 'POST', headers, body: JSON.stringify({ task: 'ping' }) });
+    expect((await complete(req({ 'x-coach-token': 'wrong' }))).status).toBe(401);
+    const ok = await complete(req({ 'x-coach-token': 'my-code' }));
+    expect(ok.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].systemInstruction.parts[0].text).toMatch(/connection test/);
+    globalThis.fetch = (async () => new Response('model not found', { status: 404 })) as typeof fetch;
+    const bad = await complete(req({ 'x-coach-token': 'my-code' }));
+    expect(bad.status).toBe(502);
+    expect(((await bad.json()) as { error: string }).error).toMatch(/Gemini returned 404/);
+    globalThis.fetch = realFetch;
+  });
+
   it('/api/chesscom proxies the archive list with a User-Agent and rejects other paths', async () => {
     process.env.CHESSCOM_CONTACT = 'me@example.com';
     const seen: { url: string; ua: string | null }[] = [];

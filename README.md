@@ -125,6 +125,12 @@ Then enter the same access code once in the app (Dashboard → Settings). The ke
 the server function (`/api/coach/complete`) and sent to Google in a header; it never reaches the
 browser bundle.
 
+Settings shows whether the AI is usable and has a **Test AI connection** button, which sends a fixed
+tiny request through the whole chain (access code → server → Gemini) and shows the exact error if
+any. "Explain this more deeply" appears under each item in *What hurt you*, in Replay on your
+inaccurate moves and on note cards, and in the practice board; the lessons explain themselves.
+Without the access code those places show a reminder instead.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value

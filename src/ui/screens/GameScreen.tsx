@@ -10,6 +10,7 @@ import { REPORT_VERSION } from '../../coach/report';
 import { engineNotes, gameStats } from '../../analysis/engineReview';
 import { repo } from '../../storage/repository';
 import { FlagButton } from '../components/FlagButton';
+import { AiExplain } from '../components/AiExplain';
 import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
 import type { FeedbackWhere } from '../../domain/types';
 
@@ -108,12 +109,23 @@ function Items({
                 ))}
               </div>
             )}
+            {where === 'hurt' && <ItemAi game={game} plies={itemPlies(it)} />}
             <FlagButton game={game} where={where} quote={it.text} ply={itemPlies(it)[0]} />
           </li>
         );
       })}
     </ul>
   );
+}
+
+/** "Explain this more deeply" for the first of the student's own non-best moves an item is about. */
+function ItemAi({ game, plies }: { game: StoredGame; plies: number[] }) {
+  const ply = plies.find((p) => {
+    const m = game.analysis?.moves[p - 1];
+    return m && m.color === game.userColor && !m.isBest;
+  });
+  if (!ply) return null;
+  return <AiExplain game={game} ply={ply} bestSan={game.analysis?.moves[ply - 1]?.bestSan} compact />;
 }
 
 function Summary({ game }: { game: StoredGame }) {

@@ -48,6 +48,16 @@ export async function coachComplete(opts: ApiOptions, givenToken: string | null 
   if (!provider) return { status: 503, body: { error: reason ?? 'No LLM configured' } };
   if (token && !tokenMatches(token, givenToken)) return { status: 401, body: { error: 'Missing or incorrect AI coach access code.' } };
   const body = (rawBody ?? {}) as { prompt?: unknown; maxTokens?: unknown; task?: unknown };
+  if (body.task === 'ping') {
+    // Connection test from Settings: a fixed, tiny request, so it costs next to nothing
+    // and proves the access code, the key and the model all work end to end.
+    try {
+      const text = await provider.complete({ system: 'This is a connection test. Reply with exactly {"ok":true}', prompt: 'Connection test.', maxTokens: 1024 });
+      return { status: 200, body: { text, provider: provider.name, model: provider.model } };
+    } catch (e) {
+      return { status: 502, body: { error: (e as Error).message } };
+    }
+  }
   if (typeof body.prompt !== 'string' || !body.prompt.trim()) return { status: 400, body: { error: 'Bad request' } };
   if (body.prompt.length > MAX_PROMPT_CHARS) return { status: 413, body: { error: 'Prompt too large' } };
   const maxTokens = Math.min(16000, Math.max(256, Number(body.maxTokens) || 16000));
