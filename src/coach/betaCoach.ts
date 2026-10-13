@@ -26,8 +26,9 @@ import { gamePlayedAt, priorGames } from '../analysis/pipeline';
 import { extractJson } from './llmCoach';
 import { recurringPatterns, UngroundedError } from './momentContext';
 
-export const BETA_VERSION = 2;
-export const BETA_DEEP_DEPTH = 18;
+export const BETA_VERSION = 3;
+/** One consistent depth for every position of the Beta evidence (about a minute per game). */
+export const BETA_DEPTH = 16;
 
 const strip = (san: string) => san.replace(/[+#?!]+$/, '');
 const isMate = (cp: number) => Math.abs(cp) >= MATE_CP - 1000;
@@ -97,11 +98,32 @@ function cleanPgn(game: StoredGame): string {
   return `${tags.join('\n')}\n\n${moves} ${h.result ?? ''}`.trim();
 }
 
-/** The game's positions, with any Beta deep re-checks in place of the fast analysis. */
+/** The Beta evidence's positions: its own one-depth pass when there is one, else the stored analysis. */
 export function betaPositions(game: StoredGame): PositionEval[] {
+  const own = game.aiCoachEval?.positions;
+  return own && own.length === game.plies.length + 1 ? own : (game.analysis?.positions ?? []);
+}
+
+/** Whether the Beta evidence still needs its one-depth pass. */
+export function needsBetaEval(game: StoredGame): boolean {
+  return game.aiCoachEval?.positions.length !== game.plies.length + 1;
+}
+
+/** Evaluate every position once at BETA_DEPTH, with any engine (browser WASM or Node). */
+export async function evaluateForBeta(
+  game: StoredGame,
+  analyse: (fen: string) => Promise<PositionEval>,
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ depth: number; positions: PositionEval[] }> {
   const base = game.analysis?.positions ?? [];
-  const deep = game.aiCoachDeep ?? {};
-  return base.map((p, i) => deep[i] ?? p);
+  const fens = [game.plies[0].fenBefore, ...game.plies.map((p) => p.fenAfter)];
+  const positions: PositionEval[] = [];
+  for (let i = 0; i < fens.length; i++) {
+    // Mate and stalemate need no engine.
+    positions.push(base[i]?.terminal ? base[i] : await analyse(fens[i]));
+    onProgress?.(i + 1, fens.length);
+  }
+  return { depth: BETA_DEPTH, positions };
 }
 
 interface Series {
@@ -111,17 +133,37 @@ interface Series {
   cp: number[];
   /** Student-POV win% after i plies. */
   win: number[];
+  /** Per ply k (1-based; index 0 unused): Stockfish's numbers around this move aren't trustworthy. */
+  unsure: boolean[];
 }
+
+const capCp = (c: number) => Math.max(-1500, Math.min(1500, c));
 
 function series(game: StoredGame): Series | undefined {
   const positions = betaPositions(game);
   if (positions.length !== game.plies.length + 1) return undefined;
   const moves = buildMoveEvals(game.plies, positions);
-  const cp = positions.map((p) => {
+  const toUser = (p: PositionEval) => {
     const v = positionCp(p);
     return sideToMove(p.fen) === game.userColor ? v : -v;
+  };
+  const cp = positions.map(toUser);
+  // A second opinion: the stored (faster) analysis. Where the two disagree sharply, or where
+  // Stockfish's own first choice seems to swing the evaluation, its numbers are unstable.
+  const base = game.analysis?.positions ?? [];
+  const shaky = positions.map((_, i) => {
+    if (!base[i] || base[i] === positions[i] || !game.aiCoachEval) return false;
+    const a = capCp(cp[i]);
+    const b = capCp(toUser(base[i]));
+    return Math.abs(a - b) >= 150 && Math.min(Math.abs(a), Math.abs(b)) < 800;
   });
-  return { positions, moves, cp, win: cp.map(winPercent) };
+  const unsure = [false, ...game.plies.map((p, i) => {
+    const k = i + 1;
+    const effect = Math.abs(capCp(cp[k]) - capCp(cp[k - 1]));
+    const enginesChoice = positions[k - 1].lines[0]?.pv[0] === p.uci;
+    return shaky[k - 1] || shaky[k] || (enginesChoice && effect >= 80);
+  })];
+  return { positions, moves, cp, win: cp.map(winPercent), unsure };
 }
 
 export interface Shift {
@@ -143,7 +185,8 @@ export interface Shift {
  */
 export function evaluationShifts(game: StoredGame, s = series(game)): Shift[] {
   if (!s) return [];
-  const d = s.win.slice(1).map((w, i) => w - s.win[i]); // d[k-1] = effect of ply k
+  // d[k-1] = effect of ply k; moves where the engine is unsure don't count as shifts.
+  const d = s.win.slice(1).map((w, i) => (s.unsure[i + 1] ? 0 : w - s.win[i]));
   const out: Shift[] = [];
   let run: number[] = [];
   const flush = () => {
@@ -207,44 +250,6 @@ function onlyMoves(game: StoredGame, s: Series): { ply: number; gap: number }[] 
     .slice(0, 5);
 }
 
-/**
- * Positions (indices) to re-check at depth 18 before the review: both sides of
- * the moves that moved the evaluation, so the evidence isn't depth-12 noise.
- */
-export function betaDeepTargets(game: StoredGame, max = 16): number[] {
-  // One pass per analysis: re-targeting on the deeper numbers would never settle.
-  if (game.aiCoachDeep) return [];
-  const s = series(game);
-  if (!s) return [];
-  const have = new Set([...(game.analysis?.deepPositions ?? []), ...Object.keys(game.aiCoachDeep ?? {}).map(Number)]);
-  const plies = candidatePlies(game, s, evaluationShifts(game, s))
-    .map((k) => ({ k, e: Math.abs(s.win[k] - s.win[k - 1]) }))
-    .sort((a, b) => b.e - a.e);
-  const out: number[] = [];
-  for (const { k } of plies) {
-    for (const i of [k - 1, k]) if (!have.has(i) && !out.includes(i) && !s.positions[i].terminal) out.push(i);
-    if (out.length >= max) break;
-  }
-  return out.slice(0, max).sort((a, b) => a - b);
-}
-
-/** Re-check the target positions with any engine (browser WASM or Node). */
-export async function deepenForBeta(
-  game: StoredGame,
-  analyse: (fen: string) => Promise<PositionEval>,
-  onProgress?: (done: number, total: number) => void,
-): Promise<Record<number, PositionEval>> {
-  const targets = betaDeepTargets(game);
-  const out: Record<number, PositionEval> = { ...(game.aiCoachDeep ?? {}) };
-  const positions = game.analysis?.positions ?? [];
-  for (let n = 0; n < targets.length; n++) {
-    const i = targets[n];
-    out[i] = await analyse(positions[i].fen);
-    onProgress?.(n + 1, targets.length);
-  }
-  return out;
-}
-
 export interface BetaContext {
   facts: Record<string, unknown>;
   /** Moves the answer may name: the game's, Stockfish's lines', and every legal move in a game position. */
@@ -253,8 +258,25 @@ export interface BetaContext {
   candidatesAt: Map<number, Set<string>>;
   /** Every Stockfish candidate move anywhere (for recommendations not tied to a move number). */
   allCandidates: Set<string>;
-  support: { material: Set<string>; mate: Set<string>; promotion: Set<string>; anyMaterial: boolean; anyMate: boolean; promotedInGame: boolean };
+  /**
+   * What the engine data backs. For moves PLAYED in the game, by ply; for alternatives, by move
+   * (a SAN that appears in some unrelated line doesn't back a claim about the game move).
+   */
+  support: {
+    material: Set<string>;
+    materialPlies: Set<number>;
+    mate: Set<string>;
+    matePlies: Set<number>;
+    promotion: Set<string>;
+    anyMaterial: boolean;
+    anyMate: boolean;
+    promotedInGame: boolean;
+  };
   verdicts: Map<number, Verdict>;
+  /** Plies (1-based) whose evaluation Stockfish isn't sure about. */
+  unsurePlies: Set<number>;
+  /** The student's plies inside a run where the evaluation moved against them. */
+  adversePlies: Set<number>;
   /** Student-POV centipawns after each ply. */
   cp: number[];
   plyCount: number;
@@ -265,7 +287,7 @@ export interface BetaContext {
 
 export function betaGrounding(game: StoredGame): string {
   const a = game.analysis;
-  return `v${BETA_VERSION}|${a?.analyzedAt}|${a?.depth}|${a?.deepPositions?.length ?? 0}|${Object.keys(game.aiCoachDeep ?? {}).length}|${game.userColor}|${userOutcome(game) ?? ''}`;
+  return `v${BETA_VERSION}|${a?.analyzedAt}|${game.aiCoachEval?.depth ?? 'base'}|${game.aiCoachEval?.positions.length ?? 0}|${game.userColor}|${userOutcome(game) ?? ''}`;
 }
 
 export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: number): BetaContext | undefined {
@@ -279,7 +301,16 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
   const allowed = new Set<string>();
   const candidatesAt = new Map<number, Set<string>>();
   const allCandidates = new Set<string>();
-  const support = { material: new Set<string>(), mate: new Set<string>(), promotion: new Set<string>(), anyMaterial: false, anyMate: false, promotedInGame: false };
+  const support = {
+    material: new Set<string>(),
+    materialPlies: new Set<number>(),
+    mate: new Set<string>(),
+    matePlies: new Set<number>(),
+    promotion: new Set<string>(),
+    anyMaterial: false,
+    anyMate: false,
+    promotedInGame: false,
+  };
   game.plies.forEach((p) => {
     allowed.add(strip(p.san));
     if (p.san.includes('=')) {
@@ -299,6 +330,7 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
     const parts = [`${label(k)} (${who(p.color)}): ${fmtEval(s.cp[k])} (${fmtDelta(s.cp[k] - s.cp[k - 1])})`, QUALITY_LABEL[v].toLowerCase()];
     if (!e.isBest && e.bestSan && v !== 'equal') parts.push(`Stockfish preferred ${e.bestSan}`);
     if (mat) parts.push(mat > 0 ? `you gain ${materialPhrase(mat)}` : `you lose ${materialPhrase(-mat)}`);
+    if (s.unsure[k]) parts.push('engine unsure here');
     return parts.join(' · ');
   });
 
@@ -315,13 +347,13 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
       change: delta > 0 ? `you gained ${materialPhrase(delta)}` : `you lost ${materialPhrase(-delta)}`,
       balance: bal[i] === 0 ? 'level' : bal[i] > 0 ? `you are up ${materialPhrase(bal[i])}` : `you are down ${materialPhrase(-bal[i])}`,
     });
-    for (let k = Math.max(1, i - 4); k <= i; k++) if (game.plies[k - 1].captured || bal[k] !== bal[k - 1]) support.material.add(strip(game.plies[k - 1].san));
-    if (i >= 2) support.material.add(strip(game.plies[i - 2].san));
+    for (let k = Math.max(1, i - 4); k <= i; k++) if (game.plies[k - 1].captured || bal[k] !== bal[k - 1]) support.materialPlies.add(k);
+    if (i >= 2) support.materialPlies.add(i - 1); // the move that allowed it
     support.anyMaterial = true;
     settled = bal[i];
   }
   if (s.positions[game.plies.length]?.terminal === 'checkmate') {
-    support.mate.add(strip(game.plies[game.plies.length - 1].san));
+    support.matePlies.add(game.plies.length);
     support.anyMate = true;
   }
 
@@ -391,18 +423,19 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
     const playedSans = played.frames.map((f) => f.san);
     playedSans.forEach((x) => allowed.add(strip(x)));
     if (played.kind === 'material') {
-      support.material.add(strip(p.san));
+      support.materialPlies.add(k);
       played.frames.filter((f) => f.san.includes('x')).forEach((f) => support.material.add(strip(f.san)));
       support.anyMaterial = true;
     }
     if (played.kind === 'mate' || isMate(e.cpAfter)) {
-      support.mate.add(strip(p.san));
+      support.matePlies.add(k);
       support.anyMate = true;
     }
     return {
       ply: k,
       beforeMove: label(k),
       toMove: who(p.color),
+      engineUnsure: s.unsure[k] || undefined,
       note: inExchange ? `${label(k - 1)} was a capture: material below is counted from before it` : undefined,
       fen: p.fenBefore,
       depth: before.depth,
@@ -451,7 +484,7 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
 
   // --- the moves by kind (labels only; the instructor decides what they mean).
   const verdicts = new Map<number, Verdict>(s.moves.map((e) => [e.ply, verdictOf(e)]));
-  const by = (c: Color, vs: Verdict[]) => s.moves.filter((e) => e.color === c && vs.includes(verdicts.get(e.ply)!)).map((e) => `${label(e.ply)} ${fmtDelta(s.cp[e.ply] - s.cp[e.ply - 1])}`);
+  const by = (c: Color, vs: Verdict[]) => s.moves.filter((e) => e.color === c && !s.unsure[e.ply] && vs.includes(verdicts.get(e.ply)!)).map((e) => `${label(e.ply)} ${fmtDelta(s.cp[e.ply] - s.cp[e.ply - 1])}`);
   const notableMoves = {
     yourOnlyMoveFinds: onlyMoves(game, s).map((f) => `${label(f.ply)} (the next-best move was much worse)`),
     yourMistakesAndBlunders: by(user, BAD),
@@ -490,7 +523,9 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
     pgn: cleanPgn(game),
     evaluationScale:
       `All evaluations are in pawns from YOUR (${COLOR_NAME[user]}'s) point of view: positive is good for you. Roughly: within ±0.5 equal; ±0.5–1.5 slightly better/worse; ±1.5–3 clearly better/worse; beyond ±3 winning/losing. Changes in brackets are each move's effect.`,
-    engine: `Stockfish, depth ${game.analysis?.depth ?? 12} for every position; positions around the evaluation shifts re-checked at depth ${BETA_DEEP_DEPTH}.`,
+    engine: game.aiCoachEval
+      ? `Stockfish, every position at depth ${game.aiCoachEval.depth} in one pass (so move-by-move changes compare like with like). "engine unsure" marks moves where a second, faster pass disagreed by 1.5+ pawns or Stockfish's own first choice appeared to swing the evaluation: its numbers there are not reliable.`
+      : `Stockfish, depth ${game.analysis?.depth ?? 12}.`,
     accuracy: { you: acc(mine), opponent: acc(theirs) },
     evaluationTimeline: timeline,
     evaluationShifts: evaluationShiftsOut,
@@ -513,6 +548,8 @@ export function buildBetaContext(game: StoredGame, all: StoredGame[], rating: nu
     allCandidates,
     support,
     verdicts,
+    unsurePlies: new Set(game.plies.map((p) => p.ply).filter((k) => s.unsure[k])),
+    adversePlies: new Set(shifts.filter((sh) => sh.direction === 'against you').flatMap((sh) => sh.moves.map((m) => m.ply).filter((k) => k >= sh.fromPly && game.plies[k - 1].color === user))),
     cp: s.cp,
     plyCount: game.plies.length,
     userColor: user,
@@ -537,7 +574,13 @@ const TACTIC_CLAIM = /\b(?:fork|skewer|discovered attack|double attack|removes? 
 const MATE_CLAIM = /\b(?:mates|mated|checkmate|mating|forces? mate|forced mate|mate in \d)\b/i;
 const UNSTOPPABLE_CLAIM = /\b(?:unstoppable|cannot be stopped|can't be stopped|could not be stopped|couldn't be stopped|will promote|queens by force)\b/i;
 const EVAL_CLAIM = /\b(?:is losing|was losing|losing position|lost position|dead lost|completely winning|totally winning|winning position|decisive(?:ly)?|game over|resignable)\b/i;
-const PRAISE = /\b(?:strong|excellent|good|great|best|well[- ]timed|correct|powerful|brilliant|accurate|clever|precise|smart|right idea|well played|instructive break|fine move)\b/i;
+const PRAISE =
+  /\b(?:strong|excellent|good|great|best|well[- ]timed|correct(?:ly)?|rightly|wisely|sensibly|well[- ]judged|powerful|brilliant|accurate(?:ly)?|clever|precise(?:ly)?|smart|right (?:idea|choice|decision|call)|well played|well done|instructive break|fine move|nicely|excellently)\b/i;
+/** "forces/forced the repetition / the draw": only true if the other side had nothing better. */
+const FORCED_DRAW = /\b(?:forces?|forced|forcing|compels?|compelled)\b[^.!?]{0,40}\b(?:repetition|draw|perpetual)\b/i;
+/** Evaluation figures quoted in the text: "+0.9", "-3.4", "−1.7", "from 0.6 to -0.7". */
+const SIGNED_NUMBER = /(?<![\w.])([+\-−]\d+(?:\.\d+)?)(?!\.?\d|%|\w)/g;
+const FROM_NUMBER = /\bfrom\s+(\d+(?:\.\d+)?)\s+to\b/gi;
 const BLAME = /\b(?:mistake|blunder|error|inaccura\w*|bad move|weak move|wrong|careless|dubious|premature)\b/i;
 const RECOMMEND = /\b(?:better (?:was|is|would)|was better|is better|would have been (?:better|stronger)|should have|stronger was|instead,? |best was|was best|preferred|recommend\w*|the right move)\b/i;
 const CONTRAST = /\b(?:but|however|although|though|yet|while|whereas|instead)\b/i;
@@ -626,25 +669,54 @@ export function checkText(text: string, ctx: BetaContext, game: StoredGame): Che
     const sans = anchors.map((a) => a.san);
     const played = anchors.filter((a) => a.ply !== undefined);
 
-    if (MATE_CLAIM.test(s) && !negated(s, MATE_CLAIM) && !(sans.length ? sans.some((m) => ctx.support.mate.has(m)) : ctx.support.anyMate)) {
+    const backs = (plies: Set<number>, moves: Set<string>) => anchors.some((a) => (a.ply !== undefined ? plies.has(a.ply) : moves.has(a.san)));
+    if (MATE_CLAIM.test(s) && !negated(s, MATE_CLAIM) && !(sans.length ? backs(ctx.support.matePlies, ctx.support.mate) : ctx.support.anyMate)) {
       return drop("Stockfish's analysis shows no such mate");
     }
-    if ((MATERIAL_CLAIM.test(s) || TACTIC_CLAIM.test(s)) && !negated(s, MATERIAL_CLAIM) && !(sans.length ? sans.some((m) => ctx.support.material.has(m)) : ctx.support.anyMaterial)) {
+    if ((MATERIAL_CLAIM.test(s) || TACTIC_CLAIM.test(s)) && !negated(s, MATERIAL_CLAIM) && !(sans.length ? backs(ctx.support.materialPlies, ctx.support.material) : ctx.support.anyMaterial)) {
       return drop("Stockfish's analysis doesn't show that material change");
     }
     // Without a move named, "couldn't be stopped" is about the game itself: a pawn must actually have promoted.
     if (UNSTOPPABLE_CLAIM.test(s) && !negated(s, UNSTOPPABLE_CLAIM) && !(sans.length ? sans.some((m) => ctx.support.promotion.has(m)) : ctx.support.promotedInGame)) {
       return drop("Stockfish's analysis shows no pawn that couldn't be stopped");
     }
+    // Where Stockfish's own numbers are unstable, nothing evaluative can be confirmed.
+    const judging = (EVAL_CLAIM.test(s) && !negated(s, EVAL_CLAIM)) || (BLAME.test(s) && !negated(s, BLAME)) || SIGNED_NUMBER.test(s);
+    SIGNED_NUMBER.lastIndex = 0;
+    if (judging && played.length && played.every((a) => ctx.unsurePlies.has(a.ply!))) {
+      return drop(`Stockfish's evaluation is unstable around ${moveLabel(game.plies[played[0].ply! - 1])}, so this can't be confirmed`);
+    }
     if (EVAL_CLAIM.test(s) && !negated(s, EVAL_CLAIM)) {
       const big = (k: number) => Math.abs(ctx.cp[k]) >= 200;
       const ok = played.length ? played.some((a) => big(a.ply!) || big(a.ply! - 1)) : ctx.cp.some((c) => Math.abs(c) >= 200);
       if (!ok) return drop("Stockfish's evaluation never got that one-sided there");
     }
+    // Quoted evaluation figures must match the timeline around the moves named.
+    const figures = [...s.matchAll(SIGNED_NUMBER)].map((m) => Number(m[1].replace('−', '-'))).concat([...s.matchAll(FROM_NUMBER)].map((m) => Number(m[1])));
+    if (figures.length && played.length) {
+      const near = played.flatMap((a) => [a.ply! - 1, a.ply!]).filter((k) => k >= 0 && k < ctx.cp.length);
+      const off = figures.find((v) => !near.some((k) => !isMate(ctx.cp[k]) && Math.abs(ctx.cp[k] / 100 - v) <= Math.max(0.25, 0.1 * Math.abs(v))));
+      if (off !== undefined) {
+        const k = played[0].ply!;
+        return drop(`Stockfish's evaluation around ${moveLabel(game.plies[k - 1])} was ${fmtEval(ctx.cp[k - 1])} → ${fmtEval(ctx.cp[k])}, not ${off}`);
+      }
+    }
+    if (FORCED_DRAW.test(s) && !negated(s, FORCED_DRAW)) {
+      // The opponent's moves near the end: if one was clearly worse than Stockfish's choice, nothing was forced.
+      const tail = game.plies.slice(-10).filter((p) => p.color !== ctx.userColor && !ctx.unsurePlies.has(p.ply));
+      const avoidable = tail.find((p) => ['inaccuracy', 'mistake', 'blunder'].includes(ctx.verdicts.get(p.ply)!));
+      if (avoidable) return drop(`Stockfish shows the opponent had better than ${moveLabel(avoidable)}: the draw wasn't forced`);
+    }
     const contrast = CONTRAST.test(s);
     if (PRAISE.test(s) && !negated(s, PRAISE) && !contrast && !RECOMMEND.test(s)) {
-      // Judged on the evaluation itself, not the label: a move that cost its player half a pawn isn't praised.
-      const bad = played.find((a) => BAD.includes(ctx.verdicts.get(a.ply!)!) || moverChange(ctx, game, a.ply!) <= -50);
+      // Judged on the evaluation itself, not the label: a move that cost its player half a pawn isn't praised,
+      // nor a smaller loss in the middle of a run that was going against the student.
+      const bad = played.find(
+        (a) =>
+          BAD.includes(ctx.verdicts.get(a.ply!)!) ||
+          moverChange(ctx, game, a.ply!) <= -50 ||
+          (ctx.adversePlies.has(a.ply!) && moverChange(ctx, game, a.ply!) <= -25),
+      );
       if (bad) {
         const k = bad.ply!;
         return drop(`Stockfish shows ${moveLabel(game.plies[k - 1])} made ${game.plies[k - 1].color === ctx.userColor ? 'your' : "the opponent's"} position worse (${fmtEval(ctx.cp[k - 1])} → ${fmtEval(ctx.cp[k])} for you)`);
@@ -694,7 +766,7 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
       const narrative = check(c?.narrative, 1600);
       if (!narrative) return undefined;
       return {
-        title: str(c?.title, 90) || 'Untitled phase',
+        title: check(c?.title, 90) || `Moves ${moveLabel(game.plies[fromPly - 1])} – ${moveLabel(game.plies[toPly - 1])}`,
         fromPly,
         toPly,
         anchorPly,
@@ -706,7 +778,8 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
           .map((x) => check(x, 300))
           .filter(Boolean),
         lesson: check(c?.lesson, 400),
-        diagram: c?.diagram !== false,
+        // Every chapter after the opening gets its board, whatever the model said.
+        diagram: str(c?.kind, 40) !== 'opening' || c?.diagram === true,
         explore: !!c?.explore,
         decisionPly: ply(c?.decisionPly),
         consequencePly: ply(c?.consequencePly),
@@ -717,7 +790,7 @@ export function parseBetaReview(text: string, ctx: BetaContext, game: StoredGame
   if (chapters.length < 2) throw new UngroundedError('The AI review had too few chapters that agreed with the engine analysis.');
 
   return {
-    version: 2,
+    version: 3,
     story: check(raw.story, 900),
     chapters,
     lessons: arr(raw.lessons)

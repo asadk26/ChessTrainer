@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { coachFromPositions } from '../src/analysis/pipeline';
-import { betaDeepTargets, betaPrompt, buildBetaContext, checkText, currentReview, evaluationShifts, parseBetaReview } from '../src/coach/betaCoach';
+import { betaPrompt, buildBetaContext, checkText, currentReview, evaluationShifts, needsBetaEval, parseBetaReview } from '../src/coach/betaCoach';
 import { UngroundedError } from '../src/coach/momentContext';
 import { BETA_COACH_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
 import { coachComplete } from '../server/coachApi';
@@ -20,9 +20,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 function drawGame(): StoredGame {
   const { game, positions } = fixtureGame('draw-game');
   const coached = coachFromPositions(game, positions, []).game;
-  // The depth-18 re-checks the app makes before the review (recorded with Node Stockfish).
-  const deep = JSON.parse(readFileSync(join(here, 'fixtures', 'draw-game-beta-deep.json'), 'utf8'));
-  return { ...coached, status: 'analyzed', aiCoachDeep: deep };
+  // The Beta pass the app makes before the review: every position at depth 16 (recorded with Node Stockfish).
+  const own = JSON.parse(readFileSync(join(here, 'fixtures', 'draw-game-beta-eval.json'), 'utf8'));
+  return { ...coached, status: 'analyzed', aiCoachEval: own };
 }
 
 const game = drawGame();
@@ -59,7 +59,7 @@ describe('Beta AI Coach evidence (draw game)', () => {
 
   it('shows Stockfish’s candidates at 19...e4, and that the pawn is lost once the line settles', () => {
     const at = f.candidatePositions.find((p: any) => p.beforeMove === '19...e4');
-    expect(at.depth).toBe(18);
+    expect(at.depth).toBe(16);
     expect(at.stockfishTop.map((t: any) => t.move)).toContain('Rfe8');
     expect(at.played.afterFullLine).toMatch(/you are down a pawn once the line settles/);
   });
@@ -83,10 +83,30 @@ describe('Beta AI Coach evidence (draw game)', () => {
     expect(f.positionalCheckpoints[1]).toMatchObject({ afterMove: '20...fxe4', opponent: { castled: true, king: 'g2' } });
   });
 
-  it('re-checks the shift positions at depth 18 once per analysis', () => {
-    expect(betaDeepTargets({ ...game, aiCoachDeep: undefined }).length).toBeGreaterThan(0);
-    expect(betaDeepTargets(game)).toEqual([]);
-    expect(evaluationShifts(game).length).toBeGreaterThan(3);
+  it('evaluates every position once at one depth, so move effects compare like with like', () => {
+    expect(needsBetaEval({ ...game, aiCoachEval: undefined })).toBe(true);
+    expect(needsBetaEval(game)).toBe(false);
+    expect(game.aiCoachEval!.positions.every((p) => p.terminal || p.depth === 16)).toBe(true);
+    expect(f.engine).toMatch(/every position at depth 16 in one pass/);
+  });
+
+  it('does not invent an endgame comeback: no shift in your favour from your own moves around 36...a5–40...Rc4', () => {
+    const shifts = evaluationShifts(game);
+    expect(shifts.map((s) => s.direction)).toContain('against you');
+    for (const s of shifts.filter((x) => x.direction === 'in your favour')) {
+      const yours = s.moves.filter((m) => m.ply >= s.fromPly && game.plies[m.ply - 1].color === 'b' && m.change > 50);
+      expect(yours.filter((m) => m.ply >= 72 && m.ply <= 80)).toEqual([]);
+    }
+    const row = (mv: string) => f.evaluationTimeline.find((r: string) => r.startsWith(mv)) as string;
+    // 38...Rc3 is Stockfish's choice and changes little; it is not a "shift".
+    expect(row('38...Rc3')).toMatch(/\(−0\.\d\) · best move/);
+  });
+
+  it('marks moves where Stockfish is unsure, mostly in the rook ending, and keeps them out of the shifts', () => {
+    expect(ctx.unsurePlies.size).toBeGreaterThan(0);
+    expect([...ctx.unsurePlies].every((k) => k > 60)).toBe(true);
+    expect(f.evaluationTimeline.filter((r: string) => r.includes('engine unsure here')).length).toBe(ctx.unsurePlies.size);
+    for (const s of evaluationShifts(game)) expect(ctx.unsurePlies.has(s.fromPly)).toBe(false);
   });
 
   it('fits comfortably in one request', () => {
@@ -138,6 +158,29 @@ describe('the Stockfish referee', () => {
     drop('41...Kg8 dropped a rook.', /material change/);
   });
 
+  // Sentences from the first real Gemini review of this game (October 2026).
+  it('catches the claims the first real review got wrong', () => {
+    drop('38...Rc3 was rated Black\'s best move, shifting the evaluation from -3.4 to -1.7.', /evaluation around 38\.\.\.Rc3 was .* not -1\.7/);
+    drop('44.Kg5 was a blunder that let you back into the game.', /unstable around 44\.Kg5/);
+    drop('You correctly played 24...b5 to free your queenside.', /24\.\.\.b5 made your position worse/);
+  });
+
+  it('does not praise small concessions in the middle of a run going against you', () => {
+    expect(ctx.adversePlies.has(44)).toBe(true); // 22...Bd6
+    drop('22...Bd6 was a sensible, well-judged move.', /22\.\.\.Bd6 made your position worse/);
+  });
+
+  it('checks quoted evaluation figures against the timeline', () => {
+    keep('Before 19...e4 the evaluation was +0.8; after it, -0.8.');
+    drop('After 19...e4 the evaluation was still +0.5.', /not 0\.5|not \+0\.5/);
+  });
+
+  it('does not let a draw be called "forced" when the opponent had better', () => {
+    const relabelled = { ...ctx, verdicts: new Map([...ctx.verdicts].map(([k, v]) => [k, k === 97 ? ('mistake' as const) : v])), unsurePlies: new Set<number>() };
+    expect(checkText('Your king pressure forces the repetition.', relabelled, game).removed[0]?.reason).toMatch(/49\.Rb5: the draw wasn't forced/);
+    keep('White chose to repeat the position, and the draw was a good practical result for you.');
+  });
+
   it('removes moves that are not in the game, the lines, or legal', () => {
     drop('19...Nf3 was possible.', /not legal at that point/);
     drop('52...Kc6 drew.', /not a move number/);
@@ -185,7 +228,7 @@ describe('parsing a review', () => {
   const r = parseBetaReview(JSON.stringify(MOCK), ctx, game, 'gemini-test');
 
   it('keeps chapters in order with their causal decision and consequence', () => {
-    expect(r.version).toBe(2);
+    expect(r.version).toBe(3);
     expect(r.chapters.map((c) => c.title)).toEqual(['A solid, equal opening', 'You force the position too soon', 'White misses Ng5', 'Active rook defence', 'Holding the draw']);
     const c = r.chapters[1];
     expect(c).toMatchObject({ decisionPly: 38, consequencePly: 41, anchorPly: 38, assessment: 'poorly', explore: true, diagram: true });
@@ -199,6 +242,18 @@ describe('parsing a review', () => {
     expect(r.chapters[3].narrative).toMatch(/38\.\.\.Rc3/);
     expect(r.removed.map((x) => x.text)).toEqual(expect.arrayContaining(['19...e4 was a strong central break.', "White's c-pawn could not be stopped."]));
     expect(r.removed.find((x) => x.text.startsWith('19...e4'))!.reason).toMatch(/made your position worse/);
+  });
+
+  it('referees titles too, and gives every chapter after the opening a board', () => {
+    const t = parseBetaReview(
+      JSON.stringify({ ...MOCK, chapters: [MOCK.chapters[0], { ...MOCK.chapters[4], title: 'Rh7xh8 wins the game', diagram: false }, MOCK.chapters[1]] }),
+      ctx,
+      game,
+    );
+    const last = t.chapters.find((c) => c.fromPly === 79)!;
+    expect(last.title).toBe('Moves 40.Rxb5 – 49...Kc6');
+    expect(last.diagram).toBe(true);
+    expect(t.chapters[0].diagram).toBe(false); // the opening chapter keeps the model's choice
   });
 
   it('keeps only practice positions before the student’s own moves', () => {

@@ -2,7 +2,7 @@
 import type { AiExplanation, BetaCoachReview, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
 import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
-import { BETA_DEEP_DEPTH, betaDeepTargets, betaPrompt, buildBetaContext, currentReview, deepenForBeta, parseBetaReview } from '../coach/betaCoach';
+import { BETA_DEPTH, betaPrompt, buildBetaContext, currentReview, evaluateForBeta, needsBetaEval, parseBetaReview } from '../coach/betaCoach';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
 import { findDuplicate } from '../chess/fingerprint';
 import { planSync, syncSummary, SyncError, type ChessComFetch } from '../sync/chesscom';
@@ -346,9 +346,9 @@ export async function explainLessons(gameId: string): Promise<number> {
 const betaInflight = new Map<string, Promise<BetaCoachReview>>();
 
 /**
- * The Beta AI Coach's whole-game review. First Stockfish re-checks the positions
- * around the evaluation shifts at depth 18 (kept apart from the built-in coach's
- * analysis), then the model writes the review, which is refereed and cached.
+ * The Beta AI Coach's whole-game review. First Stockfish evaluates every position
+ * once at one depth (kept apart from the built-in coach's analysis), then the model
+ * writes the review, which is refereed and cached.
  * Only regenerated when asked (`force`).
  */
 export function betaReview(
@@ -362,16 +362,14 @@ export function betaReview(
     if (!game) throw new Error('Game not found');
     const cached = currentReview(game);
     if (cached && !opts.force) return cached;
-    const targets = betaDeepTargets(game);
-    if (targets.length) {
+    if (needsBetaEval(game)) {
       const engine = await getBrowserEngine();
-      if (engine) {
-        const deep = await deepenForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEEP_DEPTH, multiPv: 3 }), (done, total) =>
-          opts.onProgress?.(`Stockfish is double-checking the key positions (${done}/${total})…`),
-        );
-        game = { ...((await repo.getGame(gameId)) ?? game), aiCoachDeep: deep };
-        await repo.saveGame(game);
-      }
+      if (!engine) throw new Error('Stockfish could not start in this browser.');
+      const own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), (done, total) =>
+        opts.onProgress?.(`Stockfish is checking every move at depth ${BETA_DEPTH} (${done}/${total})… this happens once per game`),
+      );
+      game = { ...((await repo.getGame(gameId)) ?? game), aiCoachEval: own };
+      await repo.saveGame(game);
     }
     const settings = await repo.getSettings();
     const ctx = buildBetaContext(game, await repo.listGames(), settings.rating);

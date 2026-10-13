@@ -416,8 +416,12 @@ export interface StoredGame {
   feedback?: CoachFeedback[];
   /** The Beta AI Coach's whole-game review, cached until regenerated on request (older shapes are ignored). */
   aiCoach?: BetaCoachReview | { version?: undefined };
-  /** Positions re-checked at depth 18 for the Beta AI Coach, by position index (kept apart from the built-in coach's analysis). */
-  aiCoachDeep?: Record<number, PositionEval>;
+  /**
+   * The Beta AI Coach's own evaluation of every position, in one pass at one depth, so
+   * move-by-move changes are never an artefact of comparing different depths.
+   * Kept apart from the built-in coach's analysis.
+   */
+  aiCoachEval?: { depth: number; positions: PositionEval[] };
 }
 
 export type FeedbackWhere = 'headline' | 'story' | 'did_well' | 'hurt' | 'recurring' | 'focus' | 'note' | 'moment' | 'drill';
@@ -538,7 +542,7 @@ export interface BetaChapter {
  * the engine data contradicts are removed before it is stored (and listed in `removed`).
  */
 export interface BetaCoachReview {
-  version: 2;
+  version: 3;
   /** The game's arc in 2–3 sentences. */
   story: string;
   chapters: BetaChapter[];

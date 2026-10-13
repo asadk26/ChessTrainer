@@ -4,7 +4,7 @@
 //
 // 1. Stockfish analyses every position (depth 12, MultiPV 3) and re-checks the
 //    built-in coach's critical positions at depth 18, exactly as the app does.
-// 2. The Beta deep pass re-checks the positions around the evaluation shifts at depth 18.
+// 2. The Beta pass evaluates every position again at one depth (16), so move effects compare like with like.
 // 3. Writes the exact evidence sent to the model: <out>/context.json and <out>/prompt.txt.
 // 4. If GEMINI_API_KEY is set (in the environment or .env.local), calls Gemini with the
 //    fixed server-side prompt, referees the answer, and writes <out>/review.json and
@@ -15,7 +15,7 @@ import { createNodeEngine } from '../server/nodeEngine.ts';
 import { GeminiProvider, DEFAULT_GEMINI_MODEL } from '../server/llm.ts';
 import { analyzeGame, coachFromPositions } from '../src/analysis/pipeline.ts';
 import { parsePgn, moveLabel } from '../src/chess/pgn.ts';
-import { BETA_DEEP_DEPTH, betaPrompt, buildBetaContext, deepenForBeta, parseBetaReview } from '../src/coach/betaCoach.ts';
+import { BETA_DEPTH, betaPrompt, buildBetaContext, evaluateForBeta, parseBetaReview } from '../src/coach/betaCoach.ts';
 import { BETA_COACH_SYSTEM_PROMPT } from '../src/coach/systemPrompt.ts';
 import type { BetaCoachReview, PositionEval, StoredGame } from '../src/domain/types.ts';
 
@@ -61,23 +61,23 @@ let game: StoredGame = {
 };
 
 const recorded = opt('positions', '');
-let deep: Record<number, PositionEval>;
+let own: { depth: number; positions: PositionEval[] };
 if (recorded) {
   // Reuse recorded Stockfish output (e.g. the test fixtures) instead of running the engine.
   game = { ...coachFromPositions(game, JSON.parse(readFileSync(recorded, 'utf8')), []).game, status: 'analyzed' };
-  deep = JSON.parse(readFileSync(opt('deep', recorded.replace('-positions.json', '-beta-deep.json')), 'utf8'));
+  own = JSON.parse(readFileSync(opt('beta-eval', recorded.replace('-positions.json', '-beta-eval.json')), 'utf8'));
 } else {
   const engine = createNodeEngine();
   const progress = (label: string) => (done: number, total: number) => process.stderr.write(`\r${label} ${done}/${total}   `);
   game = (await analyzeGame(game, engine, { depth: 12, prior: [], onProgress: progress('Stockfish') })).game;
   game.status = 'analyzed';
-  deep = await deepenForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEEP_DEPTH, multiPv: 3 }), progress(`Beta re-check at depth ${BETA_DEEP_DEPTH}`));
+  own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), progress(`Beta pass at depth ${BETA_DEPTH}`));
   engine.dispose();
   process.stderr.write('\n');
 }
-game = { ...game, aiCoachDeep: deep };
+game = { ...game, aiCoachEval: own };
 writeFileSync(join(out, 'positions.json'), JSON.stringify(game.analysis!.positions));
-writeFileSync(join(out, 'beta-deep.json'), JSON.stringify(deep));
+writeFileSync(join(out, 'beta-eval.json'), JSON.stringify(own));
 
 const ctx = buildBetaContext(game, [game], rating)!;
 writeFileSync(join(out, 'context.json'), JSON.stringify(ctx.facts, null, 1));
