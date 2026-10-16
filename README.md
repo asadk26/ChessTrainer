@@ -276,6 +276,29 @@ principles.
 From the command line: `npm run beta-review -- game.pgn w --training` writes `training.md`, plus
 `training-prompt.txt` with the exact AI input.
 
+## Adaptive Coach Games (Phase 1, experimental)
+
+**Play** (top bar) or the dashboard card. You play a normal game against a coach that is shaped around a weakness found in your **real** games. The teaching comes after the game.
+
+- **Three modes for now:**
+  - **Positional patience:** the coach steers toward closed, quiet positions.
+  - **Development discipline:** an unforced opening, kept close to openings your real opponents play against you.
+  - **Conversion:** the game starts from a real position in one of your games where you were +2 to +5.
+- **Stockfish decides what is sound.** Each coach move:
+  1. Stockfish gives 5 candidate moves at depth 12.
+  2. Moves outside the strength band are dropped, and so is any move whose own engine line loses material compared with the best line.
+  3. Among the moves left, small deterministic lesson scores (tension kept, centre closed, development, no piece trades) choose one, with a little variety.
+  - When the coach is already worse, it plays only Stockfish-equal moves.
+  - Strength comes from the band (Relaxed ≈ 0.8 pawns, Steady ≈ 0.5, Firm ≈ equal moves only). The search depth is not lowered.
+  - No language model is used during the game.
+- **After the game:** the normal analysis runs, then `src/adaptive/assess.ts` decides whether the game actually tested the skill. If not, the result is *not meaningfully tested*. Otherwise it's demonstrated, partly demonstrated or not yet, with 1–3 key moments.
+- **Three separate layers:**
+  - Real-game weakness only ever comes from real games. Coach games are tagged `adaptive` and excluded from the profile, the dashboard focus, coaching history and the accuracy trend.
+  - Coach-game results count as training progress only.
+  - A "confirmation" count tracks real games played after a good result.
+- **The premature pawn-break signal is deliberately weak.** A break counts as premature only if it is played in a quiet, level middlegame, costs at least 8 win%, and Stockfish wanted a piece move instead. On its own it counts as half a game of evidence.
+- **Code:** `src/adaptive/*`, `src/ui/adaptiveActions.ts`, `src/ui/screens/CoachGameScreen.tsx`. Tests and mock scenarios are in `tests/adaptive.test.ts`.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value

@@ -71,7 +71,7 @@ export async function importGame(
 
 /** Sets the dashboard focus from the most recent analyzed game. */
 async function syncFocus() {
-  const games = (await repo.listGames()).filter((g) => g.status === 'analyzed' && g.report);
+  const games = (await repo.listGames()).filter((g) => g.status === 'analyzed' && g.report && !g.adaptive);
   if (!games.length) return;
   const latest = games.sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a))[0];
   const settings = await repo.getSettings();

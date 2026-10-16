@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
+import type { AdaptiveSession, Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
 import { DEFAULT_SETTINGS, repo } from '../storage/repository';
 import { getLlmStatus, type LlmStatus } from '../coach/llmClient';
 
@@ -8,6 +8,7 @@ interface AppState {
   games: StoredGame[];
   drills: Drill[];
   attempts: DrillAttempt[];
+  sessions: AdaptiveSession[];
   settings: PlayerSettings;
   llm: LlmStatus;
   refresh(): Promise<void>;
@@ -22,19 +23,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     games: [],
     drills: [],
     attempts: [],
+    sessions: [],
     settings: DEFAULT_SETTINGS,
     llm: { provider: null },
   });
 
   const refresh = useCallback(async () => {
-    const [games, drills, attempts, settings, llm] = await Promise.all([
+    const [games, drills, attempts, sessions, settings, llm] = await Promise.all([
       repo.listGames(),
       repo.listDrills(),
       repo.listAttempts(),
+      repo.listSessions(),
       repo.getSettings(),
       getLlmStatus(),
     ]);
-    setState({ loaded: true, games, drills, attempts, settings, llm });
+    setState({ loaded: true, games, drills, attempts, sessions, settings, llm });
   }, []);
 
   const updateSettings = useCallback(

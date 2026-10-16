@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { aggregateProfile, describeFrequency } from '../../profile/profile';
-import { gamePlayedAt } from '../../analysis/pipeline';
+import { gamePlayedAt, isRealGame } from '../../analysis/pipeline';
 import { THEMES } from '../../domain/categories';
 import { navigate, useApp } from '../store';
 import { SAMPLE_PGN } from '../../fixtures/sampleGame';
@@ -11,6 +11,7 @@ import { userOutcome } from '../../chess/outcome';
 import { gameStats, trend } from '../../analysis/engineReview';
 import { ChessComSync } from '../components/ChessComSync';
 import { ExportPgns } from '../components/ExportPgns';
+import { CoachGameCard } from '../components/CoachGameCard';
 import { llmPing } from '../../coach/llmClient';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
@@ -24,7 +25,7 @@ export function Dashboard() {
   const profile = useMemo(
     () =>
       aggregateProfile(
-        analyzed.map((g) => ({
+        analyzed.filter(isRealGame).map((g) => ({
           gameId: g.id,
           playedAt: gamePlayedAt(g),
           findings: g.findings,
@@ -36,7 +37,7 @@ export function Dashboard() {
   const recent = [...games].sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
   const statsById = useMemo(() => new Map(analyzed.map((g) => [g.id, gameStats(g)] as const)), [analyzed]);
   const accTrend = useMemo(
-    () => trend(analyzed.flatMap((g) => (statsById.get(g.id) ? [{ at: gamePlayedAt(g), s: statsById.get(g.id)! }] : []))),
+    () => trend(analyzed.filter(isRealGame).flatMap((g) => (statsById.get(g.id) ? [{ at: gamePlayedAt(g), s: statsById.get(g.id)! }] : []))),
     [analyzed, statsById],
   );
   const solvedIds = new Set(attempts.filter((a) => a.correct).map((a) => a.drillId));
@@ -118,6 +119,7 @@ export function Dashboard() {
           <p className="muted">Analyze a game to get your first focus.</p>
         )}
       </section>
+      <CoachGameCard />
 
       {analyzed.length > 0 && (
         <section className="card trend-card">
@@ -199,7 +201,7 @@ export function Dashboard() {
                 <span className={`result ${won ? 'won' : lost ? 'lost' : 'draw'}`}>{won ? 'W' : lost ? 'L' : outcome === 'draw' ? '½' : '?'}</span>
                 <span className="g-main">
                   vs <b>{g.opponentName}</b> <span className="muted small">{g.userColor === 'w' ? 'as White' : 'as Black'}</span>
-                  <span className="muted small block">{g.status === 'analyzed' ? g.report?.focus.title : g.status === 'error' ? `Error: ${g.error}` : 'Not analyzed yet'}</span>
+                  <span className="muted small block">{g.adaptive ? 'Adaptive Coach Game · ' : ''}{g.status === 'analyzed' ? g.report?.focus.title : g.status === 'error' ? `Error: ${g.error}` : 'Not analyzed yet'}</span>
                 </span>
                 {statsById.get(g.id) && (
                   <span className="acc-badge" title="Stockfish accuracy (0–100)">

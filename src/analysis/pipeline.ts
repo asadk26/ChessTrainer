@@ -25,11 +25,14 @@ export function gameLabel(g: StoredGame): string {
   return `vs ${g.opponentName}${g.headers.date ? ` (${g.headers.date})` : ''}`;
 }
 
+/** Games from real play. Adaptive Coach games record training results, never real-game weaknesses. */
+export const isRealGame = (g: Pick<StoredGame, 'adaptive'>) => !g.adaptive;
+
 /** Analyzed games played before `game`, as coaching history. */
 export function priorGames(game: StoredGame, all: StoredGame[]): PriorGameFindings[] {
   const at = gamePlayedAt(game);
   return all
-    .filter((g) => g.id !== game.id && g.status === 'analyzed' && gamePlayedAt(g) < at)
+    .filter((g) => g.id !== game.id && g.status === 'analyzed' && isRealGame(g) && gamePlayedAt(g) < at)
     .map((g) => ({ gameId: g.id, label: gameLabel(g), playedAt: gamePlayedAt(g), findings: g.findings }));
 }
 

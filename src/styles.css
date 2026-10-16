@@ -536,3 +536,24 @@ p { margin: 0 0 0.75rem; }
 .export-row { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: end; margin-bottom: 0.6rem; }
 .export-row label { display: grid; gap: 0.2rem; font-size: 0.85rem; }
 .export-row label.check { display: flex; align-items: center; gap: 0.35rem; }
+
+/* Adaptive Coach Game */
+.tag-bad { color: var(--bad-line); background: var(--warn-soft); }
+.tag-muted { color: var(--muted); background: var(--track); }
+.coach-game .skill-list { display: grid; gap: 0.5rem; margin-top: 0.6rem; }
+.coach-game .skill-opt { display: grid; gap: 0.15rem; justify-items: start; text-align: left; padding: 0.6rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink); cursor: pointer; font: inherit; }
+.coach-game .skill-opt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.coach-game .skill-opt:disabled { opacity: 0.55; cursor: not-allowed; }
+.coach-game .row-controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; margin: 0.6rem 0 0.3rem; }
+.coach-game .row-controls label { display: grid; gap: 0.2rem; font-size: 0.85rem; }
+.coach-game .coach-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+.coach-game .moves { min-height: 1.4em; margin: 0.5rem 0; line-height: 1.5; word-break: break-word; }
+.coach-game ul.plain { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.45rem; }
+.coach-game .moments li { padding-left: 0.6rem; border-left: 3px solid var(--line); }
+.coach-game .moments li.moment-good { border-left-color: var(--good-line); }
+.coach-game .moments li.moment-bad { border-left-color: var(--bad-line); }
+@media (max-width: 420px) {
+  .topbar nav { gap: 0; }
+  .topbar nav a { padding: 0.35rem 0.42rem; font-size: 0.9rem; }
+  .theme-btn { margin-left: 0.15rem; flex: none; }
+}

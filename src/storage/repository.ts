@@ -2,7 +2,7 @@
 // localStorage to IndexedDB or Supabase/Postgres means writing one new class.
 // Suggested table mapping: games, drills, drill_attempts, player_settings
 // (findings/moments/report can live as JSONB columns on games).
-import type { Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
+import type { AdaptiveSession, Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
 import type { SyncState } from '../sync/chesscom';
 import { mergeFeedback } from '../coach/feedback';
 
@@ -23,6 +23,9 @@ export interface CoachRepository {
   /** Chess.com sync bookkeeping (which finished months were already read). Not part of backups. */
   getSyncState(): Promise<SyncState | undefined>;
   saveSyncState(s: SyncState | undefined): Promise<void>;
+  /** Adaptive Coach Game sessions (training results; part of backups). */
+  listSessions(): Promise<AdaptiveSession[]>;
+  saveSession(s: AdaptiveSession): Promise<void>;
 }
 
 export interface ImportSummary {
@@ -124,6 +127,12 @@ export class LocalStorageRepository implements CoachRepository {
     if (s) this.write('chesscomSync', s);
     else this.store.removeItem(PREFIX + 'chesscomSync');
   }
+  async listSessions() {
+    return this.read<AdaptiveSession[]>('adaptiveSessions', []);
+  }
+  async saveSession(s: AdaptiveSession) {
+    this.write('adaptiveSessions', [...(await this.listSessions()).filter((x) => x.id !== s.id), s]);
+  }
   async exportAll() {
     return JSON.stringify(
       {
@@ -133,6 +142,7 @@ export class LocalStorageRepository implements CoachRepository {
         games: await this.listGames(),
         drills: await this.listDrills(),
         attempts: await this.listAttempts(),
+        adaptiveSessions: await this.listSessions(),
         settings: { ...(await this.getSettings()), coachToken: undefined },
       },
       null,
@@ -194,6 +204,13 @@ export class LocalStorageRepository implements CoachRepository {
     }
     this.write('attempts', attempts);
 
+    const sessions = new Map((await this.listSessions()).map((x) => [x.id, x]));
+    for (const x of data.adaptiveSessions ?? []) {
+      const mine = x && typeof x.id === 'string' ? sessions.get(x.id) : undefined;
+      if (x && typeof x.id === 'string' && (!mine || (x.finishedAt ?? 0) > (mine.finishedAt ?? 0))) sessions.set(x.id, x);
+    }
+    this.write('adaptiveSessions', [...sessions.values()]);
+
     if (data.settings) {
       const local = await this.getSettings();
       const incoming = { ...DEFAULT_SETTINGS, ...data.settings };
@@ -218,6 +235,7 @@ interface Backup {
   games: StoredGame[];
   drills: Drill[];
   attempts: DrillAttempt[];
+  adaptiveSessions?: AdaptiveSession[];
   settings: PlayerSettings;
 }
 

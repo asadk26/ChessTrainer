@@ -3,6 +3,7 @@ import { Dashboard } from './ui/screens/Dashboard';
 import { ImportScreen } from './ui/screens/ImportScreen';
 import { GameScreen } from './ui/screens/GameScreen';
 import { DrillsScreen } from './ui/screens/DrillsScreen';
+import { CoachGameScreen } from './ui/screens/CoachGameScreen';
 import { useState } from 'react';
 import { getThemePref, setThemePref, type ThemePref } from './ui/theme';
 
@@ -12,6 +13,7 @@ function Routes() {
   if (!loaded) return null;
   if (parts[0] === 'import') return <ImportScreen />;
   if (parts[0] === 'drills') return <DrillsScreen />;
+  if (parts[0] === 'coach') return <CoachGameScreen />;
   if (parts[0] === 'game' && parts[1]) {
     const tab = parts[2] === 'review' ? 'review' : parts[2] === 'drills' ? 'drills' : parts[2] === 'ai' ? 'ai' : 'summary';
     const ply = query.get('ply');
@@ -36,6 +38,7 @@ function Nav() {
         {link('/', 'Dashboard')}
         {link('/import', 'Import')}
         {link('/drills', 'Drills')}
+        {link('/coach', 'Play')}
         <ThemeToggle />
       </nav>
     </header>

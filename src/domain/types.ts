@@ -412,6 +412,8 @@ export interface StoredGame {
   outcome?: 'win' | 'loss' | 'draw';
   /** AI-written explanations of single positions, keyed by ply, cached so revisiting costs no API call. */
   aiExplanations?: Record<number, AiExplanation>;
+  /** Set on games played against the Adaptive Coach: they record training, not real-game weaknesses. */
+  adaptive?: { sessionId: string; skill: AdaptiveSkill };
   /** "This seems wrong" notes the player left on the coaching. */
   feedback?: CoachFeedback[];
   /** The Beta AI Coach's whole-game review, cached until regenerated on request (older shapes are ignored). */
@@ -754,4 +756,84 @@ export interface TrainingPlan {
   removed: { text: string; reason: string }[];
   createdAt: number;
   grounding: string;
+}
+
+// ------------------------------------------------------------ adaptive coach games
+
+/** Phase 1 training modes. Kept deliberately small: each needs a real signal in your games. */
+export type AdaptiveSkill = 'positional_patience' | 'development_discipline' | 'conversion';
+
+export interface SkillExample {
+  gameId: string;
+  ply: number;
+  text: string;
+  at: number;
+}
+
+/** One objective for one coach game. Derived from your real games, never invented for variety. */
+export interface AdaptivePlan {
+  skill: AdaptiveSkill;
+  /** 'history': chosen from evidence in your games. 'practice': you picked it without that evidence. */
+  basis: 'history' | 'practice';
+  reason: string;
+  desiredPosition: string;
+  coachPreferences: string[];
+  successSignals: string[];
+  failureSignals: string[];
+  evidence: SkillExample[];
+  userColor: Color;
+  /** Where the game starts: the normal start, or a real position from one of your games. */
+  start: { fen: string; gameId?: string; ply?: number; label?: string };
+}
+
+/** Why the coach played what it played (kept for checking the coach, not shown during the game). */
+export interface CoachMoveLog {
+  ply: number;
+  uci: string;
+  bestUci: string;
+  /** Win% gap to Stockfish's best (0 for the best move). */
+  gap: number;
+  /** How many candidates were sound enough to choose from. */
+  allowed: number;
+  relevance: number;
+  reason: 'best' | 'only' | 'lesson' | 'variety';
+}
+
+export type AdaptiveVerdict = 'demonstrated' | 'partial' | 'failed' | 'not_tested';
+
+export interface AdaptiveMoment {
+  ply: number;
+  label: string;
+  text: string;
+  tone: 'good' | 'bad' | 'neutral';
+}
+
+export interface AdaptiveAssessment {
+  skill: AdaptiveSkill;
+  /** Did the game actually produce the situation the lesson needs? */
+  valid: boolean;
+  verdict: AdaptiveVerdict;
+  headline: string;
+  explanation: string;
+  moments: AdaptiveMoment[];
+  retestSoon: boolean;
+  stats: Record<string, number>;
+}
+
+export interface AdaptiveSession {
+  id: string;
+  createdAt: number;
+  plan: AdaptivePlan;
+  /** Coach playing strength: the widest win% gap from Stockfish's best it may choose. */
+  band: number;
+  /** Engine search depth for the coach's candidates (analysis strength, separate from playing strength). */
+  depth: number;
+  /** Moves from the start position, in UCI. */
+  moves: string[];
+  coachLog: CoachMoveLog[];
+  status: 'playing' | 'analysing' | 'done' | 'abandoned';
+  ending?: 'checkmate' | 'draw' | 'resigned' | 'stopped';
+  gameId?: string;
+  result?: AdaptiveAssessment;
+  finishedAt?: number;
 }

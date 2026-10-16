@@ -289,7 +289,7 @@ export function diagnose(game: StoredGame, all: StoredGame[]): Diagnosis | undef
   if (op) {
     const kinds = new Set(op.signals.map((x) => x.kind));
     // The same opening (as the same colour) going wrong before, in another analysed game.
-    const repeats = all.filter((g) => g.id !== game.id && g.status === 'analyzed' && g.userColor === game.userColor && openingName(g).name === name && detect(g)?.instances.some((i) => i.category === 'opening_development')).length;
+    const repeats = all.filter((g) => g.id !== game.id && g.status === 'analyzed' && !g.adaptive && g.userColor === game.userColor && openingName(g).name === name && detect(g)?.instances.some((i) => i.category === 'opening_development')).length;
     const score = (kinds.has('early_error') ? 3 : 0) + Math.min(3, op.cost / 60) + (kinds.has('development_lag') ? 2 : 0) + (kinds.has('defensive_duty') ? 1 : 0) + Math.min(2, repeats);
     scores.push({ category: 'opening_development', score, reason: `${[...kinds].join(', ')}${repeats ? `; ${repeats} earlier game(s) in the ${name} went wrong in the opening too` : ''}` });
   }
