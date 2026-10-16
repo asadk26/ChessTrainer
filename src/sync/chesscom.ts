@@ -112,7 +112,7 @@ function monthIsOver(url: string, now: number): boolean {
   return !!m && now > Date.UTC(Number(m[1]), Number(m[2]), 1) + 86_400_000;
 }
 
-function isStandard(g: ChessComGame): boolean {
+export function isStandard(g: ChessComGame): boolean {
   if (g.rules && g.rules !== 'chess') return false;
   return !g.initial_setup || g.initial_setup === START_FEN;
 }

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { joinPgns, recentChessComPgns } from '../src/sync/exportPgn';
 import type { ChessComFetch } from '../src/sync/chesscom';
 
-const game = (t: number, extra: Record<string, unknown> = {}) => ({ pgn: `[Event "g${t}"]\n\n1. e4 *\n`, url: `https://www.chess.com/game/live/${t}`, white: { username: 'tester' }, black: { username: 'opp' }, end_time: t, rules: 'chess', time_class: 'rapid', ...extra });
+const game = (t: number, extra: Record<string, unknown> = {}) => ({ pgn: `[Event "g${t}"]\n\n1. e4 *\n`, url: `https://www.chess.com/game/live/${t}`, white: { username: 'tester' }, black: { username: 'opp' }, end_time: t, rules: 'chess', time_class: 'rapid', initial_setup: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', ...extra });
 const months: Record<string, unknown> = {
   'player/tester/games/archives': { archives: ['https://api.chess.com/pub/player/tester/games/2026/08', 'https://api.chess.com/pub/player/tester/games/2026/09', 'https://api.chess.com/pub/player/tester/games/2026/10'] },
-  'player/tester/games/2026/10': { games: [game(30), game(31, { time_class: 'blitz' }), game(32, { rules: 'chess960' })] },
+  'player/tester/games/2026/10': { games: [game(30), game(31, { time_class: 'blitz' }), game(32, { rules: 'chess960' }), game(33, { initial_setup: '4k3/8/8/8/8/8/8/4K3 w - - 0 1' })] },
   'player/tester/games/2026/09': { games: [game(20), game(22), game(21)] },
   'player/tester/games/2026/08': { games: [game(10)] },
 };

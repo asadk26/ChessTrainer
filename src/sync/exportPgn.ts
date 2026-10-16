@@ -1,7 +1,7 @@
 // Export games as one PGN file: your most recent games straight from Chess.com (no need to
 // import or analyse them first), or the games already in the app.
 import type { StoredGame } from '../domain/types';
-import { asGames, get, normalizeUsername, SyncError, validUsername, type ChessComFetch, type ChessComGame } from './chesscom';
+import { asGames, get, isStandard, normalizeUsername, SyncError, validUsername, type ChessComFetch, type ChessComGame } from './chesscom';
 import { gamePlayedAt } from '../analysis/pipeline';
 
 /** The newest `count` standard games of `username`, newest first, walking monthly archives back as far as needed. */
@@ -19,7 +19,7 @@ export async function recentChessComPgns(
   for (const url of archives) {
     const path = url.replace(/^https?:\/\/api\.chess\.com\/pub\//, '');
     const games = asGames(await get(fetcher, path)).filter(
-      (g) => g.pgn && (g.rules ?? 'chess') === 'chess' && !g.initial_setup && (!timeClasses?.length || timeClasses.includes(g.time_class ?? '')),
+      (g) => g.pgn && isStandard(g) && (!timeClasses?.length || timeClasses.includes(g.time_class ?? '')),
     );
     found.push(...games);
     if (found.length >= count) break;
