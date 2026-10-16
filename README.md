@@ -299,6 +299,36 @@ From the command line: `npm run beta-review -- game.pgn w --training` writes `tr
 - **The premature pawn-break signal is deliberately weak.** A break counts as premature only if it is played in a quiet, level middlegame, costs at least 8 win%, and Stockfish wanted a piece move instead. On its own it counts as half a game of evidence.
 - **Code:** `src/adaptive/*`, `src/ui/adaptiveActions.ts`, `src/ui/screens/CoachGameScreen.tsx`. Tests and mock scenarios are in `tests/adaptive.test.ts`.
 
+### Adaptive Coach Games: Phase 2 tuning and playtesting
+
+- **One tuning table:** `COACH_TUNING` in `src/adaptive/selectMove.ts` holds:
+  - the band and the band while behind for each strength;
+  - when the coach eases off and by how much;
+  - the cap on lesson preferences and the score weights;
+  - the minimum think time.
+
+  Bump its `version` after a change. Every session and decision log records which version it played with. The engine search (depth 12, MultiPV 5) never changes with strength.
+- **Ease-off is how strength works:**
+  - Once comfortably ahead (Relaxed from +0.6, Steady from +1.2), the coach is content with any move that keeps it above a lower target. It never goes more than 1.6× its band below best.
+  - It still always takes free material, never plays a move whose own engine line loses material compared with the best line, and never walks into mate.
+  - Firm never eases off.
+  - Patience games ease off from +0.6, because a level position is that lesson's target.
+- **Naturalness:** a small prior picks between sound moves. It prefers recaptures, development and castling, and avoids early king walks, queen sorties, edge knights and unprovoked retreats.
+- **Material check:** each engine line is followed for at least 6 plies before deciding a move loses material, so a pawn regained a few moves later (as in the Petrov) isn't counted as lost.
+- **Coach decision log:** each coach move records Stockfish's best and its evaluation, every candidate (evaluation, lesson points, naturalness, score, or why it wasn't allowed), the move chosen and why (Stockfish's best / only sound move / equally good / lesson / natural / easing off / slightly weaker within band), and the time taken. To see it, finish a game, then use **Coach decision log** and **Copy game log**. **Play → Recent coach games → Playtest summary & export** copies the summary plus every game's log.
+- **Verdicts:**
+  - Every verdict carries its rule trace, shown under **Why this verdict**.
+  - Thresholds live in `ASSESS` in `src/adaptive/assess.ts`.
+  - Ambiguous cases resolve to "partly". For example, a clean patience game with fewer than 6 quiet decisions, slow development that Stockfish didn't punish, or an advantage held but not converted.
+  - Tactical slips are kept out of the patience verdict.
+- **Emergence:** each result records its number of test moments. A skill whose recent games mostly produced no valid test is deprioritised by the planner and flagged on the Play screen. The validity thresholds are not lowered.
+- **Novelty:**
+  - Patience and development always start from move 1. The coach avoids repeating its own opening moves from your last 3 coach games when an equal alternative exists.
+  - Conversion uses real positions from your games, rationed by exposure. Fresh positions come first. Positions you already handled well are retired. A position you've seen is reused only when nothing fresh is left, and it's labelled.
+  - `historicalConversionStarts` → `pickStart` is the hook where an "analogous position" source can be added later.
+- **Playtest notes:** optional quick answers after each game (natural? lesson came up? verdict fair?) plus weird moves and notes. They're saved with the session and included in the exported logs.
+- **Simulation:** `npx tsx scripts/coach-sim.ts [games] [relaxed|steady|firm] [skill]` plays coach games against a crude simulated player and reports how often each lesson emerges (set `SIM_USER=club` for a steadier player). It measures steering, not how the coach feels.
+
 ## Lessons: the instructor loop
 
 Each game gets at most **two interactive lessons**, chosen by learning value

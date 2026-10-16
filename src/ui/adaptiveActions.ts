@@ -1,23 +1,25 @@
 // Adaptive Coach Game flow: start → coach moves (Stockfish + lesson-aware selection) → finish →
 // the normal analysis pipeline → assessment saved as a training result.
 import { Chess } from 'chess.js';
-import type { AdaptivePlan, AdaptiveSession, StoredGame } from '../domain/types';
+import type { AdaptivePlan, AdaptiveSession, PlaytestFeedback, StoredGame } from '../domain/types';
 import { repo } from '../storage/repository';
 import { getBrowserEngine } from '../engine/browserEngine';
 import { parsePgn } from '../chess/pgn';
-import { COACH_ENGINE, STRENGTHS, selectCoachMove, type CoachStrength } from '../adaptive/selectMove';
-import { bookKey, openingBook, START_FEN } from '../adaptive/planner';
+import { COACH_ENGINE, COACH_TUNING, selectCoachMove, type StrengthId } from '../adaptive/selectMove';
+import { bookKey, openingBook, recentCoachMoves, START_FEN } from '../adaptive/planner';
 import { assessGame } from '../adaptive/assess';
 import { runAnalysis } from './actions';
 
 const newId = () => `acg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-export async function startSession(plan: AdaptivePlan, strength: CoachStrength['id']): Promise<AdaptiveSession> {
+export async function startSession(plan: AdaptivePlan, strength: StrengthId): Promise<AdaptiveSession> {
   const s: AdaptiveSession = {
     id: newId(),
     createdAt: Date.now(),
     plan,
-    band: STRENGTHS.find((x) => x.id === strength)!.band,
+    band: COACH_TUNING.strengths[strength].band,
+    strength,
+    tuning: COACH_TUNING.version,
     depth: COACH_ENGINE.depth,
     moves: [],
     coachLog: [],
@@ -41,18 +43,28 @@ export async function saveMoves(session: AdaptiveSession, moves: string[], log =
 
 let book: { color: string; map: Map<string, Set<string>> } | undefined;
 
-/** The coach's reply in the current position. */
+/** The coach's reply in the current position (never instant: it "thinks" for a moment). */
 export async function coachReply(session: AdaptiveSession): Promise<AdaptiveSession> {
   const engine = await getBrowserEngine();
   if (!engine) throw new Error('Stockfish could not start in this browser.');
+  const t0 = Date.now();
   const c = replay(session);
   const fen = c.fen();
   const pos = await engine.analyse(fen, { depth: session.depth, multiPv: COACH_ENGINE.multiPv });
   if (!book || book.color !== session.plan.userColor) book = { color: session.plan.userColor, map: openingBook(await repo.listGames(), session.plan.userColor) };
+  const avoid = session.plan.start.fen === START_FEN ? recentCoachMoves((await repo.listSessions()).filter((x) => x.id !== session.id), session.plan.userColor).get(bookKey(fen)) : undefined;
   const last = c.history({ verbose: true }).at(-1);
-  const pick = selectCoachMove(fen, pos, { band: session.band, variety: 1.2 }, { skill: session.plan.skill, lastMoveTo: last?.to, book: book.map.get(bookKey(fen)) });
+  const pick = selectCoachMove(fen, pos, { band: session.band, strength: session.strength }, { skill: session.plan.skill, lastMoveTo: last?.to, book: book.map.get(bookKey(fen)), avoid });
   if (!pick) throw new Error('The engine returned no move.');
-  return saveMoves(session, [...session.moves, pick.uci], [...session.coachLog, { ply: session.moves.length + 1, ...pick.log }]);
+  const ms = Date.now() - t0;
+  if (ms < COACH_TUNING.minThinkMs) await new Promise((r) => setTimeout(r, COACH_TUNING.minThinkMs - ms));
+  return saveMoves(session, [...session.moves, pick.uci], [...session.coachLog, { ply: session.moves.length + 1, ...pick.log, ms }]);
+}
+
+export async function saveFeedback(session: AdaptiveSession, feedback: Omit<PlaytestFeedback, 'at'>): Promise<AdaptiveSession> {
+  const next = { ...session, feedback: { ...feedback, at: Date.now() } };
+  await repo.saveSession(next);
+  return next;
 }
 
 function pgnFor(session: AdaptiveSession, userName: string, ending: NonNullable<AdaptiveSession['ending']>): string {
@@ -86,7 +98,11 @@ export async function finishSession(
     await repo.saveSession(abandoned);
     return { session: abandoned };
   }
-  let s: AdaptiveSession = { ...session, status: 'analysing', ending };
+  const final = replay(session);
+  const user = session.plan.userColor;
+  const outcome: AdaptiveSession['outcome'] =
+    ending === 'checkmate' ? (final.turn() === user ? 'loss' : 'win') : ending === 'draw' ? 'draw' : ending === 'resigned' ? 'loss' : 'unfinished';
+  let s: AdaptiveSession = { ...session, status: 'analysing', ending, outcome };
   await repo.saveSession(s);
   let gameId = s.gameId;
   if (!gameId) {

@@ -41,6 +41,8 @@ export interface SkillStatus {
     tests: number;
     lastTestedAt?: number;
     recent: { at: number; verdict: AdaptiveVerdict; sessionId: string }[];
+    /** Recent sessions mostly produced no valid test: the steering isn't producing this lesson. */
+    lowEmergence: boolean;
   };
   /** Real games after the last demonstrated result, and how many showed the weakness again. */
   confirmation?: { since: number; realGames: number; reappeared: number };
@@ -108,8 +110,14 @@ export function buildSkillProfile(games: StoredGame[], sessions: AdaptiveSession
       skill,
       label: SKILL_LABEL[skill],
       weakness: { score: Math.round(score * 10) / 10, level, games: n, confidence, examples: examples.slice(0, 4) },
-      training: { tests: mine.length, lastTestedAt: recent[0]?.at, recent },
+      training: { tests: mine.length, lastTestedAt: recent[0]?.at, recent, lowEmergence: lowEmergence(sessions, skill) },
       confirmation,
     };
   });
+}
+
+/** Most of the recent finished sessions for this skill produced no valid test. */
+export function lowEmergence(sessions: AdaptiveSession[], skill: AdaptiveSkill, window = 5): boolean {
+  const recent = sessions.filter((s) => s.plan.skill === skill && s.status === 'done' && s.result).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, window);
+  return recent.length >= 3 && recent.filter((s) => !s.result!.valid).length / recent.length >= 0.6;
 }

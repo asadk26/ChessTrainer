@@ -2,7 +2,7 @@
 // game should start. Deterministic: the plan's preferences map to real scoring rules in the
 // move selector, so free text from a language model could not change a single coach move.
 import { Chess } from 'chess.js';
-import type { AdaptivePlan, AdaptiveSession, AdaptiveSkill, Color, StoredGame } from '../domain/types';
+import type { AdaptivePlan, AdaptiveSession, AdaptiveSkill, Color, PositionExposure, StoredGame } from '../domain/types';
 import { gamePlayedAt, gameLabel, isRealGame } from '../analysis/pipeline';
 import { formatCp } from '../analysis/evaluation';
 import { moveLabel } from '../chess/pgn';
@@ -46,6 +46,8 @@ export function priority(s: SkillStatus, now = Date.now()): number {
   if (last?.verdict === 'demonstrated' && now - last.at < 3 * DAY) p *= 0.5;
   else if (last?.verdict === 'failed') p *= 1.25;
   else if (last?.verdict === 'partial') p *= 1.1;
+  // Don't keep serving a lesson that the games mostly fail to produce.
+  if (s.training.lowEmergence) p *= 0.4;
   return p;
 }
 
@@ -65,12 +67,13 @@ export function planFor(status: SkillStatus, games: StoredGame[], sessions: Adap
   const ex = status.weakness.examples[0];
   const exGame = ex && games.find((g) => g.id === ex.gameId);
   const seen = n >= 1 ? `in ${n % 1 ? n.toFixed(1) : n} of your games` : '';
-  let start: AdaptivePlan['start'] = { fen: START_FEN };
+  let start: AdaptivePlan['start'] = { fen: START_FEN, kind: 'standard' };
   let userColor: Color = color ?? exGame?.userColor ?? 'w';
   if (skill === 'conversion') {
     const pos = conversionStart(games, sessions);
     if (!pos) return undefined;
-    start = { fen: pos.fen, gameId: pos.game.id, ply: pos.ply, label: pos.label };
+    const again = pos.exposure.prior ? ` · seen ${pos.exposure.prior}× before (last: ${pos.exposure.verdicts[0]?.replace('_', ' ') ?? 'unfinished'})` : '';
+    start = { fen: pos.fen, kind: 'historical', key: pos.key, gameId: pos.game.id, ply: pos.ply, label: pos.label + again, exposure: pos.exposure };
     userColor = pos.game.userColor;
   }
   const reason =
@@ -84,14 +87,40 @@ export function planFor(status: SkillStatus, games: StoredGame[], sessions: Adap
   return { skill, basis, reason, ...TEMPLATE[skill], evidence: status.weakness.examples, userColor, start };
 }
 
+// ------------------------------------------------------------ start positions & exposure
+//
+// Historical games are seed material, not the curriculum: patience and development always
+// start from move 1 (fresh games); only conversion uses exact positions from your games, and
+// those are rationed. Exposure of an exact position is tracked separately from skill exposure.
+// Later, an "analogous position" provider can add StartCandidates without touching pickStart.
+
+export interface StartCandidate {
+  fen: string;
+  key: string;
+  game: StoredGame;
+  ply: number;
+  label: string;
+  /** Higher is better before exposure is considered (e.g. shortly before a real slip). */
+  weight: number;
+}
+
+/** Exact-position identity: board, side to move, castling, en passant (no move counters). */
+export const positionKey = (fen: string) => fen.split(' ').slice(0, 4).join(' ');
+
+/** How often this exact start position was used in earlier sessions, and how they went. */
+export function positionExposure(key: string, sessions: AdaptiveSession[]): PositionExposure {
+  const used = sessions
+    .filter((s) => (s.plan.start.key ?? positionKey(s.plan.start.fen)) === key && s.plan.start.kind !== 'standard' && s.plan.start.fen !== START_FEN && s.status !== 'abandoned')
+    .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt));
+  return { prior: used.length, lastAt: used[0] ? (used[0].finishedAt ?? used[0].createdAt) : undefined, verdicts: used.flatMap((s) => (s.result ? [s.result.verdict] : [])) };
+}
+
 /**
- * A real position from your games where you were clearly — but not trivially — better, with you
- * to move and nothing en prise. Prefers positions shortly before you let an advantage slip, and
- * ones not used for a coach game yet.
+ * Real positions from your games where you were clearly — but not trivially — better, with you
+ * to move and nothing en prise. One per stretch of a game.
  */
-export function conversionStart(games: StoredGame[], sessions: AdaptiveSession[]): { fen: string; game: StoredGame; ply: number; label: string } | undefined {
-  const used = new Set(sessions.map((s) => `${s.plan.start.gameId}@${s.plan.start.ply}`));
-  const options: { fen: string; game: StoredGame; ply: number; label: string; score: number }[] = [];
+export function historicalConversionStarts(games: StoredGame[]): StartCandidate[] {
+  const out: StartCandidate[] = [];
   for (const g of games) {
     if (g.status !== 'analyzed' || !isRealGame(g) || !g.analysis) continue;
     const slipped = gameEvidence(g, 'conversion').examples.map((e) => e.ply);
@@ -105,19 +134,60 @@ export function conversionStart(games: StoredGame[], sessions: AdaptiveSession[]
       // Stable: you were already this much better before the opponent's last move, and that move wasn't a capture.
       if (m.cpBefore < 200 || m.cpBefore > 500 || -pm.cpBefore < 200 || prev.captured) continue;
       if (new Chess(p.fenBefore).inCheck()) continue;
-      const key = `${g.id}@${p.ply - 1}`;
       const beforeSlip = slipped.some((s) => s >= p.ply && s - p.ply <= 12);
-      options.push({
+      out.push({
         fen: p.fenBefore,
+        key: positionKey(p.fenBefore),
         game: g,
         ply: p.ply - 1,
         label: `From your game ${gameLabel(g)}, before ${moveLabel(p)} — you were ${formatCp(m.cpBefore)}`,
-        score: (beforeSlip ? 10 : 0) + (used.has(key) ? -20 : 0) + gamePlayedAt(g) / 1e13,
+        weight: (beforeSlip ? 10 : 0) + gamePlayedAt(g) / 1e13,
       });
-      i += 5; // one position per stretch of the game
+      i += 5;
     }
   }
-  return options.sort((a, b) => b.score - a.score)[0];
+  return out;
+}
+
+/**
+ * Choose a start position, rationing exact repeats: positions you already handled well are
+ * retired; positions seen before rank below every fresh one (reused only for remediation,
+ * i.e. when nothing fresh is left).
+ */
+export function pickStart(cands: StartCandidate[], sessions: AdaptiveSession[]): (StartCandidate & { exposure: PositionExposure }) | undefined {
+  return cands
+    .map((c) => ({ ...c, exposure: positionExposure(c.key, sessions) }))
+    .filter((c) => !c.exposure.verdicts.includes('demonstrated'))
+    .sort((a, b) => a.exposure.prior - b.exposure.prior || (a.exposure.lastAt ?? 0) - (b.exposure.lastAt ?? 0) || b.weight - a.weight)[0];
+}
+
+export function conversionStart(games: StoredGame[], sessions: AdaptiveSession[]) {
+  return pickStart(historicalConversionStarts(games), sessions);
+}
+
+/** Coach moves already played from these positions in recent sessions (avoided, so games stay fresh). */
+export function recentCoachMoves(sessions: AdaptiveSession[], userColor: Color, lastN = 3, maxPly = 16): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  const recent = sessions
+    .filter((s) => s.plan.userColor === userColor && s.plan.start.fen === START_FEN && s.status !== 'abandoned')
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, lastN);
+  for (const s of recent) {
+    const c = new Chess(START_FEN);
+    for (const uci of s.moves.slice(0, maxPly)) {
+      if (c.turn() !== userColor) {
+        const k = bookKey(c.fen());
+        if (!out.has(k)) out.set(k, new Set());
+        out.get(k)!.add(uci);
+      }
+      try {
+        c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? 'q' });
+      } catch {
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 /** Moves your real opponents chose in a position (as the side you'll face), to shape the opening. */

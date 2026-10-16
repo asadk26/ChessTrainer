@@ -114,7 +114,7 @@ describe('coach move selection', () => {
         for (let seed = 0; seed < 60; seed++) {
           let x = seed + 1;
           const rng = () => ((x = (x * 9301 + 49297) % 233280) / 233280);
-          const pick = selectCoachMove(closed, pos, { band: s.band, variety: 1.5 }, { skill, rng })!;
+          const pick = selectCoachMove(closed, pos, { band: s.band, strength: s.id, variety: 1.5 }, { skill, rng })!;
           expect(pick.log.gap).toBeLessThanOrEqual(s.band);
           expect(pick.uci).not.toBe('c7d8');
         }
@@ -219,6 +219,23 @@ describe('mock scenario: positional patience', () => {
     expect(assessGame(g, plan('positional_patience')).verdict).not.toBe('failed');
   });
 
+  it('a clean game with too few quiet decisions and no break is only "partly" (not enough evidence)', () => {
+    const r = assessGame(analysed(`${FRENCH} 12. Bf4 a6 13. h3 Qc7`, 'w', level), plan('positional_patience'));
+    expect(r.stats.quietMoves).toBe(5);
+    expect(r.verdict).toBe('partial');
+  });
+
+  it('a tactical slip in a quiet position is not counted as a patience failure', () => {
+    // 14.Nxb4?? style material loss: the slip is excluded from the patience average and shown as neutral.
+    const g = analysed(PATIENCE_GOOD, 'w', level);
+    const i = g.plies.findIndex((p) => p.san === 'Qd2');
+    g.analysis!.moves[i] = { ...g.analysis!.moves[i], materialAfterReply: g.analysis!.moves[i].materialBefore - 3, winDrop: 30, practicalDrop: 30 };
+    const r = assessGame(g, plan('positional_patience'));
+    expect(r.stats.tacticalSlips).toBe(1);
+    expect(r.verdict).toBe('demonstrated');
+    expect(r.moments.some((m) => m.tone === 'neutral')).toBe(true);
+  });
+
   it('is "not meaningfully tested" when the game never reached a quiet middlegame', () => {
     const r = assessGame(analysed(QUICK_MATE, 'w', level), plan('positional_patience'));
     expect(r.valid).toBe(false);
@@ -233,10 +250,20 @@ describe('mock scenario: development discipline', () => {
     expect(r.verdict).toBe('demonstrated');
     expect(r.stats.undevelopedAt10).toBe(0);
   });
-  it('queen trips with pieces at home fail', () => {
-    const r = assessGame(analysed(DEV_BAD, 'w', level), plan('development_discipline'));
+  it('queen trips with pieces at home fail when they cost something', () => {
+    // The queen trips (plies 3, 5, 13, 17) each give away a little.
+    const r = assessGame(analysed(DEV_BAD, 'w', (i) => 20 - 40 * [3, 5, 13, 17].filter((q) => i >= q).length), plan('development_discipline'));
     expect(r.verdict).toBe('failed');
     expect(r.stats.undevelopedAt10).toBeGreaterThanOrEqual(2);
+    expect(r.evidence!.some((e) => e.startsWith('Rule:'))).toBe(true);
+  });
+  it('slow development that Stockfish did not punish is only "partly", not a failure', () => {
+    const slow = '1. d4 d5 2. c4 e6 3. e3 Nf6 4. a3 Be7 5. b4 O-O 6. c5 c6 7. Bd3 b6 8. f4 a5 9. Bb2 Ba6 10. h3 Nbd7';
+    const r = assessGame(analysed(slow, 'w', level), plan('development_discipline'));
+    expect(r.stats.undevelopedAt10).toBe(2);
+    expect(r.stats.openingFindings).toBe(0);
+    expect(r.verdict).toBe('partial');
+    expect(r.explanation).toContain("didn't punish");
   });
   it('a game over before move 10 is not meaningfully tested', () => {
     expect(assessGame(analysed(QUICK_MATE, 'w', level), plan('development_discipline')).verdict).toBe('not_tested');
@@ -249,8 +276,15 @@ describe('mock scenario: development discipline', () => {
 describe('mock scenario: conversion after winning material', () => {
   const pgn = quietGame(UP_A_PIECE, 20);
   const start = { fen: UP_A_PIECE };
-  it('keeping the extra piece is demonstrated', () => {
-    expect(assessGame(analysed(pgn, 'w', () => 350), plan('conversion', { start })).verdict).toBe('demonstrated');
+  const long = quietGame(UP_A_PIECE, 30);
+  it('keeping the extra piece and making progress is demonstrated', () => {
+    const r = assessGame(analysed(long, 'w', (i) => 350 + i * 8), plan('conversion', { start }));
+    expect(r.verdict).toBe('demonstrated');
+    expect(r.testMoments).toBeGreaterThanOrEqual(12);
+  });
+  it('holding the advantage without progress, or for only a few moves, is only "partly"', () => {
+    expect(assessGame(analysed(long, 'w', () => 350), plan('conversion', { start })).verdict).toBe('partial');
+    expect(assessGame(analysed(pgn, 'w', () => 350), plan('conversion', { start })).verdict).toBe('partial');
   });
   it('letting it slip fails', () => {
     const r = assessGame(analysed(pgn, 'w', (i) => (i < 9 ? 350 : 40)), plan('conversion', { start }));

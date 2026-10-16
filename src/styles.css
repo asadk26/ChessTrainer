@@ -557,3 +557,12 @@ p { margin: 0 0 0.75rem; }
   .topbar nav a { padding: 0.35rem 0.42rem; font-size: 0.9rem; }
   .theme-btn { margin-left: 0.15rem; flex: none; }
 }
+.coach-game pre.coach-log { white-space: pre-wrap; word-break: break-word; font-size: 0.72rem; line-height: 1.45; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem; max-height: 420px; overflow: auto; }
+.coach-game button.link { background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
+.coach-game .feedback-card .fb-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.3rem 0.8rem; margin: 0.35rem 0; }
+.coach-game .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.coach-game .seg button { background: var(--card); color: var(--ink); border: 0; border-left: 1px solid var(--line); padding: 0.3rem 0.7rem; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.coach-game .seg button:first-child { border-left: 0; }
+.coach-game .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.coach-game .feedback-card label.block { display: grid; gap: 0.2rem; margin: 0.5rem 0; }
+.coach-game .feedback-card input, .coach-game .feedback-card textarea { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); width: 100%; box-sizing: border-box; }

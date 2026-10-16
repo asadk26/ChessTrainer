@@ -783,20 +783,59 @@ export interface AdaptivePlan {
   evidence: SkillExample[];
   userColor: Color;
   /** Where the game starts: the normal start, or a real position from one of your games. */
-  start: { fen: string; gameId?: string; ply?: number; label?: string };
+  start: {
+    fen: string;
+    kind?: 'standard' | 'historical';
+    gameId?: string;
+    ply?: number;
+    label?: string;
+    /** Exact-position identity (board, side, castling, en passant), for exposure tracking. */
+    key?: string;
+    /** This exact position's history when the session started. */
+    exposure?: PositionExposure;
+  };
 }
 
-/** Why the coach played what it played (kept for checking the coach, not shown during the game). */
+/** One Stockfish candidate as the coach saw it (cp from the coach's point of view). */
+export interface CoachCandidate {
+  uci: string;
+  san: string;
+  cp: number;
+  /** Win% gap below the reference evaluation (Stockfish's best, or the ease-off target). */
+  gap: number;
+  /** Lesson points counted for this move (0 when it was too far from the reference). */
+  lesson: number;
+  /** "Would a person play this?" prior. */
+  natural: number;
+  score?: number;
+  /** Why it was not allowed: outside the band, sheds material in its own line, or mate. */
+  out?: 'band' | 'material' | 'mate';
+}
+
+/** Why the coach played what it played — the per-move decision log for tuning. */
 export interface CoachMoveLog {
   ply: number;
   uci: string;
+  san?: string;
   bestUci: string;
-  /** Win% gap to Stockfish's best (0 for the best move). */
+  bestSan?: string;
+  /** Stockfish's evaluation of its best move, coach's point of view. */
+  bestCp?: number;
+  /** Win% gap from Stockfish's best (0 for the best move). */
   gap: number;
   /** How many candidates were sound enough to choose from. */
   allowed: number;
   relevance: number;
-  reason: 'best' | 'only' | 'lesson' | 'variety';
+  /**
+   * best: Stockfish's choice · only: nothing else was sound · near_best: an equally good move
+   * (variety) · lesson: chosen for the lesson · natural: a more human-looking sound move ·
+   * eased: comfortably ahead, not pressing · variety: a slightly weaker move within the band.
+   */
+  reason: 'best' | 'only' | 'near_best' | 'lesson' | 'natural' | 'eased' | 'variety';
+  eased?: boolean;
+  band?: number;
+  ms?: number;
+  cands?: CoachCandidate[];
 }
 
 export type AdaptiveVerdict = 'demonstrated' | 'partial' | 'failed' | 'not_tested';
@@ -806,6 +845,13 @@ export interface AdaptiveMoment {
   label: string;
   text: string;
   tone: 'good' | 'bad' | 'neutral';
+}
+
+/** How often an exact start position was used before (skill exposure is tracked separately). */
+export interface PositionExposure {
+  prior: number;
+  lastAt?: number;
+  verdicts: AdaptiveVerdict[];
 }
 
 export interface AdaptiveAssessment {
@@ -818,6 +864,20 @@ export interface AdaptiveAssessment {
   moments: AdaptiveMoment[];
   retestSoon: boolean;
   stats: Record<string, number>;
+  /** How many decisions in the game were genuine tests of the skill. */
+  testMoments?: number;
+  /** The rule trace behind the verdict, for checking it. */
+  evidence?: string[];
+}
+
+/** Optional playtest notes on one coach game. */
+export interface PlaytestFeedback {
+  natural?: 'yes' | 'mixed' | 'no';
+  lesson?: 'yes' | 'partly' | 'no';
+  verdict?: 'fair' | 'partly' | 'unfair';
+  weirdMoves?: string;
+  notes?: string;
+  at: number;
 }
 
 export interface AdaptiveSession {
@@ -826,6 +886,10 @@ export interface AdaptiveSession {
   plan: AdaptivePlan;
   /** Coach playing strength: the widest win% gap from Stockfish's best it may choose. */
   band: number;
+  strength?: 'relaxed' | 'steady' | 'firm';
+  /** COACH_TUNING.version the coach played with. */
+  tuning?: string;
+  feedback?: PlaytestFeedback;
   /** Engine search depth for the coach's candidates (analysis strength, separate from playing strength). */
   depth: number;
   /** Moves from the start position, in UCI. */
@@ -833,6 +897,8 @@ export interface AdaptiveSession {
   coachLog: CoachMoveLog[];
   status: 'playing' | 'analysing' | 'done' | 'abandoned';
   ending?: 'checkmate' | 'draw' | 'resigned' | 'stopped';
+  /** Your result in this game ('unfinished' when stopped early). */
+  outcome?: 'win' | 'loss' | 'draw' | 'unfinished';
   gameId?: string;
   result?: AdaptiveAssessment;
   finishedAt?: number;

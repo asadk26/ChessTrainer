@@ -78,11 +78,21 @@ export function isPawnBreak(p: Pick<PlyRecord, 'piece' | 'captured' | 'to' | 'fe
  * (or the lack of it) shows.
  */
 export function quietBalanced(p: PlyRecord, m: MoveEval, prev?: PlyRecord): boolean {
-  if (p.moveNumber < 9 || Math.abs(m.cpBefore) > 150) return false;
-  if (nonPawnMaterial(p.fenBefore) < 30 || !hasQueen(p.fenBefore, 'w') || !hasQueen(p.fenBefore, 'b')) return false;
-  if (new Chess(p.fenBefore).inCheck()) return false;
-  if (prev?.captured) return false; // a recapture may be pending
-  return !!m.bestSan && !/[x+#]/.test(m.bestSan);
+  return notQuietBecause(p, m, prev) === undefined;
+}
+
+export type NotQuiet = 'opening' | 'not_level' | 'simplified' | 'queens_off' | 'in_check' | 'recapture' | 'tactical';
+
+/** Why a decision is NOT a quiet, level middlegame decision (undefined when it is). For evidence and tuning. */
+export function notQuietBecause(p: PlyRecord, m: MoveEval, prev?: PlyRecord): NotQuiet | undefined {
+  if (p.moveNumber < 9) return 'opening';
+  if (Math.abs(m.cpBefore) > 150) return 'not_level';
+  if (!hasQueen(p.fenBefore, 'w') || !hasQueen(p.fenBefore, 'b')) return 'queens_off';
+  if (nonPawnMaterial(p.fenBefore) < 30) return 'simplified';
+  if (new Chess(p.fenBefore).inCheck()) return 'in_check';
+  if (prev?.captured) return 'recapture'; // a recapture may be pending
+  if (!m.bestSan || /[x+#]/.test(m.bestSan)) return 'tactical';
+  return undefined;
 }
 
 export type BreakKind = 'premature' | 'questionable' | 'sound' | 'fine';
