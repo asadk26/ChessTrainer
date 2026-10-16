@@ -10,6 +10,7 @@ import { feedbackCount } from '../../coach/feedback';
 import { userOutcome } from '../../chess/outcome';
 import { gameStats, trend } from '../../analysis/engineReview';
 import { ChessComSync } from '../components/ChessComSync';
+import { ExportPgns } from '../components/ExportPgns';
 import { llmPing } from '../../coach/llmClient';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
@@ -88,6 +89,7 @@ export function Dashboard() {
           <h3>Or sync your Chess.com games</h3>
           <ChessComSync />
         </section>
+        {settings.chesscom?.username && <ExportPgns />}
         <p className="muted small">
           Moving from another device? Export your data there (Dashboard → Settings), then restore it here: {importButton}
         </p>
@@ -103,6 +105,7 @@ export function Dashboard() {
       <section className="card sync-card">
         <ChessComSync />
       </section>
+      <ExportPgns />
       <section className="card focus-card">
         <span className="eyebrow">Current focus</span>
         {settings.focus ? (

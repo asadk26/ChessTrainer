@@ -117,13 +117,13 @@ function isStandard(g: ChessComGame): boolean {
   return !g.initial_setup || g.initial_setup === START_FEN;
 }
 
-function asGames(json: unknown): ChessComGame[] {
+export function asGames(json: unknown): ChessComGame[] {
   const games = (json as { games?: unknown })?.games;
   if (!Array.isArray(games)) throw new SyncError('bad_response', 'Chess.com sent an unexpected response.');
   return games.filter((g): g is ChessComGame => !!g && typeof g === 'object' && typeof (g as ChessComGame).url === 'string' && !!(g as ChessComGame).white && !!(g as ChessComGame).black);
 }
 
-async function get(fetcher: ChessComFetch, path: string): Promise<unknown> {
+export async function get(fetcher: ChessComFetch, path: string): Promise<unknown> {
   let r: Awaited<ReturnType<ChessComFetch>>;
   try {
     r = await fetcher(path);

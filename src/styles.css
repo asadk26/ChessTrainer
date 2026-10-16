@@ -531,3 +531,8 @@ p { margin: 0 0 0.75rem; }
 .train-drill { display: grid; grid-template-columns: auto 1fr auto; gap: 0.6rem; align-items: center; text-align: left; font: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.55rem 0.75rem; cursor: pointer; color: inherit; }
 .train-drill:hover { border-color: var(--accent); }
 @media (max-width: 640px) { .train-drill { grid-template-columns: 1fr; } }
+
+/* Export PGNs */
+.export-row { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: end; margin-bottom: 0.6rem; }
+.export-row label { display: grid; gap: 0.2rem; font-size: 0.85rem; }
+.export-row label.check { display: flex; align-items: center; gap: 0.35rem; }

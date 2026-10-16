@@ -10,6 +10,7 @@ import { REPORT_VERSION } from '../../coach/report';
 import { engineNotes, gameStats } from '../../analysis/engineReview';
 import { repo } from '../../storage/repository';
 import { FlagButton } from '../components/FlagButton';
+import { copyText } from '../clipboard';
 import { AiExplain } from '../components/AiExplain';
 import { BetaCoach, useBetaCoachOn } from '../components/BetaCoach';
 import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
@@ -225,6 +226,22 @@ function Summary({ game }: { game: StoredGame }) {
   );
 }
 
+/** Copy this game's PGN in one tap. */
+function CopyPgn({ pgn }: { pgn: string }) {
+  const [done, setDone] = useState<'' | 'ok' | 'fail'>('');
+  return (
+    <button
+      className="link small"
+      onClick={async () => {
+        setDone((await copyText(pgn.trim() + '\n')) ? 'ok' : 'fail');
+        window.setTimeout(() => setDone(''), 2000);
+      }}
+    >
+      {done === 'ok' ? 'Copied ✓' : done === 'fail' ? 'Copy failed' : 'Copy PGN'}
+    </button>
+  );
+}
+
 /** "You lost ▾" — the player can correct a missing or wrong PGN result. */
 function OutcomeSelect({ game }: { game: StoredGame }) {
   const { refresh } = useApp();
@@ -274,7 +291,7 @@ export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab
           {game.headers.white} <span className="muted">vs</span> {game.headers.black}
         </h1>
         <p className="muted small">
-          <OutcomeSelect game={game} /> · you played {game.userColor === 'w' ? 'White' : 'Black'}
+          <OutcomeSelect game={game} /> · <CopyPgn pgn={game.pgn} /> · you played {game.userColor === 'w' ? 'White' : 'Black'}
           {game.headers.date ? ` · ${game.headers.date}` : ''}
           {game.report ? ` · coach voice: ${game.report.voice === 'llm' ? 'AI' : 'built-in'}` : ''}
           {llmState === 'working' && ' · AI coach is writing…'}
