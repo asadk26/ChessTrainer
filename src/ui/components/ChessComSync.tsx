@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import type { ChessComSettings, ChessComTimeClass } from '../../domain/types';
 import { SyncError, validUsername } from '../../sync/chesscom';
-import { analyzeInOrder, syncChessCom } from '../actions';
+import { syncChessCom } from '../actions';
 import { useApp } from '../store';
 
 const CLASSES: { id: ChessComTimeClass; label: string }[] = [
@@ -24,7 +24,7 @@ const setShared = (patch: Partial<typeof shared>) => {
 };
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 
-/** Manual Chess.com sync: a username setting and one button. No background polling. */
+/** Manual Chess.com sync (import only): a username setting and one button. No background polling. */
 export function ChessComSync() {
   const { settings, updateSettings, refresh } = useApp();
   const cfg = settings.chesscom;
@@ -50,15 +50,7 @@ export function ChessComSync() {
     try {
       const { message, imported } = await syncChessCom((t) => setStatus({ tone: 'neutral', text: t }));
       await refresh();
-      setStatus({ tone: 'good', text: message });
-      if (imported.length) {
-        await analyzeInOrder(imported, (done, total) => {
-          if (done < total) setStatus({ tone: 'neutral', text: `${message} Analyzing ${done + 1} of ${total}…` });
-          void refresh();
-        });
-        await refresh();
-        setStatus({ tone: 'good', text: `${message} Analysis done.` });
-      }
+      setStatus({ tone: 'good', text: imported.length ? `${message} They're ready to export now; analyse them below whenever you like.` : message });
     } catch (e) {
       const text =
         e instanceof SyncError

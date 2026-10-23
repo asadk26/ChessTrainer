@@ -9,6 +9,7 @@ import { coachMoveLine, exportPlaytest, moveLabels, sessionLog, statsText } from
 import type { PlaytestFeedback } from '../../domain/types';
 import { abandonSession, coachReply, finishSession, replay, saveFeedback, saveMoves, startSession } from '../adaptiveActions';
 import { copyText, downloadText } from '../clipboard';
+import { pendingAnalysis } from '../actions';
 
 const VERDICT_CLASS: Record<string, string> = { demonstrated: 'tag-good', partial: '', failed: 'tag-bad', not_tested: 'tag-muted' };
 const VERDICT_SHORT: Record<string, string> = { demonstrated: 'Demonstrated', partial: 'Partly', failed: 'Not yet', not_tested: 'Not tested' };
@@ -59,6 +60,11 @@ function SetupView({
   return (
     <div className="narrow coach-game">
       <h1>Adaptive Coach Game</h1>
+      {pendingAnalysis(games).length > 0 && (
+        <p className="feedback neutral small">
+          {pendingAnalysis(games).length} of your games aren’t analysed yet, so they don’t count here. Analyse them from the Dashboard for a better-informed plan.
+        </p>
+      )}
       <p className="muted">
         A normal game against a coach that plays sound moves, but steers toward a kind of position your own games say you need to practise. Teaching
         comes after the game.

@@ -12,6 +12,7 @@ import { gameStats, trend } from '../../analysis/engineReview';
 import { ChessComSync } from '../components/ChessComSync';
 import { ExportPgns } from '../components/ExportPgns';
 import { CoachGameCard } from '../components/CoachGameCard';
+import { AnalysisQueue } from '../components/AnalysisQueue';
 import { llmPing } from '../../coach/llmClient';
 
 const TREND: Record<string, string> = { improving: '↘ improving', worsening: '↗ more often', stable: '→ stable', new: 'new', insufficient: '' };
@@ -106,6 +107,7 @@ export function Dashboard() {
       <section className="card sync-card">
         <ChessComSync />
       </section>
+      <AnalysisQueue />
       <ExportPgns />
       <section className="card focus-card">
         <span className="eyebrow">Current focus</span>

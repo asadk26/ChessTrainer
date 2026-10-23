@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AdaptiveSession, Drill, DrillAttempt, PlayerSettings, StoredGame } from '../domain/types';
-import { DEFAULT_SETTINGS, repo } from '../storage/repository';
+import { DEFAULT_SETTINGS } from '../storage/repository';
+import { repo } from '../storage/repo';
 import { getLlmStatus, type LlmStatus } from '../coach/llmClient';
 
 interface AppState {

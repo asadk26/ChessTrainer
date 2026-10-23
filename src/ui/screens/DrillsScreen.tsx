@@ -4,7 +4,7 @@ import { FlagButton } from '../components/FlagButton';
 import { Board } from '../components/Board';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { navigate, useApp } from '../store';
-import { repo } from '../../storage/repository';
+import { repo } from '../../storage/repo';
 import { categoryLabel } from '../../domain/categories';
 import { playLine, sideToMove } from '../../chess/board';
 import { closeToBest, evaluateMove } from '../actions';

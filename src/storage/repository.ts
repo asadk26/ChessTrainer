@@ -45,13 +45,31 @@ export const DEFAULT_SETTINGS: PlayerSettings = {
   useLlm: true,
 };
 
-const PREFIX = 'chesscoach:v1:';
+export const PREFIX = 'chesscoach:v1:';
 
 /** Minimal Storage-like interface so tests can pass an in-memory map. */
 export interface KeyValueStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+}
+
+/** The same, asynchronous (IndexedDB). */
+export interface AsyncKeyValueStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  remove(key: string): Promise<void>;
+}
+
+/** The app's localStorage entries (only keys with the app prefix). */
+export function prefixedEntries(ls: Pick<Storage, 'length' | 'key' | 'getItem'>): [string, string][] {
+  const out: [string, string][] = [];
+  for (let i = 0; i < ls.length; i++) {
+    const k = ls.key(i);
+    const v = k?.startsWith(PREFIX) ? ls.getItem(k) : null;
+    if (k && v !== null) out.push([k, v]);
+  }
+  return out;
 }
 
 export function memoryStore(): KeyValueStore {
@@ -63,12 +81,36 @@ export function memoryStore(): KeyValueStore {
   };
 }
 
-export class LocalStorageRepository implements CoachRepository {
-  constructor(private store: KeyValueStore = globalThis.localStorage) {}
+export function asAsync(s: KeyValueStore): AsyncKeyValueStore {
+  return {
+    get: async (k) => s.getItem(k),
+    set: async (k, v) => s.setItem(k, v),
+    remove: async (k) => s.removeItem(k),
+  };
+}
 
-  private read<T>(key: string, fallback: T): T {
+/**
+ * Key-value backed repository (IndexedDB in the browser, an in-memory map in tests). Every
+ * read-modify-write runs one at a time, so a sync importing games while the analysis queue
+ * saves results can never lose an entry.
+ */
+export class KvRepository implements CoachRepository {
+  private store: AsyncKeyValueStore;
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(store: KeyValueStore | AsyncKeyValueStore) {
+    this.store = 'getItem' in store ? asAsync(store) : store;
+  }
+
+  private atomic<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(fn, fn);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async read<T>(key: string, fallback: T): Promise<T> {
     try {
-      const raw = this.store.getItem(PREFIX + key);
+      const raw = await this.store.get(PREFIX + key);
       return raw ? (JSON.parse(raw) as T) : fallback;
     } catch {
       return fallback;
@@ -76,62 +118,69 @@ export class LocalStorageRepository implements CoachRepository {
   }
 
   private write(key: string, value: unknown) {
-    this.store.setItem(PREFIX + key, JSON.stringify(value));
+    return this.store.set(PREFIX + key, JSON.stringify(value));
   }
 
-  private gameIds(): string[] {
+  private gameIds(): Promise<string[]> {
     return this.read<string[]>('games:index', []);
   }
 
   async listGames() {
-    return this.gameIds()
-      .map((id) => this.read<StoredGame | undefined>(`game:${id}`, undefined))
-      .filter((g): g is StoredGame => !!g);
+    const games = await Promise.all((await this.gameIds()).map((id) => this.read<StoredGame | undefined>(`game:${id}`, undefined)));
+    return games.filter((g): g is StoredGame => !!g);
   }
   async getGame(id: string) {
     return this.read<StoredGame | undefined>(`game:${id}`, undefined);
   }
-  async saveGame(game: StoredGame) {
-    const ids = this.gameIds();
-    if (!ids.includes(game.id)) this.write('games:index', [...ids, game.id]);
-    this.write(`game:${game.id}`, game);
+  private async putGame(game: StoredGame) {
+    const ids = await this.gameIds();
+    if (!ids.includes(game.id)) await this.write('games:index', [...ids, game.id]);
+    await this.write(`game:${game.id}`, game);
   }
-  async deleteGame(id: string) {
-    this.write('games:index', this.gameIds().filter((x) => x !== id));
-    this.store.removeItem(PREFIX + `game:${id}`);
-    await this.replaceDrillsForGame(id, []);
+  saveGame(game: StoredGame) {
+    return this.atomic(() => this.putGame(game));
+  }
+  private async putDrillsForGame(gameId: string, drills: Drill[]) {
+    const rest = (await this.listDrills()).filter((d) => d.gameId !== gameId);
+    await this.write('drills', [...rest, ...drills]);
+  }
+  deleteGame(id: string) {
+    return this.atomic(async () => {
+      await this.write('games:index', (await this.gameIds()).filter((x) => x !== id));
+      await this.store.remove(PREFIX + `game:${id}`);
+      await this.putDrillsForGame(id, []);
+    });
   }
   async listDrills() {
     return this.read<Drill[]>('drills', []);
   }
-  async replaceDrillsForGame(gameId: string, drills: Drill[]) {
-    const rest = (await this.listDrills()).filter((d) => d.gameId !== gameId);
-    this.write('drills', [...rest, ...drills]);
+  replaceDrillsForGame(gameId: string, drills: Drill[]) {
+    return this.atomic(() => this.putDrillsForGame(gameId, drills));
   }
   async listAttempts() {
     return this.read<DrillAttempt[]>('attempts', []);
   }
-  async addAttempt(a: DrillAttempt) {
-    this.write('attempts', [...(await this.listAttempts()), a]);
+  addAttempt(a: DrillAttempt) {
+    return this.atomic(async () => this.write('attempts', [...(await this.listAttempts()), a]));
   }
   async getSettings() {
-    return { ...DEFAULT_SETTINGS, ...this.read<Partial<PlayerSettings>>('settings', {}) };
+    return { ...DEFAULT_SETTINGS, ...(await this.read<Partial<PlayerSettings>>('settings', {})) };
   }
   async saveSettings(s: PlayerSettings) {
-    this.write('settings', s);
+    await this.write('settings', s);
   }
   async getSyncState() {
     return this.read<SyncState | undefined>('chesscomSync', undefined);
   }
   async saveSyncState(s: SyncState | undefined) {
-    if (s) this.write('chesscomSync', s);
-    else this.store.removeItem(PREFIX + 'chesscomSync');
+    if (s) await this.write('chesscomSync', s);
+    else await this.store.remove(PREFIX + 'chesscomSync');
   }
   async listSessions() {
     return this.read<AdaptiveSession[]>('adaptiveSessions', []);
   }
-  async saveSession(s: AdaptiveSession) {
-    this.write('adaptiveSessions', [...(await this.listSessions()).filter((x) => x.id !== s.id), s]);
+  saveSession(s: AdaptiveSession) {
+    return this.atomic(async () => this.write('adaptiveSessions', [...(await this.listSessions()).filter((x) => x.id !== s.id), s]));
   }
   async exportAll() {
     return JSON.stringify(
@@ -150,7 +199,11 @@ export class LocalStorageRepository implements CoachRepository {
     );
   }
 
-  async importAll(json: string): Promise<ImportSummary> {
+  importAll(json: string): Promise<ImportSummary> {
+    return this.atomic(() => this.importUnlocked(json));
+  }
+
+  private async importUnlocked(json: string): Promise<ImportSummary> {
     let data: Partial<Backup>;
     try {
       data = JSON.parse(json);
@@ -167,10 +220,10 @@ export class LocalStorageRepository implements CoachRepository {
       if (!g || typeof g.id !== 'string' || !Array.isArray(g.plies)) continue;
       const existing = await this.getGame(g.id);
       if (!existing) {
-        await this.saveGame(g);
+        await this.putGame(g);
         summary.gamesAdded++;
       } else if (freshness(g) > freshness(existing)) {
-        await this.saveGame({
+        await this.putGame({
           ...g,
           completedMomentIds: [...new Set([...existing.completedMomentIds, ...g.completedMomentIds])],
           feedback: mergeFeedback(existing.feedback, g.feedback),
@@ -179,7 +232,7 @@ export class LocalStorageRepository implements CoachRepository {
       } else {
         // Keep this device's analysis, but never drop feedback notes from the other device.
         const feedback = mergeFeedback(existing.feedback, g.feedback);
-        if ((feedback?.length ?? 0) > (existing.feedback?.length ?? 0)) await this.saveGame({ ...existing, feedback });
+        if ((feedback?.length ?? 0) > (existing.feedback?.length ?? 0)) await this.putGame({ ...existing, feedback });
         summary.gamesKept++;
       }
     }
@@ -191,7 +244,7 @@ export class LocalStorageRepository implements CoachRepository {
         summary.drills++;
       }
     }
-    this.write('drills', [...drills.values()]);
+    await this.write('drills', [...drills.values()]);
 
     const attempts = await this.listAttempts();
     const seen = new Set(attempts.map((a) => `${a.drillId}@${a.at}`));
@@ -202,14 +255,14 @@ export class LocalStorageRepository implements CoachRepository {
         summary.attempts++;
       }
     }
-    this.write('attempts', attempts);
+    await this.write('attempts', attempts);
 
     const sessions = new Map((await this.listSessions()).map((x) => [x.id, x]));
     for (const x of data.adaptiveSessions ?? []) {
       const mine = x && typeof x.id === 'string' ? sessions.get(x.id) : undefined;
       if (x && typeof x.id === 'string' && (!mine || (x.finishedAt ?? 0) > (mine.finishedAt ?? 0))) sessions.set(x.id, x);
     }
-    this.write('adaptiveSessions', [...sessions.values()]);
+    await this.write('adaptiveSessions', [...sessions.values()]);
 
     if (data.settings) {
       const local = await this.getSettings();
@@ -239,6 +292,9 @@ interface Backup {
   settings: PlayerSettings;
 }
 
-export const repo: CoachRepository = new LocalStorageRepository(
-  typeof localStorage !== 'undefined' ? localStorage : memoryStore(),
-);
+/** Kept for tests and older code: the same repository over a synchronous store. */
+export class LocalStorageRepository extends KvRepository {
+  constructor(store: KeyValueStore = globalThis.localStorage) {
+    super(store);
+  }
+}

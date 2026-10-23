@@ -28,6 +28,16 @@ export function gameLabel(g: StoredGame): string {
 /** Games from real play. Adaptive Coach games record training results, never real-game weaknesses. */
 export const isRealGame = (g: Pick<StoredGame, 'adaptive'>) => !g.adaptive;
 
+/**
+ * Real games still waiting for analysis, oldest first. 'analyzing' counts too unless it is
+ * running right now (a reload interrupted it).
+ */
+export function waitingForAnalysis(games: StoredGame[], isRunning: (id: string) => boolean = () => false): StoredGame[] {
+  return games
+    .filter((g) => isRealGame(g) && (g.status === 'imported' || (g.status === 'analyzing' && !isRunning(g.id))))
+    .sort((a, b) => gamePlayedAt(a) - gamePlayedAt(b));
+}
+
 /** Analyzed games played before `game`, as coaching history. */
 export function priorGames(game: StoredGame, all: StoredGame[]): PriorGameFindings[] {
   const at = gamePlayedAt(game);

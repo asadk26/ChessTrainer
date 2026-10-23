@@ -394,9 +394,16 @@ Chess.com's public Published-Data API.
   of the last one makes no requests. There is no background polling.
 - **What it imports.** Standard chess only (no Chess960 or custom starting positions), Rapid by
   default (Blitz, Bullet and Daily can be switched on). Your side is found by matching your
-  username case-insensitively. At most 10 new games per sync, Rapid first; the rest come next time.
-- **Same pipeline as pasted games.** Synced games go through the same `importGame` → Stockfish →
-  coaching path and the same duplicate check (`src/chess/fingerprint.ts`): the Chess.com game id
+  username case-insensitively. Up to 100 new games per sync (a safety cap), Rapid first; the rest
+  come next time.
+- **Sync only imports; analysis is a separate queue.** Synced games appear straight away. You can
+  export their PGNs straight away too. The Dashboard's analysis card ("N games waiting · Analyse
+  next 5 · Analyse all · Stop") runs Stockfish on them oldest first, so each game's coaching sees
+  the games before it. Each game is saved as soon as it's done. Stopping keeps everything finished
+  so far, and anything left waits for next time. Coaching, drills and the Adaptive Coach only use
+  analysed games.
+- **Same pipeline as pasted games.** Synced games go through the same `importGame` path (and the
+  same Stockfish → coaching path once analysed) and the same duplicate check (`src/chess/fingerprint.ts`): the Chess.com game id
   when there is one, otherwise the exact move list (short games also need the same date). Pasting
   a game you've already synced (or syncing one you pasted) opens the existing game instead.
 - **Requests.** They go through a tiny read-only proxy (`/api/chesscom`, `server/chesscomProxy.ts`)
@@ -448,7 +455,7 @@ src/
                  llmClient.ts, systemPrompt.ts
   drills/        generate.ts
   profile/       identify.ts (who is "me"), profile.ts (cross-game aggregation)
-  storage/       repository.ts (CoachRepository interface + localStorage implementation)
+  storage/       repository.ts (CoachRepository + key-value implementation), indexedDb.ts, repo.ts (the instance)
   ui/            React screens/components
 server/          llm.ts (providers), coachApi.ts (shared proxy logic + access token), coachPlugin.ts (Vite
                  middleware for dev/preview), nodeEngine.ts (Stockfish for tests/CLI)
@@ -618,7 +625,16 @@ and highlights always come from the deterministic layer.
 
 ## Where data is stored
 
-Browser `localStorage`, keys prefixed `chesscoach:v1:`:
+Browser IndexedDB (database `chess-coach`, store `kv`), keys prefixed `chesscoach:v1:`.
+
+- An analysed game takes roughly 100–150 KB, so localStorage (about 5 MB) only had room for about
+  30–50 of them. IndexedDB has room for hundreds.
+- On first load, the app copies its existing localStorage entries into IndexedDB in one
+  transaction. It leaves the localStorage copy untouched, as a fallback.
+- If IndexedDB can't be opened (some private-browsing modes), the app keeps using localStorage.
+- The app asks the browser to keep the data persistent (`navigator.storage.persist()`).
+- Read-modify-write steps (the game index, drills, attempts, sessions) run one at a time, so a sync
+  and the analysis queue can save at the same time without losing entries.
 
 | Key | Contents |
 | --- | --- |
@@ -626,9 +642,11 @@ Browser `localStorage`, keys prefixed `chesscoach:v1:`:
 | `drills` | Generated drills |
 | `attempts` | Drill attempts (correct / incorrect, timestamp) |
 | `settings` | Known usernames, rating, engine depth, AI toggle, current focus |
+| `adaptiveSessions` | Adaptive Coach games: plan, moves, decision log, result, playtest notes |
+| `chesscomSync` | Which finished Chess.com months were already read (not in backups) |
 
 The player profile is *derived* (recomputed from stored findings), so it never drifts. All access goes
-through the async `CoachRepository` interface; moving to IndexedDB or Supabase/Postgres means writing one
+through the async `CoachRepository` interface; moving to Supabase/Postgres later means writing one
 class (games → table with JSONB for findings/moments/report; drills; drill_attempts; player_settings).
 Dashboard → Settings → *Export data* downloads a JSON backup; *Import data* merges one back in (see *Deploy
 it* for moving between devices). The AI access code is stored locally and excluded from exports.
@@ -653,7 +671,8 @@ secrets, and one integration test that runs real Stockfish over the sample game.
   slightly between Node and the browser.
 * The predict-the-reply step accepts the game reply and near-best engine replies; other reasonable
   replies are marked as "possible, but…".
-* localStorage is per-browser and limited to ~5 MB (roughly a few hundred analyzed games).
+* Data is per-browser (IndexedDB). Use Settings → Export data to move it to another device.
+  Without "Add to Home Screen", Safari may clear website data after weeks of not using the site.
 * Clock analysis only works when the PGN includes `%clk` comments.
 * The hosted AI coach needs Vercel (or the local dev/preview server). Other static hosts fall back to
   built-in coaching.

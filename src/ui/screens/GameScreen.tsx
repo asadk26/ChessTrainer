@@ -8,7 +8,7 @@ import { CoachText, HoverProvider } from '../components/CoachText';
 import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/PositionDiagram';
 import { REPORT_VERSION } from '../../coach/report';
 import { engineNotes, gameStats } from '../../analysis/engineReview';
-import { repo } from '../../storage/repository';
+import { repo } from '../../storage/repo';
 import { FlagButton } from '../components/FlagButton';
 import { copyText } from '../clipboard';
 import { AiExplain } from '../components/AiExplain';

@@ -8,9 +8,10 @@ import { findDuplicate } from '../chess/fingerprint';
 import { planSync, syncSummary, SyncError, type ChessComFetch } from '../sync/chesscom';
 import { chesscomFetch } from '../sync/chesscomClient';
 import { REPORT_VERSION } from '../coach/report';
-import { repo, type ImportSummary } from '../storage/repository';
+import { type ImportSummary } from '../storage/repository';
+import { repo } from '../storage/repo';
 import { getBrowserEngine } from '../engine/browserEngine';
-import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames } from '../analysis/pipeline';
+import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames, waitingForAnalysis } from '../analysis/pipeline';
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
 import { buildCoachPrompt, extractJson, mergeLlmOutput } from '../coach/llmCoach';
@@ -224,8 +225,8 @@ export async function setOutcome(gameId: string, outcome: Outcome) {
   await recoach(gameId);
 }
 
-/** How many new games one sync brings in; the rest come next time (analysis takes a while). */
-export const SYNC_MAX_GAMES = 10;
+/** Safety cap on new games per sync (import only — analysis is a separate queue); the rest come next time. */
+export const SYNC_MAX_GAMES = 100;
 
 export interface SyncResult {
   message: string;
@@ -233,9 +234,9 @@ export interface SyncResult {
 }
 
 /**
- * Manual Chess.com sync: find new games in the last N days, import them through
- * importGame (same model, dedupe and pipeline as pasted games), then analyse them
- * one at a time, oldest first, so each game's coaching sees the ones before it.
+ * Manual Chess.com sync: find new games in the last N days and import them through importGame
+ * (same model and dedupe as pasted games). No analysis here: that's the analysis queue below, so
+ * syncing and exporting PGNs are never held up by Stockfish.
  */
 export async function syncChessCom(onProgress?: (text: string) => void, fetcher: ChessComFetch = chesscomFetch): Promise<SyncResult> {
   const settings = await repo.getSettings();
@@ -269,6 +270,61 @@ export async function analyzeInOrder(games: StoredGame[], onProgress?: (done: nu
     }
   }
   onProgress?.(games.length, games.length, games[games.length - 1]);
+}
+
+// ------------------------------------------------------------ analysis queue
+//
+// Imported games wait here until you choose to analyse them. Oldest first, so each game's
+// coaching sees the games before it. Each finished game is saved straight away; stopping only
+// stops after the current game, and anything left is picked up next time.
+
+/** Real games still waiting for analysis, oldest first ('analyzing' = interrupted by a reload). */
+export function pendingAnalysis(games: StoredGame[]): StoredGame[] {
+  return waitingForAnalysis(games, (id) => running.has(id));
+}
+
+export interface QueueState {
+  running: boolean;
+  stopping: boolean;
+  done: number;
+  total: number;
+  current?: string;
+  failed: number;
+}
+let queue: QueueState = { running: false, stopping: false, done: 0, total: 0, failed: 0 };
+const queueListeners = new Set<() => void>();
+const setQueue = (patch: Partial<QueueState>) => {
+  queue = { ...queue, ...patch };
+  queueListeners.forEach((l) => l());
+};
+export const analysisQueue = {
+  get: () => queue,
+  subscribe: (l: () => void) => (queueListeners.add(l), () => void queueListeners.delete(l)),
+  stop: () => queue.running && setQueue({ stopping: true }),
+};
+
+/** Analyse up to `limit` waiting games (all when omitted). `onGame` runs after each one. */
+export async function runAnalysisQueue(limit: number | undefined, onGame?: () => void): Promise<void> {
+  if (queue.running) return;
+  const todo = pendingAnalysis(await repo.listGames()).slice(0, limit);
+  if (!todo.length) return;
+  setQueue({ running: true, stopping: false, done: 0, total: todo.length, failed: 0, current: undefined });
+  try {
+    for (const g of todo) {
+      if (queue.stopping) break;
+      setQueue({ current: `vs ${g.opponentName}${g.headers.date ? ` (${g.headers.date})` : ''}` });
+      try {
+        await runAnalysis(g.id, () => undefined);
+      } catch (e) {
+        console.warn('Analysis failed', g.id, e);
+        setQueue({ failed: queue.failed + 1 });
+      }
+      setQueue({ done: queue.done + 1 });
+      onGame?.();
+    }
+  } finally {
+    setQueue({ running: false, stopping: false, current: undefined });
+  }
 }
 
 const liveCache = new Map<string, Promise<PositionEval | undefined>>();

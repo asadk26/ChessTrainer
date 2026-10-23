@@ -2,7 +2,7 @@
 // the normal analysis pipeline → assessment saved as a training result.
 import { Chess } from 'chess.js';
 import type { AdaptivePlan, AdaptiveSession, PlaytestFeedback, StoredGame } from '../domain/types';
-import { repo } from '../storage/repository';
+import { repo } from '../storage/repo';
 import { getBrowserEngine } from '../engine/browserEngine';
 import { parsePgn } from '../chess/pgn';
 import { COACH_ENGINE, COACH_TUNING, selectCoachMove, type StrengthId } from '../adaptive/selectMove';
