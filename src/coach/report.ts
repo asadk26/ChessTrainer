@@ -1,4 +1,5 @@
 // Builds the concise post-game coaching report from findings + history.
+import { PATTERN_FOCUS, PATTERN_LABEL, type PatternTag } from '../analysis/patterns';
 import type { CategoryId, Color, Finding, GameReport, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
 import { COLOR_NAME, materialPhrase, other } from '../chess/board';
@@ -336,6 +337,15 @@ export function chooseFocus(groups: ThemeGroup[], prior: PriorGameFindings[]): T
  */
 export function focusFor(theme: ThemeId, findings: Finding[]): { focusTitle: string; focusDetail: string; clause: string; label: string } {
   const meta = THEMES[theme];
+  // A specific tactic decided the game (a discovered attack, a fork…): that is the lesson, not
+  // the generic theme text.
+  const decided = findings
+    .filter((f) => f.kind === 'weakness' && f.facts.pattern && f.severity >= 2 && f.confidence !== 'low' && themeOf(f.category) === theme)
+    .sort((a, b) => b.severity - a.severity)[0];
+  if (decided) {
+    const tag = decided.facts.pattern as PatternTag;
+    return { focusTitle: PATTERN_FOCUS[tag].title, focusDetail: PATTERN_FOCUS[tag].detail, clause: `you walked into a ${PATTERN_LABEL[tag].toLowerCase()}`, label: PATTERN_LABEL[tag] };
+  }
   if (theme === 'king_safety') {
     const ks = findings.filter((f) => f.category === 'king_safety' && countsAsPattern(f));
     if (ks.length && !ks.some((f) => f.facts.notCastled)) {
@@ -441,7 +451,9 @@ export function buildReport(input: ReportInput): GameReport {
   } else {
     const opener = solidOpening ? 'Your opening fundamentals were mostly solid, but ' : '';
     const mates = lead.findings.filter((f) => f.facts.mateIn).length;
-    const clause = lead.theme === 'tactics' && mates ? `you missed ${mates >= 2 ? 'checkmates' : 'a checkmate'} on the board` : THEMES[lead.theme].clause;
+    // When a specific tactic decided it, say that instead of the theme's generic clause.
+    const patterned = lead.theme === focusTheme && focusMeta.clause !== THEMES[focusTheme].clause;
+    const clause = lead.theme === 'tactics' && mates ? `you missed ${mates >= 2 ? 'checkmates' : 'a checkmate'} on the board` : patterned ? focusMeta.clause : THEMES[lead.theme].clause;
     headline = `${opener}${opener ? clause : capitalise(clause)}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   }
 

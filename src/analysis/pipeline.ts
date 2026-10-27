@@ -1,5 +1,5 @@
 // Orchestrates: engine facts -> findings -> teaching moments -> report -> drills.
-import type { Drill, PositionEval, StoredGame } from '../domain/types';
+import type { Drill, Finding, PlyRecord, PositionEval, StoredGame } from '../domain/types';
 import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
@@ -13,7 +13,7 @@ import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
-import { detectPattern } from './patterns';
+import { PATTERN_LABEL, detectPattern } from './patterns';
 import { verdictOf } from './engineReview';
 
 /** Chronological key: PGN date when available, import time otherwise. */
@@ -41,6 +41,19 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence };
   });
   return out;
+}
+
+const TACTICAL: string[] = ['blunder', 'missed_threat', 'calculation'];
+
+/** Attach a decisive tactical pattern (not a plain hanging piece) to the finding about that move. */
+export function annotatePatterns(findings: Finding[], patterns: NonNullable<StoredGame['patterns']>, plies: PlyRecord[]) {
+  for (const f of findings) {
+    const hit = patterns[f.ply];
+    if (f.kind !== 'weakness' || !hit || hit.tag === 'hanging_piece' || hit.side !== 'refutation' || !TACTICAL.includes(f.category)) continue;
+    const p = plies[f.ply - 1];
+    f.facts = { ...f.facts, pattern: hit.tag, patternEvidence: hit.evidence };
+    f.evidence = `${moveLabel(p)} walked into a ${PATTERN_LABEL[hit.tag].toLowerCase()}: ${hit.evidence}.`;
+  }
 }
 
 /** Games from real play. Adaptive Coach games record training results, never real-game weaknesses. */
@@ -72,6 +85,10 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
     { plies: game.plies, evals: moves, positions, userColor: game.userColor, result: resultFor(userOutcome(game), game.userColor, game.headers.result), contexts },
     game.headers.timeControl,
   );
+  // The tactic behind each mistake, from the board. When a specific one decided it (a discovered
+  // attack, a fork…), the finding says so instead of the generic "left unprotected".
+  const patterns = gamePatterns({ ...game, findings, analysis: { positions, moves } as StoredGame['analysis'] });
+  annotatePatterns(findings, patterns, game.plies);
   // Three-part explanations for every credible mistake / missed chance of the user.
   const explanations: Record<number, MoveExplanation> = {};
   for (const f of findings) {
@@ -86,7 +103,6 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
   const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions), won: userOutcome(game) === 'win' });
   const drills = generateDrills(game.id, moments);
-  const patterns = gamePatterns({ ...game, findings, analysis: { positions, moves } as StoredGame['analysis'] });
   return {
     game: {
       ...game,

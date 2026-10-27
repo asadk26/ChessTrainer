@@ -253,7 +253,10 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
   // A "simple" tactic: material is won within the first three plies of the best line.
   const quickGain = materialAfterLine(p.fenBefore, best.pv, ctx.userColor, 3, 1) - e.materialBefore;
   const missed = e.materialAfterBest - e.materialAfterReply;
-  if (quickGain < 2 || missed < 2) return [];
+  // The best line must WIN material once exchanges settle — not just be better because the move
+  // played lost something (16.Nxf6+ Qxf6 17.Qxf6 Nxf6 is a trade, not "winning the knight").
+  const settledGain = e.materialAfterBest - e.materialBefore;
+  if (quickGain < 2 || missed < 2 || settledGain < 2) return [];
 
   const first = playLine(p.fenBefore, best.pv, 1)[0];
   const target = first ? pieceAt(p.fenBefore, first.to) : undefined;

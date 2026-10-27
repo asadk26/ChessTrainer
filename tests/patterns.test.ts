@@ -107,3 +107,19 @@ describe('short "Why?"', () => {
     expect(e.headline).toBe('Qe7 keeps the queen safe.');
   });
 });
+
+describe('regression: chunkmonkey420 vs Atayan48 (flagged: "it was a discovered attack")', () => {
+  const g = game('atayan-game');
+  const p16 = 31; // 16.Nxd6
+  it('names the discovered attack (…Ne5 hits the queen and uncovers Qd8 on the knight)', () => {
+    const f = g.findings.find((x) => x.ply === p16 && x.category === 'blunder')!;
+    expect(f.facts.pattern).toBe('discovered_attack');
+    expect(f.evidence).toBe('16.Nxd6 walked into a discovered attack: Ne5 attacks the queen on f3 and uncovers the queen on d8, which now attacks the knight on d6.');
+    expect(g.moments.find((m) => m.ply === p16)?.text.title).toBe('16.Nxd6 — walked into a discovered attack');
+    expect(g.report?.focus.title).toBe("Before you capture, ask what your opponent's reply can uncover.");
+    expect(g.report?.headline).toMatch(/^You walked into a discovered attack\./);
+  });
+  it('no longer claims 16.Nxf6+ "would have won the knight" (it was an even trade)', () => {
+    expect(g.findings.some((x) => x.ply === p16 && x.category === 'tactical_blindness')).toBe(false);
+  });
+});

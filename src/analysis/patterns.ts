@@ -112,8 +112,12 @@ function discovered(fs: Frame[]): PatternHit | undefined {
         // A discovered check: this piece, not the one that moved, now attacks the king.
         const k = kingSquare(after, other(me));
         if (attackersOf(after, k, me).includes(p.square as never) && !attackersOf(before, k, me).includes(p.square as never)) fresh.unshift({ square: k, type: 'k' });
-        if (fresh.length && (move.san.includes('+') || gainAfter(fs, i, me) >= 2))
-          return { tag: 'discovered_attack', side: 'refutation', at: i, evidence: `${move.san} uncovers the ${PIECE_NAME[p.type as PieceType]} on ${p.square}, which now attacks the ${fresh[0].type === 'k' ? 'king' : sq(fresh[0].type, fresh[0].square)}` };
+        if (fresh.length && (move.san.includes('+') || gainAfter(fs, i, me) >= 2)) {
+          // Usually the moving piece makes its own threat at the same time: that's what makes it work.
+          const own = attackedEnemyPieces(after, move.to).filter((t) => t.type === 'q' || t.type === 'r' || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType]);
+          const hits = own.length ? `attacks the ${sq(own[0].type, own[0].square)} and ` : '';
+          return { tag: 'discovered_attack', side: 'refutation', at: i, evidence: `${move.san} ${hits}uncovers the ${PIECE_NAME[p.type as PieceType]} on ${p.square}, which now attacks the ${fresh[0].type === 'k' ? 'king' : sq(fresh[0].type, fresh[0].square)}` };
+        }
       }
   }
 }
@@ -207,3 +211,19 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
   }
   return undefined;
 }
+
+/** Next-game focus for each pattern, when a pattern decided the game. */
+export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }> = {
+  discovered_attack: {
+    title: "Before you capture, ask what your opponent's reply can uncover.",
+    detail:
+      "A discovered attack is two threats in one move: a piece steps off a line with its own threat, and the piece behind it suddenly attacks something too. Before grabbing material, look for enemy pieces lined up behind one of their own pieces — and ask what happens if the front one moves with a threat.",
+  },
+  knight_fork: { title: 'Check the squares their knights can jump to before you move.', detail: 'A knight on the right square attacks two pieces at once — often king and queen, or king and rook. Before every move, look at each enemy knight and the squares it can reach next.' },
+  pin: { title: "Don't line your pieces up in front of your king or queen.", detail: 'A pinned piece can be attacked again and again because it can’t move away. Before putting a piece on a line with your king or queen behind it, check whether a bishop, rook or queen can pin it.' },
+  in_between_move: { title: 'Before you recapture, look for a stronger in-between move.', detail: 'An in-between move — a check or a bigger threat played before the expected recapture — can change the whole exchange. Check for one, for both sides, whenever pieces are being traded.' },
+  trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
+  opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
+  back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  hanging_piece: { title: 'Before you let go of a piece, check whether it can simply be taken.', detail: 'Do a two-second blunder check on every move: for the square you are moving to, and for the piece you are moving away from — what can now be captured for free?' },
+};

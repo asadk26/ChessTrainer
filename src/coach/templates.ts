@@ -1,6 +1,7 @@
 // Deterministic coaching language. This is the voice the app uses when no LLM
 // is configured, and the fallback for any field an LLM response leaves out.
 // Tone: a calm human coach talking to a ~850 player. Engine numbers stay out.
+import { PATTERN_LABEL, PATTERN_RULE, type PatternTag } from '../analysis/patterns';
 import type { Color, Finding, MomentText, MoveExplanation, PlyRecord } from '../domain/types';
 import { gerundPhrase } from '../analysis/movePurpose';
 import { betterSentence } from '../analysis/explain';
@@ -42,6 +43,8 @@ export interface MomentTextInput {
 
 export function momentTitle(f: Finding, played: PlyRecord): string {
   const mv = `${played.moveNumber}${played.color === 'w' ? '.' : '...'}${played.san}`;
+  // A specific tactic decided it: name it.
+  if (f.facts.pattern) return `${mv} — walked into a ${PATTERN_LABEL[f.facts.pattern as PatternTag].toLowerCase()}`;
   switch (f.category) {
     case 'premature_attack':
       return `${mv} — active, but what's the follow-up?`;
@@ -202,6 +205,21 @@ function buildCategoryText(input: MomentTextInput): MomentText {
       };
     }
     case 'blunder':
+      if (facts.pattern) {
+        // The reply is a tactic (a discovered attack, a fork…), not just a free capture.
+        const tag = facts.pattern as PatternTag;
+        const ev = s(facts.patternEvidence);
+        return {
+          ...base,
+          question: `After ${played.san}, what can ${opp} do? Look for a move that makes two threats at once. Play ${opp}'s strongest reply.`,
+          predictCorrect: `Exactly — ${ev}.`,
+          predictOther: `Look again: ${ev}.`,
+          reveal: `${capitalise(ev)}: a ${PATTERN_LABEL[tag].toLowerCase()}. You can't answer both threats, so material is lost.`,
+          betterPrompt: `Find a move that doesn't allow that.`,
+          betterCorrect: `Good — that takes the sting out of it.`,
+          lesson: PATTERN_RULE[tag],
+        };
+      }
       return {
         ...base,
         question: `After ${played.san}, what can ${opp} do? Play ${opp}'s strongest reply.`,
@@ -397,3 +415,5 @@ export function goodIdeaText(f: Finding, played: PlyRecord, mover: Color): {
     },
   };
 }
+
+const capitalise = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
