@@ -101,3 +101,33 @@ export function moveBoardFacts(fen: string, uci: string, pv?: string[]): MoveBoa
     ignoresHanging: hangingPieces(fen, other(me)).filter((h) => theirsAfter.has(h.square)).map((h) => `before ${san}, ${h.text} — and it still is`),
   };
 }
+
+/**
+ * When the better move simply takes something that's hanging, say it as an opportunity:
+ * "the knight on e5 is hanging to your bishop on c3 — still available next move" (or "— gone after
+ * your move" when the move played or the reply removes the chance).
+ */
+export function captureOpportunity(fenBefore: string, bestUci: string, playedUci?: string, replyUci?: string): string | undefined {
+  const me = new Chess(fenBefore).turn() as Color;
+  const target = pieceAt(fenBefore, bestUci.slice(2, 4));
+  const by = pieceAt(fenBefore, bestUci.slice(0, 2));
+  if (!target || !by || target.color === me || !isLoose(fenBefore, bestUci.slice(2, 4))) return undefined;
+  const what = `the ${sqName(target.type, bestUci.slice(2, 4))} is hanging to your ${sqName(by.type, bestUci.slice(0, 2))}`;
+  if (!playedUci) return what;
+  // Still there after the move played and the opponent's best reply?
+  const c = new Chess(fenBefore);
+  try {
+    c.move({ from: playedUci.slice(0, 2), to: playedUci.slice(2, 4), promotion: playedUci[4] ?? 'q' });
+    if (replyUci) c.move({ from: replyUci.slice(0, 2), to: replyUci.slice(2, 4), promotion: replyUci[4] ?? 'q' });
+  } catch {
+    return what;
+  }
+  const fen = c.fen();
+  const still =
+    c.turn() === me &&
+    pieceAt(fen, bestUci.slice(2, 4))?.type === target.type &&
+    pieceAt(fen, bestUci.slice(0, 2))?.type === by.type &&
+    isLoose(fen, bestUci.slice(2, 4)) &&
+    c.moves({ verbose: true }).some((m) => m.from === bestUci.slice(0, 2) && m.to === bestUci.slice(2, 4));
+  return `${what} — ${still ? 'still available next move' : 'gone after your move'}`;
+}

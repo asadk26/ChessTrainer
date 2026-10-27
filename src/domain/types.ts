@@ -412,6 +412,11 @@ export interface StoredGame {
   outcome?: 'win' | 'loss' | 'draw';
   /** AI-written explanations of single positions, keyed by ply, cached so revisiting costs no API call. */
   aiExplanations?: Record<number, AiExplanation>;
+  /**
+   * Tactical pattern behind each of your mistakes/blunders (by ply), from the board and Stockfish's
+   * lines — saved so patterns can be counted across games.
+   */
+  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string }>;
   /** Set on games played against the Adaptive Coach: they record training, not real-game weaknesses. */
   adaptive?: { sessionId: string; skill: AdaptiveSkill };
   /** "This seems wrong" notes the player left on the coaching. */
@@ -506,6 +511,10 @@ export interface ProfileSummary {
 /** An AI instructor's explanation of one position, grounded in (and checked against) the Stockfish analysis. */
 export interface AiExplanation {
   ply: number;
+  /** One sentence naming the concrete move and idea — shown first. */
+  headline?: string;
+  /** The tactical pattern behind the move (deterministic, from the board), if any. */
+  patternTag?: import('../analysis/patterns').PatternTag;
   tryingTo: string;
   missed: string;
   whyBetter: string;

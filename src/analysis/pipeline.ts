@@ -13,6 +13,8 @@ import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
+import { detectPattern } from './patterns';
+import { verdictOf } from './engineReview';
 
 /** Chronological key: PGN date when available, import time otherwise. */
 export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'>): number {
@@ -23,6 +25,22 @@ export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'>): num
 
 export function gameLabel(g: StoredGame): string {
   return `vs ${g.opponentName}${g.headers.date ? ` (${g.headers.date})` : ''}`;
+}
+
+/** The pattern tag of each of the player's mistakes and blunders (empty when none applies). */
+export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'findings' | 'analysis'>): NonNullable<StoredGame['patterns']> {
+  const out: NonNullable<StoredGame['patterns']> = {};
+  const a = game.analysis;
+  if (!a) return out;
+  a.moves.forEach((e, i) => {
+    const v = verdictOf(e);
+    if (e.color !== game.userColor || (v !== 'mistake' && v !== 'blunder')) return;
+    const p = game.plies[i];
+    const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
+    const hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
+    if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence };
+  });
+  return out;
 }
 
 /** Games from real play. Adaptive Coach games record training results, never real-game weaknesses. */
@@ -68,6 +86,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
   const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions), won: userOutcome(game) === 'win' });
   const drills = generateDrills(game.id, moments);
+  const patterns = gamePatterns({ ...game, findings, analysis: { positions, moves } as StoredGame['analysis'] });
   return {
     game: {
       ...game,
@@ -85,6 +104,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
       explanations,
       moments,
       report,
+      patterns,
       drillIds: drills.map((d) => d.id),
       completedMomentIds: game.completedMomentIds.filter((id) => moments.some((m) => m.id === id)),
     },

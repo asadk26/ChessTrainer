@@ -372,6 +372,23 @@ model is calibrated on engine play, so it would be false precision here.
 - **Badges:** every move gets a coloured badge from the same quality bands as the rest of the app (`classifyMove` in `src/analysis/moveQuality.ts`): ★ Best, = Equally good, ✓ Good, ?! Inaccuracy, ? Mistake, ?? Blunder, plus two deliberately rare ones. **! Great** is the only good move in a position that isn't already decided. **!! Brilliant** is a best or equal move that gives up at least two pawns' worth of material in Stockfish's line and keeps the position. The badge shows on the destination square, next to the move caption, and in the move list. Lesson moves you haven't reached show a grey "?" until done, so the stop-and-think moments aren't given away.
 - **Arrows:** the move just played (orange for yours, red for the opponent's) and, when it wasn't best or equal, Stockfish's choice in green.
 
+### Short explanations, step-through lines, "Find it first", pattern tags
+
+- **Why? is short.** You see, in order:
+  - a one-sentence headline naming the concrete move and idea;
+  - a **pattern tag** with its one-line rule;
+  - everything else, collapsed under **More**.
+
+  The tags are in-between move, knight fork, hanging piece, pin, discovered attack, trapped piece, opened line and back rank. A tag comes from the board, never from the AI (`src/analysis/patterns.ts`): it's found in the opponent's punishing line or in your better line, with the evidence ("Nc7+ forks the king and the rook on a8"). Positional mistakes get no tag rather than a guessed one. A headline without a square or a piece is replaced by the concrete reason.
+- **Show me** steps through Stockfish's line one tap at a time, with no autoplay and 3–5 moves:
+  - **"Show me what goes wrong"** plays the opponent's best reply line after your move;
+  - **"Show the better line"** plays Stockfish's line instead of your move.
+
+  Each move gets an arrow and a one-line caption from the board, from your side: it takes, gives check, attacks, pins, gets out of check, or is the only legal move (`src/analysis/lineSteps.ts`). Captions don't use the AI yet.
+- **Find it first:** stepping onto one of your mistakes or blunders (except lessons, which have their own flow) stops before the move. You get one try at a better move, graded by Stockfish, then it reveals Stockfish's move and continues. Until then, that move's badge shows "?".
+- **Free captures are said as opportunities:** "the knight on d5 is hanging to your rook on d1 — still available next move" (or "gone after your move").
+- **Pattern tags are saved on every mistake and blunder** (`game.patterns`, by ply). `patternStats(games)` (`src/analysis/patternStats.ts`) counts them per tag and per month, with a trend, over real games only, for the AI coach to use later. Games analysed before this are tagged when they're re-coached or counted.
+
 ## Practice board and line comparison
 
 Inside Guided Review, any of your moves that wasn't Stockfish's choice (and every teaching

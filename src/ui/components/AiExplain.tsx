@@ -4,6 +4,16 @@ import { aiReady, explainPosition } from '../actions';
 import { useApp } from '../store';
 import { CoachText } from './CoachText';
 import { EXPLAIN_VERSION } from '../../coach/momentContext';
+import { PATTERN_LABEL, PATTERN_RULE, type PatternTag } from '../../analysis/patterns';
+
+/** The pattern behind a move as a tag plus its one-line rule. */
+export function PatternChip({ tag }: { tag: PatternTag }) {
+  return (
+    <p className="pattern-line small">
+      <span className="pattern-tag">{PATTERN_LABEL[tag]}</span> {PATTERN_RULE[tag]}
+    </p>
+  );
+}
 
 /** Whether the AI instructor can be used right now (configured, switched on, unlocked). */
 /** Configured on the server, but not usable yet — and why, in words the user can act on. */
@@ -105,7 +115,14 @@ export function AiExplain({
       {cached ? (
         <>
           <span className="eyebrow">Why? · {cached.model === 'none' ? 'from Stockfish' : 'AI, grounded in Stockfish'}</span>
-          {cached.model === 'none' ? <CoachText text={cached.whyBetter} /> : <Sections e={cached} bestSan={bestSan} oppName={oppName} />}
+          <CoachText text={cached.headline || cached.whyBetter} className="why-headline" />
+          {cached.patternTag && <PatternChip tag={cached.patternTag} />}
+          {cached.model !== 'none' && (
+            <details className="why-more">
+              <summary className="small">More</summary>
+              <Sections e={cached} bestSan={bestSan} oppName={oppName} />
+            </details>
+          )}
           {available && cached.model !== 'none' && (
             <button className="link small" disabled={state === 'loading'} onClick={() => run(true)}>
               {state === 'loading' ? 'Regenerating…' : 'Regenerate'}

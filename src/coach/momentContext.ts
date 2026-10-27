@@ -13,7 +13,8 @@ import { buildContexts } from '../analysis/context';
 import { CATEGORIES, THEMES } from '../domain/categories';
 import { themeOf, countsAsPattern } from './report';
 import { extractJson, mentionsOnlyKnownMoves } from './llmCoach';
-import { moveBoardFacts, type MoveBoardFacts } from '../analysis/boardFacts';
+import { captureOpportunity, moveBoardFacts, type MoveBoardFacts } from '../analysis/boardFacts';
+import { PATTERN_LABEL, detectPattern, type PatternTag } from '../analysis/patterns';
 import { MATE_CP, formatCp } from '../analysis/evaluation';
 import { lineToSan } from '../chess/board';
 import type { PriorGameFindings } from '../analysis/moments';
@@ -21,7 +22,7 @@ import type { PriorGameFindings } from '../analysis/moments';
 const band = (cp: number) => BAND_LABEL[bandOf(cp)].toLowerCase();
 
 /** Bumped when the explanation's input or rules change, so older cached explanations are redone on request. */
-export const EXPLAIN_VERSION = 'why2';
+export const EXPLAIN_VERSION = 'why3';
 
 /** Below this win% gap the two moves are close: say so in one line instead of inventing reasons. */
 export const SMALL_DIFFERENCE = 6;
@@ -50,6 +51,8 @@ export interface MomentContext {
   smallDifference?: boolean;
   /** A deterministic concrete reason, used if the AI's answer doesn't name one. */
   fallbackReason?: string;
+  /** Deterministic tactical pattern for this move, if any. */
+  pattern?: PatternTag;
   /** For the one-line small-difference answer. */
   summary?: { playedSan: string; bestSan?: string; evalPlayed: string; evalBest: string };
 }
@@ -175,6 +178,8 @@ export function buildMomentContext(game: StoredGame, ply: number, opts: { rating
     smallDifference: gap < SMALL_DIFFERENCE,
     differenceInWinningChances: `${Math.round(gap)}%`,
   };
+  const pattern = isUser ? (game.patterns?.[ply] ?? detectPattern(played.fenBefore, played.uci, after?.lines[0]?.pv ?? [], before.lines[0].pv, here.map((f) => f.category as string))) : undefined;
+  (facts as Record<string, unknown>).detectedPattern = pattern ? { pattern: PATTERN_LABEL[pattern.tag], evidence: pattern.evidence } : null;
   (facts as Record<string, unknown>).boardFacts = {
     playedMove: factList(playedFacts),
     bestMove: factList(bestFacts),
@@ -182,10 +187,14 @@ export function buildMomentContext(game: StoredGame, ply: number, opts: { rating
   const grounding = `${before.lines[0].pv[0]}|${before.depth}|${bestCp}|${playedCp}|${EXPLAIN_VERSION}`;
   const smallDifference = gap < SMALL_DIFFERENCE;
   const reasons = factList(bestFacts);
+  // A free capture is an opportunity, said as one; otherwise the strongest board fact.
   // Reasons start with a move in SAN ("f4 opens…", "Nf3 develops…"): never change their case.
-  const fallbackReason = reasons.length ? `${reasons[0]}.` : undefined;
+  const opportunity = quality !== 'best' ? captureOpportunity(played.fenBefore, bestUci, played.uci, after?.lines[0]?.pv[0]) : undefined;
+  const fallbackReason = opportunity ? `${opportunity}.` : reasons.length ? `${reasons[0]}.` : undefined;
+  if (opportunity) ((facts as Record<string, unknown>).boardFacts as { bestMove: string[] }).bestMove.unshift(opportunity);
+  const patternTag = pattern?.tag;
   const summary = { playedSan: played.san, bestSan: quality !== 'best' ? bestLine4[0] : undefined, evalPlayed: evalText(playedCp), evalBest: evalText(bestCp) };
-  return { facts, allowedMoves: allowed, grounding, smallDifference, fallbackReason, summary };
+  return { facts, allowedMoves: allowed, grounding, smallDifference, fallbackReason, summary, pattern: patternTag };
 }
 
 /**
@@ -198,14 +207,14 @@ export function smallDifferenceExplanation(ctx: MomentContext, ply: number): AiE
   const line = s.bestSan
     ? `Small difference — ${s.playedSan} is fine. Stockfish slightly prefers ${s.bestSan} (${s.evalBest} instead of ${s.evalPlayed})${reason}`
     : `${s.playedSan} was Stockfish's choice.`;
-  return { ply, tryingTo: '', missed: '', whyBetter: line, opponentReply: '', difference: '', takeaway: '', pattern: '', confidence: 'small_difference', model: 'none', createdAt: Date.now(), grounding: ctx.grounding };
+  return { ply, headline: line, patternTag: ctx.pattern, tryingTo: '', missed: '', whyBetter: line, opponentReply: '', difference: '', takeaway: '', pattern: '', confidence: 'small_difference', model: 'none', createdAt: Date.now(), grounding: ctx.grounding };
 }
 
 export function momentPrompt(ctx: MomentContext): string {
   return `Explain this position to the student. All chess facts are below; use only these.\n\n${JSON.stringify(ctx.facts, null, 1)}`;
 }
 
-const FIELDS = ['tryingTo', 'missed', 'whyBetter', 'opponentReply', 'difference', 'takeaway', 'pattern'] as const;
+const FIELDS = ['headline', 'tryingTo', 'missed', 'whyBetter', 'opponentReply', 'difference', 'takeaway', 'pattern'] as const;
 
 export class UngroundedError extends Error {}
 
@@ -218,14 +227,20 @@ export function parseMomentExplanation(text: string, ctx: MomentContext, ply: nu
     const s = typeof v === 'string' ? v.trim() : '';
     if (s.length > 600) throw new UngroundedError(`The AI answer was too long (${k}).`);
     if (s && !mentionsOnlyKnownMoves(s, ctx.allowedMoves)) throw new UngroundedError(`The AI mentioned a move that isn't in Stockfish's analysis (${k}).`);
-    out[k] = s;
+    (out as unknown as Record<string, string>)[k] = s;
   }
+  // The tactical tag is ours (from the board), never the model's.
+  out.patternTag = ctx.pattern;
   if (!out.whyBetter && !out.takeaway) throw new UngroundedError('The AI answer was empty.');
   out.confidence = ctx.smallDifference || raw.confidence === 'small_difference' ? 'small_difference' : 'clear';
   // A real difference needs a concrete reason: a square or a move. If the answer only waves its
   // hands, lead with a reason taken from the board facts instead.
   if (out.confidence === 'clear' && !namesConcreteReason(out.whyBetter) && ctx.fallbackReason)
     out.whyBetter = `${ctx.fallbackReason}${out.whyBetter ? ` ${out.whyBetter}` : ''}`;
+  // The headline is the one thing everyone reads: it must be one concrete sentence.
+  const first = (t: string) => (t.match(/^.*?[.!?](\s|$)/)?.[0] ?? t).trim();
+  if (!out.headline || !namesConcreteReason(out.headline)) out.headline = first(out.whyBetter);
+  else out.headline = first(out.headline);
   return out;
 }
 

@@ -34,6 +34,7 @@ Stockfish has already analysed the position. The input JSON contains every chess
 Rules — follow them strictly:
 - Stockfish is the source of truth. Never contradict it: do not call a move good or bad differently from the input, and do not suggest any move that is not in the input.
 - Only mention moves that appear in the input, written exactly as they appear there (SAN like Nxd7, O-O, Qe7).
+- "headline" is what the student reads first: ONE sentence (max ~25 words) naming the concrete move and the idea, with the squares or pieces — e.g. "After Bf4, …Bxb2 picks up the pawn and then traps your rook on a1 — c3 kept the long diagonal closed." If detectedPattern is given, the headline is about that pattern and its evidence. Everything else is shown only if the student asks for more, so keep the other fields short.
 - "whyBetter" MUST name at least one concrete reason taken from boardFacts or from the first moves of the lines, with the squares or pieces involved — e.g. "d4 attacks the bishop on c5 and the pawn on e5", "after Nf3 your bishop on b5 is left hanging". A reason without a square or a piece is not acceptable.
 - If engineFacts.smallDifference is true, the moves are close: say so plainly in ONE short line in "whyBetter" (e.g. "Both are fine — Stockfish slightly prefers Nc3, which develops a piece"), leave "missed" and "difference" empty, set confidence to "small_difference", and do not invent reasons.
 - Do not invent tactics, threats, plans or variations. Use only what boardFacts and the lines show; if they show nothing more, keep it short rather than making something up.
@@ -43,7 +44,8 @@ Rules — follow them strictly:
 - Mention a recurring pattern only if the input lists one that fits; otherwise leave that field empty.
 
 Respond with a single JSON object and nothing else, with these string fields:
-{"tryingTo": "what the student was most likely trying to do with their move",
+{"headline": "one concrete sentence: the move and the idea (see rules)",
+ "tryingTo": "what the student was most likely trying to do with their move",
  "missed": "what the move overlooked (or empty if it was fine)",
  "whyBetter": "why the better move is better, naming at least one concrete board reason (or one plain line if the difference is small)",
  "opponentReply": "the opponent's strongest reply and what it does",

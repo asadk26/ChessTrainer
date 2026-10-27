@@ -634,3 +634,18 @@ p { margin: 0 0 0.75rem; }
   .eval-graph { height: 38px; }
   .rv.in-moment .eval-graph { display: none; }
 }
+
+/* Guided Review: short "Why?", pattern tag, step-through lines */
+.why-headline { font-weight: 600; margin: 0.25rem 0; }
+.pattern-line { margin: 0.2rem 0 0.3rem; color: var(--muted); }
+.pattern-tag {
+  display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 0.1rem 0.45rem; margin-right: 0.3rem;
+}
+.why-more summary { cursor: pointer; color: var(--accent); }
+.show-me-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.3rem 0; }
+.show-me-row .show-best { margin: 0; }
+.line-steps { margin: 0.3rem 0 0; padding-left: 1.3rem; display: grid; gap: 0.2rem; font-size: 0.92rem; }
+.line-steps li p { margin: 0; }
+.line-steps li.on { font-weight: 600; }
+.line-steps li.done { color: var(--muted); }

@@ -13,6 +13,7 @@ import { EvalChange } from '../components/EvalBar';
 import { AiExplain } from '../components/AiExplain';
 import { classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
 import { EvalColumn, EvalGraph, QualityBadge, whiteEvals } from '../components/ReviewVisuals';
+import { useFindFirst, useLineView } from '../components/ReviewSteps';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
@@ -534,19 +535,34 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     setPly(m.ply - 1);
     setActive(m);
   };
+  // "Find it first": before each of your mistakes/blunders that isn't already a lesson, one try at a better move.
+  const [attempted, setAttempted] = useState<Set<number>>(() => new Set());
+  const findFirst = useFindFirst(game, (p) => (setAttempted((s) => new Set(s).add(p)), setPly(p)));
+  const lineView = useLineView(game);
+  const findsFirst = (n: number) =>
+    game.plies[n - 1]?.color === game.userColor && (classes[n] === 'mistake' || classes[n] === 'blunder') && !attempted.has(n) && !(momentAt.get(n) && momentAt.get(n)!.tier !== 'note'); // lessons have their own flow
   const next = () => {
-    if (active) return;
-    const upcoming = momentAt.get(ply + 1);
+    if (active || findFirst.active) return;
+    if (lineView.active) return void lineView.next();
+    const n = ply + 1;
+    const upcoming = momentAt.get(n);
     if (stopsAt(upcoming)) startMomentAt(upcoming!);
+    else if (findsFirst(n)) findFirst.start(n);
     else setPly((p) => Math.min(game.plies.length, p + 1));
   };
-  const prev = () => (active ? setActive(undefined) : setPly((p) => Math.max(0, p - 1)));
+  const prev = () => {
+    if (lineView.active) return void lineView.prev();
+    if (findFirst.active) return findFirst.cancel();
+    if (active) setActive(undefined);
+    else setPly((p) => Math.max(0, p - 1));
+  };
+  const jump = (p: number) => (setPracticePly(null), setActive(undefined), findFirst.cancel(), lineView.close(), setPly(p));
   const nextMoment = moments.find((m) => m.ply > ply + 1 && stopsAt(m));
 
   // On phones the strip + question + board + verdict just fit the screen.
   // Keep that block aligned to the top whenever the move or the moment's state
   // changes, so the verdict is always visible and nothing jumps around.
-  const stateKey = lesson?.stateKey ?? runner?.stateKey ?? `browse:${ply}`;
+  const stateKey = lesson?.stateKey ?? runner?.stateKey ?? findFirst.panels?.stateKey ?? lineView.panels?.stateKey ?? `browse:${ply}`;
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current && initialPly === undefined) {
@@ -594,7 +610,12 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     (game.analysis?.moves ?? []).forEach((e, i) => (out[i + 1] = classifyMove(e, game.analysis!.positions[i])));
     return out;
   }, [game.analysis]);
-  const hiddenPlies = useMemo(() => new Set(moments.filter((x) => x.tier !== 'note' && !doneIds.has(x.id)).map((x) => x.ply)), [moments, doneIds]);
+  // Hidden until reached: lessons not done yet, and your mistakes/blunders you haven't tried to improve on.
+  const hiddenPlies = useMemo(() => {
+    const out = new Set(moments.filter((x) => x.tier !== 'note' && !doneIds.has(x.id)).map((x) => x.ply));
+    for (const [p, c] of Object.entries(classes)) if ((c === 'mistake' || c === 'blunder') && game.plies[Number(p) - 1].color === game.userColor && !attempted.has(Number(p))) out.add(Number(p));
+    return out;
+  }, [moments, doneIds, classes, attempted, game.plies, game.userColor]);
   const badges = useMemo(() => {
     const out: Record<number, MoveClass | 'hidden'> = {};
     for (const [p, c] of Object.entries(classes)) out[Number(p)] = hiddenPlies.has(Number(p)) && Number(p) > ply ? 'hidden' : c;
@@ -653,9 +674,19 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
       )}
       {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
       {evalAt && !evalAt.isBest && evalAt.bestSan && (game.analysis?.positions[ply - 1]?.lines[0]?.pv.length ?? 0) > 0 && (
-        <button className="btn ghost small show-best" onClick={() => setPracticePly(ply)}>
-          {mine ? `Explore: your move vs ${evalAt.bestSan}` : `Explore: ${evalAt.bestSan} instead`}
-        </button>
+        <div className="show-me-row">
+          {(game.analysis?.positions[ply]?.lines[0]?.pv.length ?? 0) > 0 && (
+            <button className="btn ghost small" onClick={() => lineView.open(ply, 'refutation')}>
+              Show me what goes wrong
+            </button>
+          )}
+          <button className="btn ghost small" onClick={() => lineView.open(ply, 'better')}>
+            Show the better line
+          </button>
+          <button className="btn ghost small show-best" onClick={() => setPracticePly(ply)}>
+            {mine ? `Try your own moves` : `Explore`}
+          </button>
+        </div>
       )}
       {noteHere && (
         <div className="note-card">
@@ -726,7 +757,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     </p>
   ) : null;
 
-  const panels: Panels = practice ?? lesson ?? runner ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  const panels: Panels = practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
   const marks = Object.fromEntries(
     moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : x.tier === 'note' ? ('note' as const) : ('bad' as const)]),
   );
@@ -735,9 +766,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     <HoverProvider>
       <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
         {whites.length > 1 && (
-          <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
+          <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={jump} />
         )}
-        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
+        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={jump} />
         <div className="rv-grid">
           <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
           <div className="rv-board">
