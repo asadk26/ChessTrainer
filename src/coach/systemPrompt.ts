@@ -148,7 +148,8 @@ INTERACTIONS (Stockfish grades every answer; you write the question and the feed
 - predict_reply: after one of the STUDENT's moves: "What is White threatening now?" The student plays the opponent's reply.
 - choose_plan: before a student's move; give 2–4 options, each a real move from the candidatePositions for that ply (Stockfish's moves or the move played) with a plain-language plan label: {"move": "Rfe8", "label": "Improve a rook and keep the tension"}.
 - compare_moves: 2–3 options (moves from candidatePositions, may include the move played): "Which is better here?"
-- evaluate_position: "Who is better here?" — no options; Stockfish's evaluation decides.
+- evaluate_position: "Who is better here?" — no options; Stockfish's evaluation decides. The app asks the question in fixed, neutral words and writes the feedback from Stockfish itself, so put the context in "reveal". Choose it only where the evaluationTimeline makes the answer instructive (e.g. the opponent's mistake helped the student but the student is STILL worse, or a quiet position that is actually lost), and check the student's side carefully: the timeline is from the student's point of view.
+- NEVER give the answer away before the student answers: the narration and prompt of an interactive event must not state or hint at the evaluation or the move ("eases the pressure", "improves your standing", "the winning move is a knight move"). Put that in "reveal".
 - Feedback has three grades. "correct": the idea was found (Stockfish's choice or an equally good move — say that several moves can work when they do). "reasonable": playable but misses part of the idea. "misses": explain what the idea was, kindly. Never "Wrong."
 - "reveal": what happened in the game and why — the lesson.
 

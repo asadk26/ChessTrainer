@@ -3,7 +3,8 @@ import type { AiWalkthrough, Arrow, BetaCoachReview, StoredGame, WalkEvent } fro
 import { aiWalkthrough, analysePosition } from '../actions';
 import { useApp } from '../store';
 import { betaPositions } from '../../coach/betaCoach';
-import { currentWalkthrough, gradeEvaluation, gradeOf, knownQuality, qualityFromAfter, walkGrounding, type Grade } from '../../coach/walkthrough';
+import { EVALUATE_PROMPT, currentWalkthrough, evaluationFeedback, gradeEvaluation, gradeOf, knownQuality, qualityFromAfter, walkGrounding, type Grade } from '../../coach/walkthrough';
+import { materialSummary } from '../../analysis/linePoint';
 import { QUALITY_LABEL, gapBetween, qualityOfGap, type Quality } from '../../analysis/moveQuality';
 import { positionCp, scoreToCp } from '../../analysis/evaluation';
 import { lineToSan, other, sideToMove } from '../../chess/board';
@@ -234,7 +235,17 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
     if (!ev?.interaction || answer) return;
     const at = ev.timing === 'before' ? ev.ply - 1 : ev.ply;
     const cp = cpUser(at);
-    respond(ev, gradeEvaluation(cp, a), `Stockfish puts it at ${(cp / 100 >= 0 ? '+' : '') + (cp / 100).toFixed(1)} for you.`);
+    const last = at > 0 ? game.plies[at - 1] : undefined;
+    const fenAt = last ? last.fenAfter : game.plies[0].fenBefore;
+    const text = evaluationFeedback({
+      cp,
+      prevCp: at > 0 ? cpUser(at - 1) : undefined,
+      lastMove: last ? { label: moveLabel(last), byOpponent: last.color !== user } : undefined,
+      material: materialSummary(fenAt, user),
+      opponent: user === 'w' ? 'Black' : 'White',
+    });
+    // The AI's feedback for this question is not used: it was written before the answer was known.
+    setAnswer({ grade: gradeEvaluation(cp, a), text });
   };
 
   // ------------------------------------------------------------- render ---
@@ -315,14 +326,15 @@ function Walk({ game, plan, w, onRegenerate, busy }: { game: StoredGame; plan: B
             )}
           </p>
         )}
-        {ev.narration && <CoachText text={ev.narration} className="beta-para" />}
+        {/* "Who is better?" narration is evaluative by nature: shown only once answered, so it can't give the answer away. */}
+        {ev.narration && (ev.interaction?.kind !== 'evaluate_position' || answer) && <CoachText text={ev.narration} className="beta-para" />}
         {ev.interaction && (
           <div className="walk-question">
             {playedWell(ev) && <p className="walk-replay small">You found this in the game ({moveLabel(game.plies[ev.ply - 1])}). Find it again, and look for why it was right.</p>}
             <p>
-              <strong>{ev.interaction.prompt}</strong>
+              <strong>{ev.interaction.kind === 'evaluate_position' ? EVALUATE_PROMPT(user === 'w' ? 'White' : 'Black') : ev.interaction.prompt}</strong>
             </p>
-            {!answer && ev.interaction.hint && <p className="muted small">Hint: {ev.interaction.hint}</p>}
+            {!answer && ev.interaction.hint && ev.interaction.kind !== 'evaluate_position' && <p className="muted small">Hint: {ev.interaction.hint}</p>}
             {!answer && (ev.interaction.kind === 'find_move' || ev.interaction.kind === 'predict_reply') && (
               <p className="muted small">{checking ? 'Checking with Stockfish…' : `Play ${ev.interaction.kind === 'predict_reply' ? "your opponent's" : 'your'} move on the board.`}</p>
             )}

@@ -64,6 +64,17 @@ export function materialText(startFen: string, endFen: string, pov: Color, youNa
   return `material stays level (${join(ours)} for ${join(theirs)})`;
 }
 
+/** The material balance against the normal starting set: "you're down a knight for two pawns", "material is level". */
+export function materialSummary(fen: string, pov: Color): string {
+  const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const { ours, theirs } = netLoss(start, fen, pov);
+  if (!ours.length && !theirs.length) return 'material is level';
+  const mat = materialBalance(fen, pov);
+  if (!theirs.length) return `you're down ${join(ours)}`;
+  if (!ours.length) return `you're up ${join(theirs)}`;
+  return mat < 0 ? `you're down ${join(ours)} for ${join(theirs)}` : mat > 0 ? `you're up ${join(theirs)} for ${join(ours)}` : `material is level (${join(ours)} for ${join(theirs)})`;
+}
+
 const isCapture = (f?: SequenceFrame) => !!f && f.san.includes('x');
 const isCheck = (f?: SequenceFrame) => !!f && /[+#]/.test(f.san);
 

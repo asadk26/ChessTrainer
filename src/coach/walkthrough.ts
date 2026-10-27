@@ -222,6 +222,30 @@ export function qualityFromAfter(pos: PositionEval, uci: string, after: Position
   return { quality: qualityOfGap(gapBetween(bestCp, cp), pos.lines[0].pv[0] === uci), cp };
 }
 
+/** The neutral question for "who is better?" — fixed, so its wording can never hint at the answer. */
+export const EVALUATE_PROMPT = (color: string) => `How do you assess this position for you (${color})? Count the material and look for threats first.`;
+
+/**
+ * Feedback for "who is better?", written from Stockfish rather than by the AI (which writes its
+ * feedback before knowing which answer is right): the evaluation in words and numbers, the material,
+ * and what the opponent's last move changed — so "Black made a mistake" and "you're still worse"
+ * can both be true without confusion.
+ */
+export function evaluationFeedback(o: { cp: number; prevCp?: number; lastMove?: { label: string; byOpponent: boolean }; material: string; opponent: string }): string {
+  const v = (cp: number) => `${cp >= 0 ? '+' : ''}${(cp / 100).toFixed(1)}`;
+  const a = Math.abs(o.cp);
+  const words =
+    a < 60 ? 'about equal' : o.cp > 0 ? (a < 150 ? 'slightly better for you' : a < 300 ? 'clearly better for you' : 'winning for you') : a < 150 ? 'slightly worse for you' : a < 300 ? 'clearly worse for you' : 'losing for you';
+  const parts = [`Stockfish: ${v(o.cp)} — ${words}.`];
+  if (o.lastMove?.byOpponent && o.prevCp !== undefined && Math.abs(o.cp - o.prevCp) >= 50) {
+    const helped = o.cp > o.prevCp;
+    const still = helped && o.cp <= -60 ? ', but you are still worse' : !helped && o.cp >= 60 ? ', but you are still better' : '';
+    parts.push(`${o.opponent}'s ${o.lastMove.label} ${helped ? 'helped you' : 'made things harder for you'} (it was ${v(o.prevCp)} before)${still}.`);
+  }
+  parts.push(`Material: ${o.material}.`);
+  return parts.join(' ');
+}
+
 /** "Who is better here?": Stockfish's evaluation for the student, in three bands (borderline answers are reasonable). */
 export function gradeEvaluation(cpForStudent: number, answer: 'better' | 'equal' | 'worse'): Grade {
   const band = cpForStudent >= 60 ? 'better' : cpForStudent <= -60 ? 'worse' : 'equal';

@@ -95,3 +95,26 @@ describe('"Why?" explanations', () => {
     expect(evalText(-(10000 - 20))).toBe('-M2');
   });
 });
+
+import { EVALUATE_PROMPT, evaluationFeedback, gradeEvaluation } from '../src/coach/walkthrough';
+import { materialSummary } from '../src/analysis/linePoint';
+import { GUIDED_REVIEW_SYSTEM_PROMPT } from '../src/coach/systemPrompt';
+
+describe('"Who is better?" questions in the AI guided review', () => {
+  // The reported position: before 22.Qc3, after Black's 21...f6 (Stockfish: White −0.8, it was −2.7).
+  const fen = 'rr4k1/p1bn2p1/2Qq1p1p/3Pn3/5B2/P5PP/1P3PB1/R3R1K1 w - - 0 22';
+  it('grades from Stockfish for the student: still worse after the opponent’s mistake', () => {
+    expect(gradeEvaluation(-82, 'worse')).toBe('correct');
+    expect(gradeEvaluation(-82, 'better')).toBe('misses');
+    expect(gradeEvaluation(-82, 'equal')).toBe('reasonable');
+  });
+  it('explains it from Stockfish: number, what the last move changed, and material', () => {
+    expect(materialSummary(fen, 'w')).toBe("you're down a knight for 2 pawns");
+    const t = evaluationFeedback({ cp: -82, prevCp: -268, lastMove: { label: '21...f6', byOpponent: true }, material: materialSummary(fen, 'w'), opponent: 'Black' });
+    expect(t).toBe("Stockfish: -0.8 — slightly worse for you. Black's 21...f6 helped you (it was -2.7 before), but you are still worse. Material: you're down a knight for 2 pawns.");
+  });
+  it('asks in neutral words and tells the AI never to hint at the answer', () => {
+    expect(EVALUATE_PROMPT('White')).not.toMatch(/improv|better|worse|pressure/i);
+    expect(GUIDED_REVIEW_SYSTEM_PROMPT).toContain('NEVER give the answer away');
+  });
+});
