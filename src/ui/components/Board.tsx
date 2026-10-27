@@ -3,6 +3,20 @@ import { Chessboard } from 'react-chessboard';
 import { Chess, type Square } from 'chess.js';
 import type { Arrow, Color } from '../../domain/types';
 import { useHover } from './CoachText';
+import { CLASS_ICON, CLASS_LABEL, type MoveClass } from '../../analysis/moveQuality';
+
+/** The badge sits on the top-right corner of its square, wherever the board is turned. */
+function SquareBadge({ square, cls, orientation }: { square: string; cls: MoveClass; orientation: Color }) {
+  const f = square.charCodeAt(0) - 97;
+  const r = Number(square[1]) - 1;
+  const col = orientation === 'w' ? f : 7 - f;
+  const row = orientation === 'w' ? 7 - r : r;
+  return (
+    <span className={`qb qb-${cls} square-badge`} style={{ left: `${(col + 1) * 12.5}%`, top: `${row * 12.5}%` }} title={CLASS_LABEL[cls]} aria-label={CLASS_LABEL[cls]}>
+      {CLASS_ICON[cls]}
+    </span>
+  );
+}
 
 export const ARROW_COLORS: Record<Arrow['color'], string> = {
   played: 'rgba(214, 128, 38, 0.85)',
@@ -29,11 +43,13 @@ export interface BoardProps {
   lastMove?: { from: string; to: string };
   /** When set, the side that may move pieces; the callback returns true to accept the move. */
   movable?: Color;
+  /** A move-quality badge pinned to a square's corner (the square the move landed on). */
+  badge?: { square: string; cls: MoveClass };
   onMove?: (uci: string, san: string, fenAfter: string) => boolean | void;
 }
 
 /** Chessboard with arrows/highlights; supports drag-and-drop and tap-tap moves. */
-export function Board({ fen, orientation, arrows = [], highlights = [], lastMove, movable, onMove }: BoardProps) {
+export function Board({ fen, orientation, arrows = [], highlights = [], lastMove, movable, onMove, badge }: BoardProps) {
   const hover = useHover();
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -96,6 +112,7 @@ export function Board({ fen, orientation, arrows = [], highlights = [], lastMove
         customBoardStyle={{ borderRadius: 6, boxShadow: '0 2px 14px var(--shadow)' }}
         animationDuration={220}
       />
+      {badge && <SquareBadge {...badge} orientation={orientation} />}
     </div>
   );
 }

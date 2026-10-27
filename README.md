@@ -99,7 +99,7 @@ explanation.** The AI never decides the chess; Stockfish remains the source of t
 moves, evaluations, lines and move quality.
 
 - **What it explains:** for each game's 1–2 lessons (automatically) and for any other move on
-  request ("Explain this more deeply"): what you were trying to do, what you missed, why the better
+  request (**Why?**, on every one of your moves that wasn't Stockfish's best): what you were trying to do, what you missed, why the better
   move is better, the opponent's best reply, how the positions differ, a take-away, and a link to a
   recurring pattern when your recent games show one.
 - **What it gets** (`src/coach/momentContext.ts`): FEN, your colour and rating, your move and its
@@ -127,8 +127,17 @@ browser bundle.
 
 Settings shows whether the AI is usable and has a **Test AI connection** button, which sends a fixed
 tiny request through the whole chain (access code → server → Gemini) and shows the exact error if
-any. "Explain this more deeply" appears under each item in *What hurt you*, in Replay on your
-inaccurate moves and on note cards, and in the practice board; the lessons explain themselves.
+any. **Why?** appears under each item in *What hurt you*, in Replay on every one of your non-best
+moves (Good included) and on note cards, and in the practice board; the lessons explain themselves.
+
+- **Concrete reasons, not vague ones.** Gemini gets:
+  - the evaluation before the move, after the move played and after Stockfish's best (+0.6, M3);
+  - the first four moves of each line;
+  - board facts for both moves (`src/analysis/boardFacts.ts`, built on the move-purpose engine): what each attacks, defends or threatens, new pins, pieces it leaves hanging, and free material it ignores.
+
+  Its "why the better move is better" must name a square or a piece. If it doesn't, the app puts the strongest board fact first.
+- **Small differences get one plain line.** Under about 6% difference in winning chances, there's no AI call. The app writes one line from Stockfish itself, e.g. "Small difference — O-O is fine. Stockfish slightly prefers h3 (+0.7 instead of +0.4): h3 attacks the loose bishop on g4."
+- **Older explanations are redone on request.** Explanations cached before this change are generated again when you press Why? (`EXPLAIN_VERSION`).
 Without the access code those places show a reminder instead.
 
 ### Beta AI Coach (experimental)
@@ -355,6 +364,13 @@ Evaluation is shown in words with a small bar (`src/analysis/evalBand.ts`): Winn
 better / Slightly better / Equal / … and the swing ("Clearly better → Equal: this gave back most of
 your advantage"). No draw percentages or decimals in the main view — Stockfish's win/draw/loss
 model is calibrated on engine play, so it would be false precision here.
+
+## Guided Review visuals
+
+- **Eval bar:** a vertical bar beside the board shows Stockfish's evaluation with its number (+0.6, M3), animated as you step. The side at the bottom of the board fills from the bottom; when you play White, that's White's share.
+- **Eval graph:** a small graph of the whole game sits above the move list. Tap anywhere to jump to that move. Inaccuracies, mistakes and blunders (and great/brilliant moves) are marked on it.
+- **Badges:** every move gets a coloured badge from the same quality bands as the rest of the app (`classifyMove` in `src/analysis/moveQuality.ts`): ★ Best, = Equally good, ✓ Good, ?! Inaccuracy, ? Mistake, ?? Blunder, plus two deliberately rare ones. **! Great** is the only good move in a position that isn't already decided. **!! Brilliant** is a best or equal move that gives up at least two pawns' worth of material in Stockfish's line and keeps the position. The badge shows on the destination square, next to the move caption, and in the move list. Lesson moves you haven't reached show a grey "?" until done, so the stop-and-think moments aren't given away.
+- **Arrows:** the move just played (orange for yours, red for the opponent's) and, when it wasn't best or equal, Stockfish's choice in green.
 
 ## Practice board and line comparison
 

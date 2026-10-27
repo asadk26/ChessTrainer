@@ -334,8 +334,8 @@ function AiStatus() {
         {!settings.useLlm
           ? 'AI explanations are switched off.'
           : missingCode
-            ? 'Access code missing: the "Explain this more deeply" buttons stay hidden until you enter it.'
-            : 'AI explanations are on. Look for "Explain this more deeply" under "What hurt you", in Replay on your inaccurate moves, and in the practice board.'}
+            ? 'Access code missing: the "Why?" buttons stay hidden until you enter it.'
+            : 'AI explanations are on. Tap "Why?" on any of your moves that wasn\'t Stockfish\'s best — in Replay, under "What hurt you", and in the practice board.'}
       </div>
       <button className="btn ghost small" disabled={test.state === 'running'} onClick={run}>
         {test.state === 'running' ? 'Testing…' : 'Test AI connection'}

@@ -3,6 +3,7 @@ import type { AiExplanation, StoredGame } from '../../domain/types';
 import { aiReady, explainPosition } from '../actions';
 import { useApp } from '../store';
 import { CoachText } from './CoachText';
+import { EXPLAIN_VERSION } from '../../coach/momentContext';
 
 /** Whether the AI instructor can be used right now (configured, switched on, unlocked). */
 /** Configured on the server, but not usable yet — and why, in words the user can act on. */
@@ -50,7 +51,7 @@ function Sections({ e, bestSan, oppName }: { e: AiExplanation; bestSan?: string;
 
 /**
  * The AI instructor's explanation of one move: shown from the cache if there is one,
- * otherwise generated on request ("Explain this more deeply"). Grounded in the stored
+ * otherwise generated on request ("Why?"). Grounded in the stored
  * Stockfish analysis; falls back quietly to the built-in coaching when unavailable.
  */
 export function AiExplain({
@@ -70,7 +71,9 @@ export function AiExplain({
   const { refresh } = useApp();
   const available = useAiAvailable();
   const blocker = useAiBlocker();
-  const cached = game.aiExplanations?.[ply];
+  // Explanations written before the current rules (concrete reasons, engine facts) are redone on request.
+  const stored = game.aiExplanations?.[ply];
+  const cached = stored?.grounding?.endsWith(`|${EXPLAIN_VERSION}`) ? stored : undefined;
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState('');
   const oppName = game.plies[ply - 1]?.color === 'w' ? 'Black' : 'White';
@@ -101,10 +104,9 @@ export function AiExplain({
     <div className={`ai-box ${compact ? 'compact' : ''}`}>
       {cached ? (
         <>
-          <span className="eyebrow">Coach's explanation · AI, grounded in Stockfish</span>
-          {cached.confidence === 'small_difference' && <p className="muted small">The engine sees only a small difference here.</p>}
-          <Sections e={cached} bestSan={bestSan} oppName={oppName} />
-          {available && (
+          <span className="eyebrow">Why? · {cached.model === 'none' ? 'from Stockfish' : 'AI, grounded in Stockfish'}</span>
+          {cached.model === 'none' ? <CoachText text={cached.whyBetter} /> : <Sections e={cached} bestSan={bestSan} oppName={oppName} />}
+          {available && cached.model !== 'none' && (
             <button className="link small" disabled={state === 'loading'} onClick={() => run(true)}>
               {state === 'loading' ? 'Regenerating…' : 'Regenerate'}
             </button>
@@ -113,8 +115,8 @@ export function AiExplain({
       ) : state === 'loading' ? (
         <p className="muted small">The coach is writing an explanation…</p>
       ) : (
-        <button className="btn ghost small" onClick={() => run()}>
-          Explain this more deeply
+        <button className="btn ghost small why-btn" onClick={() => run()}>
+          Why?
         </button>
       )}
       {state === 'error' && <p className="muted small">AI explanation unavailable ({error}). The built-in explanation above still applies.</p>}

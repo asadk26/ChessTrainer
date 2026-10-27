@@ -1,7 +1,7 @@
 // How good is a move compared with the engine's best, in practical bands —
 // so a move that's as good as Stockfish's #1 is never called wrong.
-import type { PositionEval } from '../domain/types';
-import { scoreToCp, winPercent } from './evaluation';
+import type { MoveEval, PositionEval } from '../domain/types';
+import { pd, scoreToCp, winPercent } from './evaluation';
 
 export type Quality = 'best' | 'equal' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
 
@@ -71,4 +71,42 @@ export function qualityOf(pos: PositionEval | undefined, uci: string, cpAfterFor
   if (hit) return hit.quality;
   if (cpAfterForMover === undefined || !ranked.length) return undefined;
   return qualityOfGap(gapBetween(ranked[0].cp, cpAfterForMover), false);
+}
+
+// ------------------------------------------------------------ display classes (badges)
+
+/** The quality bands plus two rare praise classes, for badges in the review. */
+export type MoveClass = Quality | 'great' | 'brilliant';
+
+export const CLASS_LABEL: Record<MoveClass, string> = { ...QUALITY_LABEL, great: 'Great move', brilliant: 'Brilliant' };
+export const CLASS_ICON: Record<MoveClass, string> = {
+  brilliant: '!!',
+  great: '!',
+  best: '★',
+  equal: '=',
+  good: '✓',
+  inaccuracy: '?!',
+  mistake: '?',
+  blunder: '??',
+};
+
+/**
+ * Badge for one move: its quality band (same as everywhere else), upgraded to
+ * - Brilliant: a best/equal move that gives up at least two pawns' worth of material in
+ *   Stockfish's line and still keeps the position, while the game wasn't already won;
+ * - Great: Stockfish's best when every alternative was clearly worse (an only move), in a
+ *   position that wasn't already decided.
+ * Both are deliberately rare: a wrong "brilliant" is worse than none.
+ */
+export function classifyMove(e: MoveEval, before?: PositionEval): MoveClass {
+  const q = qualityOfGap(pd(e), e.isBest);
+  if (q !== 'best' && q !== 'equal') return q;
+  const sacrifice = e.materialAfterReply <= e.materialBefore - 2 && e.winAfter >= 50 && e.winBefore < 90;
+  if (sacrifice) return 'brilliant';
+  const lines = before?.lines.filter((l) => l.pv.length) ?? [];
+  if (q === 'best' && lines.length >= 2 && e.winBefore >= 15 && e.winBefore <= 90) {
+    const gap = gapBetween(scoreToCp(lines[0].score), scoreToCp(lines[1].score));
+    if (gap >= 10) return 'great';
+  }
+  return q;
 }

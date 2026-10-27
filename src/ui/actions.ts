@@ -1,6 +1,6 @@
 // App-level operations that combine storage, engine and coaching.
 import type { AiExplanation, AiWalkthrough, BetaCoachReview, TrainingPlan, CoachFeedback, Color, ParsedGame, PositionEval, StoredGame } from '../domain/types';
-import { buildMomentContext, momentPrompt, parseMomentExplanation } from '../coach/momentContext';
+import { buildMomentContext, momentPrompt, parseMomentExplanation, smallDifferenceExplanation } from '../coach/momentContext';
 import { feedbackReport } from '../coach/feedback';
 import { BETA_DEPTH, betaPrompt, buildBetaContext, currentReview, evaluateForBeta, needsBetaEval, parseBetaReview } from '../coach/betaCoach';
 import { outcomeFromResult, type Outcome } from '../chess/outcome';
@@ -368,10 +368,14 @@ export function explainPosition(gameId: string, ply: number, opts: { force?: boo
     const ctx = buildMomentContext(game, ply, { rating: settings.rating, prior: priorGames(game, all) });
     if (!ctx) throw new Error('No engine analysis for this move yet.');
     if (cached && !opts.force && cached.grounding === ctx.grounding) return cached;
-    const status = await getLlmStatus();
-    if (!status.provider) throw new Error('No AI coach is configured.');
-    const text = await llmComplete(momentPrompt(ctx), settings.coachToken, 4096, 'moment');
-    const expl = parseMomentExplanation(text, ctx, ply, status.model);
+    let expl: AiExplanation;
+    if (ctx.smallDifference) expl = smallDifferenceExplanation(ctx, ply);
+    else {
+      const status = await getLlmStatus();
+      if (!status.provider) throw new Error('No AI coach is configured.');
+      const text = await llmComplete(momentPrompt(ctx), settings.coachToken, 4096, 'moment');
+      expl = parseMomentExplanation(text, ctx, ply, status.model);
+    }
     const fresh = (await repo.getGame(gameId)) ?? game;
     await repo.saveGame({ ...fresh, aiExplanations: { ...(fresh.aiExplanations ?? {}), [ply]: expl } });
     return expl;

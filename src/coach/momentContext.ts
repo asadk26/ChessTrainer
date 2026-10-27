@@ -13,9 +13,30 @@ import { buildContexts } from '../analysis/context';
 import { CATEGORIES, THEMES } from '../domain/categories';
 import { themeOf, countsAsPattern } from './report';
 import { extractJson, mentionsOnlyKnownMoves } from './llmCoach';
+import { moveBoardFacts, type MoveBoardFacts } from '../analysis/boardFacts';
+import { MATE_CP, formatCp } from '../analysis/evaluation';
+import { lineToSan } from '../chess/board';
 import type { PriorGameFindings } from '../analysis/moments';
 
 const band = (cp: number) => BAND_LABEL[bandOf(cp)].toLowerCase();
+
+/** Bumped when the explanation's input or rules change, so older cached explanations are redone on request. */
+export const EXPLAIN_VERSION = 'why2';
+
+/** Below this win% gap the two moves are close: say so in one line instead of inventing reasons. */
+export const SMALL_DIFFERENCE = 6;
+
+/** "+0.6", "−1.2", "M3" (mate for the mover), "−M2" (getting mated). */
+export function evalText(cp: number): string {
+  if (Math.abs(cp) < MATE_CP - 1000) return formatCp(cp);
+  const n = Math.max(1, Math.round((MATE_CP - Math.abs(cp)) / 10));
+  return cp > 0 ? `M${n}` : `-M${n}`;
+}
+
+function factList(f: MoveBoardFacts | undefined): string[] {
+  if (!f) return [];
+  return [...f.does, ...f.newPins, ...f.leavesHanging, ...f.ignoresHanging];
+}
 const sanLine = (frames: { san: string }[]) => frames.map((f) => f.san);
 
 export interface MomentContext {
@@ -25,6 +46,12 @@ export interface MomentContext {
   allowedMoves: Set<string>;
   /** Changes when the underlying engine analysis changes. */
   grounding: string;
+  /** The two moves are close: one plain line is the honest explanation. */
+  smallDifference?: boolean;
+  /** A deterministic concrete reason, used if the AI's answer doesn't name one. */
+  fallbackReason?: string;
+  /** For the one-line small-difference answer. */
+  summary?: { playedSan: string; bestSan?: string; evalPlayed: string; evalBest: string };
 }
 
 /** Recurring patterns from recent games: themes with credible findings in 2+ of them. */
@@ -131,8 +158,47 @@ export function buildMomentContext(game: StoredGame, ply: number, opts: { rating
     builtInCoachExplanation: expl ? { intent: expl.intent, problem: expl.problem, whyBetter: expl.better } : null,
     recentRecurringPatterns: recurringPatterns(opts.prior, here),
   };
-  const grounding = `${before.lines[0].pv[0]}|${before.depth}|${bestCp}|${playedCp}`;
-  return { facts, allowedMoves: allowed, grounding };
+  // Concrete engine and board facts: the explanation must cite at least one of these.
+  const bestUci = before.lines[0].pv[0];
+  const gap = gapBetween(bestCp, playedCp);
+  const bestFacts = quality !== 'best' ? moveBoardFacts(played.fenBefore, bestUci, before.lines[0].pv) : undefined;
+  const playedFacts = moveBoardFacts(played.fenBefore, played.uci, [played.uci, ...(after?.lines[0]?.pv ?? [])]);
+  const bestLine4 = lineToSan(played.fenBefore, before.lines[0].pv, 4);
+  const playedLine4 = lineToSan(played.fenBefore, [played.uci, ...(after?.lines[0]?.pv ?? [])], 4);
+  add(bestLine4);
+  add(playedLine4);
+  (facts as Record<string, unknown>).engineFacts = {
+    pointOfView: COLOR_NAME[me],
+    evaluationBefore: evalText(bestCp),
+    afterPlayedMove: { move: played.san, evaluation: evalText(playedCp), first4Moves: playedLine4 },
+    afterBestMove: quality !== 'best' ? { move: bestLine4[0], evaluation: evalText(bestCp), first4Moves: bestLine4 } : null,
+    smallDifference: gap < SMALL_DIFFERENCE,
+    differenceInWinningChances: `${Math.round(gap)}%`,
+  };
+  (facts as Record<string, unknown>).boardFacts = {
+    playedMove: factList(playedFacts),
+    bestMove: factList(bestFacts),
+  };
+  const grounding = `${before.lines[0].pv[0]}|${before.depth}|${bestCp}|${playedCp}|${EXPLAIN_VERSION}`;
+  const smallDifference = gap < SMALL_DIFFERENCE;
+  const reasons = factList(bestFacts);
+  // Reasons start with a move in SAN ("f4 opens…", "Nf3 develops…"): never change their case.
+  const fallbackReason = reasons.length ? `${reasons[0]}.` : undefined;
+  const summary = { playedSan: played.san, bestSan: quality !== 'best' ? bestLine4[0] : undefined, evalPlayed: evalText(playedCp), evalBest: evalText(bestCp) };
+  return { facts, allowedMoves: allowed, grounding, smallDifference, fallbackReason, summary };
+}
+
+/**
+ * When the two moves are close, the honest explanation is one plain line — built from the
+ * engine and board facts, no AI needed (and nothing to invent).
+ */
+export function smallDifferenceExplanation(ctx: MomentContext, ply: number): AiExplanation {
+  const s = ctx.summary!;
+  const reason = ctx.fallbackReason ? `: ${ctx.fallbackReason}` : '.';
+  const line = s.bestSan
+    ? `Small difference — ${s.playedSan} is fine. Stockfish slightly prefers ${s.bestSan} (${s.evalBest} instead of ${s.evalPlayed})${reason}`
+    : `${s.playedSan} was Stockfish's choice.`;
+  return { ply, tryingTo: '', missed: '', whyBetter: line, opponentReply: '', difference: '', takeaway: '', pattern: '', confidence: 'small_difference', model: 'none', createdAt: Date.now(), grounding: ctx.grounding };
 }
 
 export function momentPrompt(ctx: MomentContext): string {
@@ -155,6 +221,15 @@ export function parseMomentExplanation(text: string, ctx: MomentContext, ply: nu
     out[k] = s;
   }
   if (!out.whyBetter && !out.takeaway) throw new UngroundedError('The AI answer was empty.');
-  out.confidence = raw.confidence === 'small_difference' ? 'small_difference' : 'clear';
+  out.confidence = ctx.smallDifference || raw.confidence === 'small_difference' ? 'small_difference' : 'clear';
+  // A real difference needs a concrete reason: a square or a move. If the answer only waves its
+  // hands, lead with a reason taken from the board facts instead.
+  if (out.confidence === 'clear' && !namesConcreteReason(out.whyBetter) && ctx.fallbackReason)
+    out.whyBetter = `${ctx.fallbackReason}${out.whyBetter ? ` ${out.whyBetter}` : ''}`;
   return out;
+}
+
+/** Mentions a square (e5) or a move (Nf3, O-O): something checkable on the board. */
+export function namesConcreteReason(text: string): boolean {
+  return /\b[a-h][1-8]\b/.test(text) || /\b(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|O-O(?:-O)?)\b/.test(text);
 }

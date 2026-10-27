@@ -120,7 +120,7 @@ function Items({
   );
 }
 
-/** "Explain this more deeply" for the first of the student's own non-best moves an item is about. */
+/** "Why?" for the first of the student's own non-best moves an item is about. */
 function ItemAi({ game, plies }: { game: StoredGame; plies: number[] }) {
   const ply = plies.find((p) => {
     const m = game.analysis?.moves[p - 1];

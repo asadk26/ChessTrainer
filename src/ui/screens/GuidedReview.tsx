@@ -11,14 +11,15 @@ import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoar
 import { useLessonRunner } from '../components/LessonRunner';
 import { EvalChange } from '../components/EvalBar';
 import { AiExplain } from '../components/AiExplain';
-import { gapBetween, qualityOf, qualityOfGap, type Quality } from '../../analysis/moveQuality';
+import { classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
+import { EvalColumn, EvalGraph, QualityBadge, whiteEvals } from '../components/ReviewVisuals';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
 import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
-import { VERDICT_LABEL, engineNotes, verdictOf, type Verdict as MoveVerdict } from '../../analysis/engineReview';
+import { engineNotes, verdictOf } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
 import { gamePlayedAt } from '../../analysis/pipeline';
@@ -586,26 +587,40 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const noteCmp = useMemo(() => (noteHere && noteHere.kind === 'mistake' ? gameMoveComparison(game, noteHere.betterPly) : undefined), [game, noteHere]);
   const evalAt = ply > 0 ? game.analysis?.moves[ply - 1] : undefined;
   const plyNotes = game.findings.filter((f) => f.ply === ply && ply > 0 && f.confidence !== 'low' && !momentAt.has(ply));
-  const verdicts = useMemo(() => {
-    const out: Record<number, MoveVerdict> = {};
-    (game.analysis?.moves ?? []).forEach((e, i) => {
-      const v = verdictOf(e);
-      if (v === 'inaccuracy' || v === 'mistake' || v === 'blunder') out[i + 1] = v;
-    });
+  // Badge for every move (both sides). Lessons not done yet show "?" so the stop-and-think
+  // moments aren't given away; everything else can be scanned at a glance.
+  const classes = useMemo(() => {
+    const out: Record<number, MoveClass> = {};
+    (game.analysis?.moves ?? []).forEach((e, i) => (out[i + 1] = classifyMove(e, game.analysis!.positions[i])));
     return out;
   }, [game.analysis]);
-  // Only moves already played: marking upcoming ones would give the critical moments away.
-  const shownVerdicts = useMemo(() => Object.fromEntries(Object.entries(verdicts).filter(([p]) => Number(p) <= ply)) as Record<number, MoveVerdict>, [verdicts, ply]);
+  const hiddenPlies = useMemo(() => new Set(moments.filter((x) => x.tier !== 'note' && !doneIds.has(x.id)).map((x) => x.ply)), [moments, doneIds]);
+  const badges = useMemo(() => {
+    const out: Record<number, MoveClass | 'hidden'> = {};
+    for (const [p, c] of Object.entries(classes)) out[Number(p)] = hiddenPlies.has(Number(p)) && Number(p) > ply ? 'hidden' : c;
+    return out;
+  }, [classes, hiddenPlies, ply]);
+  const whites = useMemo(() => (game.analysis ? whiteEvals(game.plies, game.analysis.positions) : []), [game]);
+  const graphMarks = useMemo(
+    () => Object.fromEntries(Object.entries(badges).filter(([, c]) => c === 'inaccuracy' || c === 'mistake' || c === 'blunder' || c === 'brilliant' || c === 'great')) as Record<number, string>,
+    [badges],
+  );
   const notesByPly = useMemo(() => new Map(engineNotes(game).map((n) => [n.ply, n])), [game]);
   const engineNote = notesByPly.get(ply);
   const verdict = evalAt ? verdictOf(evalAt) : undefined;
+  const cls = ply > 0 ? classes[ply] : undefined;
   const mine = evalAt?.color === game.userColor;
 
   // ---------------------------------------------------------- play-through
+  // The move just played (orange for yours, red for theirs) and, when it wasn't as good,
+  // Stockfish's choice in green.
+  const showBest = !!evalAt?.bestUci && !!cls && !['best', 'equal', 'great', 'brilliant'].includes(cls);
   const browseBoard: BoardProps = {
     fen: current ? current.fenAfter : game.plies[0].fenBefore,
     orientation: game.userColor,
     lastMove: current ? { from: current.from, to: current.to } : undefined,
+    arrows: current ? [uciArrow(current.uci, current.color === game.userColor ? 'played' : 'reply'), ...(showBest ? [uciArrow(evalAt!.bestUci!, 'best')] : [])] : [],
+    badge: current && cls ? { square: current.to, cls } : undefined,
   };
   const yours = current?.color === game.userColor;
   const lessonCount = moments.filter((x) => x.tier !== 'note').length;
@@ -622,20 +637,18 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
         </p>
       ) : (
         <p className="move-caption">
-          <b>{moveLabel(current!)}</b> <span className="muted">— {yours ? 'you played' : `${game.opponentName} played`}</span>
+          <b>{moveLabel(current!)}</b> {cls && <QualityBadge cls={cls} label />} <span className="muted">— {yours ? 'you played' : `${game.opponentName} played`}</span>
           {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
         </p>
       )}
-      {evalAt && verdict && (
+      {evalAt && verdict && !evalAt.isBest && evalAt.bestSan && (
         <p className={`engine-line v-${verdict}`}>
-          <span className="engine-chip">Stockfish</span> {VERDICT_LABEL[verdict]}
-          {verdict === 'equal' && evalAt.bestSan
-            ? ` · its first choice was ${evalAt.bestSan}, but this is just as good`
-            : verdict === 'good' && evalAt.bestSan
-              ? ` · ${evalAt.bestSan} was a little more precise`
-              : !evalAt.isBest && evalAt.bestSan
-                ? ` · preferred ${evalAt.bestSan} (${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view)`
-                : ''}
+          <span className="engine-chip">Stockfish</span>
+          {verdict === 'equal'
+            ? ` its first choice was ${evalAt.bestSan} (green arrow), but this is just as good`
+            : verdict === 'good'
+              ? ` ${evalAt.bestSan} (green arrow) was a little more precise`
+              : ` preferred ${evalAt.bestSan} (green arrow): ${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view`}
         </p>
       )}
       {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
@@ -664,7 +677,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
           {noteHere.kind === 'mistake' && <AiExplain game={game} ply={noteHere.betterPly} bestSan={noteCmp?.bestSan} compact />}
         </div>
       )}
-      {!noteHere && !upcomingRaw && evalAt && mine && !evalAt.isBest && verdict !== 'equal' && <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} compact />}
+      {(!noteHere || noteHere.kind === 'good_idea') && evalAt && mine && !evalAt.isBest && <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} compact />}
       {plyNotes.map((f, i) => (
         <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
       ))}
@@ -721,11 +734,19 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   return (
     <HoverProvider>
       <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
-        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} verdicts={active ? {} : shownVerdicts} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
+        {whites.length > 1 && (
+          <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
+        )}
+        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={(p) => (setPracticePly(null), setActive(undefined), setPly(p))} />
         <div className="rv-grid">
           <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
           <div className="rv-board">
-            <Board {...panels.board} />
+            <div className="board-with-eval">
+              <EvalColumn whiteCp={practice ? undefined : whites[active ? active.ply - 1 : ply]} orientation={game.userColor} />
+              <div className="bwe-board">
+                <Board {...panels.board} />
+              </div>
+            </div>
           </div>
           <div className="rv-banner">{panels.banner}</div>
           <aside className="rv-side">
@@ -756,15 +777,11 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
               <span>
                 <i style={{ background: 'rgb(60,108,196)' }} /> your guess
               </span>
-              <span>
-                <i className="lg-v inaccuracy" /> inaccuracy
-              </span>
-              <span>
-                <i className="lg-v mistake" /> mistake
-              </span>
-              <span>
-                <i className="lg-v blunder" /> blunder
-              </span>
+              {(['brilliant', 'great', 'best', 'equal', 'good', 'inaccuracy', 'mistake', 'blunder'] as const).map((c) => (
+                <span key={c}>
+                  <QualityBadge cls={c} label />
+                </span>
+              ))}
             </div>
             {moments.length > 0 && (
               <div className="moment-index">
