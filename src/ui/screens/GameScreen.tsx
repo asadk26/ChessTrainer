@@ -8,7 +8,8 @@ import { DrillList } from './DrillsScreen';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { PositionDiagram, diagramFor, type DiagramSpec } from '../components/PositionDiagram';
 import { REPORT_VERSION } from '../../coach/report';
-import { engineNotes, gameStats } from '../../analysis/engineReview';
+import { engineNotes, gameStats, verdictOf } from '../../analysis/engineReview';
+import { EvalGraph, whiteEvals } from '../components/ReviewVisuals';
 import { repo } from '../../storage/repo';
 import { FlagButton } from '../components/FlagButton';
 import { AiExplain } from '../components/AiExplain';
@@ -159,6 +160,17 @@ function Summary({ game }: { game: StoredGame }) {
             </span>
             {stats.caveat && <span className="muted small block">{stats.caveat}</span>}
           </p>
+        )}
+        {game.analysis && game.analysis.positions.length > 1 && (
+          <div className="summary-graph">
+            <EvalGraph
+              values={whiteEvals(game.plies, game.analysis.positions)}
+              current={-1}
+              marks={Object.fromEntries(game.analysis.moves.flatMap((e, i) => (['mistake', 'blunder'].includes(verdictOf(e)) ? [[i + 1, verdictOf(e)]] : [])))}
+              onSelect={(p) => navigate(`/game/${game.id}/review?ply=${p}`)}
+            />
+            <span className="muted small">Evaluation over the game — tap to open that move in Guided Review.</span>
+          </div>
         )}
       </section>
       <section className="card">

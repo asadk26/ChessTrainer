@@ -769,33 +769,124 @@ a { color: var(--accent); }
 .icon-btn.plain:hover, .icon-btn.plain:active { background: var(--surface-2); color: var(--ink); }
 .screen-head .screen-actions { margin-right: -0.5rem; }
 
-/* ---------------------------------------------------------------- Guided Review on phones
-   The review is one screen between the game header and the tab bar: the board sits in the
-   middle, the graph and moves just above it, the question and buttons below. Nothing but the
-   text under the board scrolls, and the playback controls stay in view. */
+/* ---------------------------------------------------------------- Guided Review: fixed zones
+   Modelled on chess.com's Game Review. Top to bottom: compact header, thin eval bar, a fixed-height
+   coach bubble, the board (as large as the space left, edge to edge on phones), the move strip and
+   the action bar, all fitted to the viewport above the tab bar. Longer text opens in a sheet. */
 :root { --tabbar-h: 62px; }
 .tabbar { box-sizing: border-box; min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
-@media (max-width: 860px) {
-  .rv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'board' 'bottom'; row-gap: 0.45rem; }
-  .container:has(> .game-page.tab-review) { padding-bottom: 0; }
-  .game-page.tab-review {
-    /* The space between the game header and the tab bar; the board takes at most half of it. */
-    --review-h: calc(100dvh - 0.9rem - var(--tabbar-h) - env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; height: var(--review-h); overflow: hidden;
-  }
-  .game-page.tab-review > .game-header { margin-bottom: 0.45rem; flex: none; }
-  .game-page.tab-review > .feedback { flex: none; }
-  .game-page.tab-review .rv { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.45rem; }
-  .game-page.tab-review .rv-grid { display: contents; }
-  .game-page.tab-review .rv-board, .game-page.tab-review .rv-bottom { grid-area: auto; }
-  /* Above the board: graph, moves and the question, pushed down against the board; scrolls if long. */
-  .game-page.tab-review .rv-top { display: flex; flex-direction: column; gap: 0.4rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .game-page.tab-review .rv-top > * { flex: none; }
-  .game-page.tab-review .rv-top > :first-child { margin-top: auto; }
-  .game-page.tab-review .rv-board { position: static; padding: 0; box-shadow: none; }
-  .game-page.tab-review .bwe-board { flex: 0 1 min(calc(100% - 26px), calc((var(--review-h) - 150px) * 0.5)); }
-  .game-page.tab-review .rv-bottom { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 0.5rem; padding-bottom: 0.4rem; }
-  .game-page.tab-review .rv-bottom > * { flex: none; }
-  .game-page.tab-review .rv-side .legend { display: none; }
-  .game-page.tab-review .rv.prompt-above .eval-graph, .game-page.tab-review .rv.prompt-above .move-strip { display: none; }
+.container:has(> .game-page.tab-review) { padding-bottom: 0; }
+.game-page.tab-review {
+  --pad: 1.25rem;
+  height: calc(100dvh - var(--pad) - var(--tabbar-h) - env(safe-area-inset-bottom));
+  max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden;
+}
+@media (max-width: 860px) { .game-page.tab-review { --pad: 0.9rem; } }
+.game-page.tab-review > .game-header { flex: none; gap: 0.15rem; margin-bottom: 0.35rem; }
+.game-page.tab-review > .game-header h1 { font-size: 1.05rem; }
+.game-page.tab-review .game-meta { min-height: 1.3rem; font-size: 0.8rem; }
+.game-page.tab-review .game-header .tabs { margin-top: 0.1rem; padding: 0.18rem; }
+.game-page.tab-review .game-header .tab { padding: 0.28rem 0.3rem; font-size: 0.82rem; }
+.game-page.tab-review > .feedback { flex: none; }
+
+.gr { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; position: relative; }
+
+.gr-eval { flex: none; height: 14px; border-radius: 4px; position: relative; overflow: hidden; background: #3b3936; }
+.gr-eval.you-b { background: #f2f1ee; }
+.gr-eval-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #f2f1ee; transition: width 0.35s ease; }
+.gr-eval.you-b .gr-eval-fill { background: #3b3936; }
+.gr-eval-num {
+  position: absolute; left: 4px; top: 50%; transform: translateY(-50%); font-size: 0.62rem; font-weight: 700; line-height: 12px;
+  padding: 0 4px; border-radius: 3px; background: var(--card); color: var(--ink); font-variant-numeric: tabular-nums;
+}
+
+.gr-bubble {
+  flex: none; height: 64px; box-sizing: border-box; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 7px 12px; position: relative; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.gr-bubble.tall { height: 104px; }
+.gr-bubble-head { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; font-size: 0.92rem; min-height: 1.3rem; }
+.gr-bubble-head b { overflow: hidden; text-overflow: ellipsis; }
+.gr-head-eval { margin-left: auto; padding-left: 6px; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 650; font-size: 0.85rem; }
+.gr-bubble-body { flex: 1; min-height: 0; overflow: hidden; font-size: 0.88rem; line-height: 1.32; pointer-events: none; }
+.gr-bubble.has-more .gr-bubble-body { -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.gr-bubble-body p, .gr-bubble-body .coach-text { margin: 0 0 0.2rem; }
+/* In the bubble, only the question itself: labels, charts and cards live in "Tap for more". */
+.gr-bubble .moment-head, .gr-bubble .eval-change, .gr-bubble .muted.small, .gr-bubble .ai-box, .gr-bubble .compare-card,
+.gr-bubble .ply-note, .gr-bubble .why-box, .gr-bubble .line-steps, .gr-bubble .lesson-label { display: none; }
+.gr-bubble .moment-title { font-size: 0.92rem; margin: 0 0 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gr-bubble .move-caption { margin: 0 0 0.15rem; }
+.gr-more {
+  position: absolute; right: 10px; bottom: 5px; font-size: 0.72rem; font-weight: 650; color: var(--accent);
+  background: linear-gradient(90deg, transparent, var(--card) 28%); padding-left: 26px;
+}
+
+.gr-board-zone { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 860px) { .gr-board-zone { margin: 0 calc(-1 * var(--pad)); } }
+.gr-board { position: relative; }
+.gr-board .board-frame { max-width: none; width: 100%; }
+
+.gr-strip { flex: none; display: flex; align-items: center; gap: 4px; }
+.gr-strip .move-strip { flex: 1; min-width: 0; padding: 0.2rem 0.3rem; }
+.gr-arrow {
+  flex: none; width: 44px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--card); border-radius: 10px; color: var(--ink); cursor: pointer; padding: 0;
+}
+.gr-arrow:active { background: var(--surface-2); }
+
+.gr-actions { flex: none; display: flex; align-items: stretch; gap: 2px; padding-bottom: 4px; }
+.gr-act {
+  flex: 0 0 54px; min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 0.66rem; font-weight: 600; border-radius: 10px; cursor: pointer; padding: 0;
+}
+.gr-act:active { background: var(--surface-2); }
+.gr-act:disabled { opacity: 0.35; cursor: default; }
+.gr-next { flex: 1; min-height: 50px; font-size: 1.02rem; margin-left: 4px; }
+
+.gr-dock { flex: none; max-height: 42%; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
+.gr-dock .actions { margin: 0; flex-wrap: wrap; }
+.gr-dock .verdict { padding: 0.45rem 0.65rem; }
+.gr-dock .options { margin: 0; }
+
+.gr-dock-sheet {
+  flex: none; max-height: 44%; overflow-y: auto; background: var(--card); border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 16px 16px 0 0; padding: 0 12px 6px; box-shadow: 0 -6px 16px var(--shadow); transition: transform 0.15s;
+}
+.gr-dock-sheet .move-caption { display: none; }
+@media (max-height: 720px) { .gr-dock-sheet .line-steps { display: none; } .gr-dock-sheet .muted.small { display: none; } }
+.gr-dock-sheet .line-steps { margin: 0 0 0.4rem; }
+.gr-dock-sheet .board-controls { margin: 0; }
+
+.gr-sheet-wrap { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
+.gr-sheet-wrap.open { pointer-events: auto; }
+.gr-sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.28); opacity: 0; transition: opacity 0.2s; }
+.gr-sheet-wrap.open .gr-sheet-backdrop { opacity: 1; }
+.gr-sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 72%; display: flex; flex-direction: column;
+  background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px var(--shadow);
+  transform: translateY(100%); transition: transform 0.22s ease;
+}
+@media (max-width: 860px) { .gr-sheet { left: calc(-1 * var(--pad)); right: calc(-1 * var(--pad)); } }
+.gr-sheet-wrap.open .gr-sheet { transform: translateY(0); }
+.gr-sheet-top { display: flex; align-items: center; gap: 8px; padding: 14px 6px 2px 16px; position: relative; touch-action: none; cursor: grab; flex: none; }
+.gr-sheet-top.compact { padding: 12px 0 4px; }
+.gr-handle { position: absolute; left: 50%; top: 5px; transform: translateX(-50%); width: 38px; height: 4px; border-radius: 2px; background: var(--line); }
+.gr-sheet-title { flex: 1; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-sheet-close { width: 44px; height: 44px; border: 0; background: transparent; color: var(--muted); font-size: 1rem; cursor: pointer; }
+.gr-sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 0 16px calc(16px + env(safe-area-inset-bottom)); }
+.gr-sheet-body .moment-index { margin-top: 0.8rem; }
+.gr-why .why-headline { font-weight: 600; }
+.summary-graph { margin-top: 0.6rem; display: grid; gap: 0.25rem; }
+.summary-graph .eval-graph { height: 56px; }
+/* Short phones (SE-size): tighter lesson question and answer so the board keeps its size. */
+@media (max-height: 720px) {
+  .gr-bubble.tall { height: 84px; }
+  .gr-bubble.tall .gr-bubble-body { font-size: 0.84rem; line-height: 1.28; }
+  .gr-dock { gap: 4px; }
+  .gr-dock .verdict { padding: 0.3rem 0.55rem; gap: 0.45rem; }
+  .gr-dock .verdict-icon { width: 1.4rem; height: 1.4rem; font-size: 0.8rem; }
+  .gr-dock .verdict-title { font-size: 0.9rem; }
+  .gr-dock .verdict-text { font-size: 0.8rem; }
+  .gr-dock .btn { padding: 0.35rem 0.75rem; font-size: 0.86rem; min-height: 36px; }
+  .gr-dock .actions { gap: 0.35rem; }
 }

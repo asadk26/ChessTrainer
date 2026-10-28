@@ -50,7 +50,7 @@ export function TabBar() {
   );
 }
 
-const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'trash', ReactNode> = {
+const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'forward' | 'trash' | 'why' | 'showme' | 'try' | 'best', ReactNode> = {
   home: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
   games: (
     <>
@@ -81,6 +81,21 @@ const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'trash', ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   trash: <path d="M4 7h16M9 7V4.5h6V7M6.5 7l.9 12.5a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9L17.5 7M10 11v5.5M14 11v5.5" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  forward: <path d="M9 5l7 7-7 7" />,
+  why: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 3.8M12 17.2v.1" />
+    </>
+  ),
+  showme: (
+    <>
+      <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.8" />
+    </>
+  ),
+  try: <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11m0-1.5a1.5 1.5 0 0 1 3 0V12m0-1a1.5 1.5 0 0 1 3 0v4.5a5.5 5.5 0 0 1-5.5 5.5h-.8a5.5 5.5 0 0 1-4.6-2.5L4.6 15a1.5 1.5 0 0 1 2.4-1.8L9 15" />,
+  best: <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />,
 };
 
 export function Icon({ name, size = 22 }: { name: keyof typeof PATHS; size?: number }) {

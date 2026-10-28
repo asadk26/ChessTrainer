@@ -174,8 +174,17 @@ export function useLineView(game: StoredGame) {
     };
   })();
 
+  const info = view && steps.length
+    ? {
+        title: view.kind === 'refutation' ? `What goes wrong after ${moveLabel(game.plies[view.ply - 1])}` : `The better line instead of ${moveLabel(game.plies[view.ply - 1])}`,
+        caption: view.idx >= 0 ? steps[view.idx].caption : 'Tap Next to play the first move.',
+        idx: view.idx,
+        total: steps.length,
+      }
+    : undefined;
   return {
     active: !!view && steps.length > 0,
+    info,
     open: (ply: number, kind: LineKind) => setView({ ply, kind, idx: -1 }),
     close: () => setView(null),
     next: () => view && setView({ ...view, idx: Math.min(steps.length - 1, view.idx + 1) }),

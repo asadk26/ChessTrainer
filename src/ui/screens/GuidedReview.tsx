@@ -12,7 +12,10 @@ import { useLessonRunner } from '../components/LessonRunner';
 import { EvalChange } from '../components/EvalBar';
 import { AiExplain } from '../components/AiExplain';
 import { classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
-import { EvalColumn, EvalGraph, QualityBadge, whiteEvals } from '../components/ReviewVisuals';
+import { QualityBadge, whiteEvals } from '../components/ReviewVisuals';
+import { ActionButton, BoardZone, BottomSheet, CoachBubble, DockSheet, EvalStrip } from '../components/ReviewShell';
+import { Icon } from '../components/AppShell';
+import { evalText } from '../../coach/momentContext';
 import { useFindFirst, useLineView } from '../components/ReviewSteps';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
@@ -494,19 +497,6 @@ function useSeenBefore(game: StoredGame, m: TeachingMoment | undefined) {
   }, [games, game, m]);
 }
 
-/** True on phone-width screens (the stacked, centred-board layout). */
-function usePhone() {
-  const query = '(max-width: 860px)';
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
-  useEffect(() => {
-    const m = window.matchMedia(query);
-    const on = () => setPhone(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, []);
-  return phone;
-}
-
 export function GuidedReview({ game, initialPly, explore = false }: { game: StoredGame; initialPly?: number; explore?: boolean }) {
   const moments = game.moments;
   const momentAt = useMemo(() => new Map(moments.map((m) => [m.ply, m])), [moments]);
@@ -520,8 +510,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const [practicePly, setPracticePly] = useState<number | null>(exploring ? initialPly! : null);
   const practice = usePracticeBoard(game, practicePly, () => setPracticePly(null));
   const topRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const phone = usePhone();
 
   const finish = (m: TeachingMoment, completed: boolean) => {
     if (completed) setDoneIds((s) => new Set(s).add(m.id));
@@ -574,29 +562,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const jump = (p: number) => (setPracticePly(null), setActive(undefined), findFirst.cancel(), lineView.close(), setPly(p));
   const nextMoment = moments.find((m) => m.ply > ply + 1 && stopsAt(m));
 
-  // On phones the strip + question + board + verdict just fit the screen.
-  // Keep that block aligned to the top whenever the move or the moment's state
-  // changes, so the verdict is always visible and nothing jumps around.
   const stateKey = lesson?.stateKey ?? runner?.stateKey ?? findFirst.panels?.stateKey ?? lineView.panels?.stateKey ?? `browse:${ply}`;
-  const firstRender = useRef(true);
-  useEffect(() => {
-    if (firstRender.current && initialPly === undefined) {
-      firstRender.current = false;
-      return;
-    }
-    const initial = firstRender.current;
-    firstRender.current = false;
-    // Phones: the screen doesn't scroll — the board stays centred and only the text under it
-    // scrolls, so each new step starts from the top of that text.
-    const id = window.setTimeout(() => {
-      if (window.innerWidth > 860) return;
-      bottomRef.current?.scrollTo({ top: 0, behavior: initial ? 'auto' : 'smooth' });
-      const top = topRef.current?.querySelector('.rv-top');
-      top?.scrollTo({ top: top.scrollHeight, behavior: 'auto' });
-    }, initial ? 120 : 30);
-    return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stateKey]);
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -638,10 +604,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     return out;
   }, [classes, hiddenPlies, ply]);
   const whites = useMemo(() => (game.analysis ? whiteEvals(game.plies, game.analysis.positions) : []), [game]);
-  const graphMarks = useMemo(
-    () => Object.fromEntries(Object.entries(badges).filter(([, c]) => c === 'inaccuracy' || c === 'mistake' || c === 'blunder' || c === 'brilliant' || c === 'great')) as Record<number, string>,
-    [badges],
-  );
   const notesByPly = useMemo(() => new Map(engineNotes(game).map((n) => [n.ply, n])), [game]);
   const engineNote = notesByPly.get(ply);
   const verdict = evalAt ? verdictOf(evalAt) : undefined;
@@ -689,21 +651,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
         </p>
       )}
       {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
-      {evalAt && !evalAt.isBest && evalAt.bestSan && (game.analysis?.positions[ply - 1]?.lines[0]?.pv.length ?? 0) > 0 && (
-        <div className="show-me-row">
-          {(game.analysis?.positions[ply]?.lines[0]?.pv.length ?? 0) > 0 && (
-            <button className="btn ghost small" onClick={() => lineView.open(ply, 'refutation')}>
-              Show me what goes wrong
-            </button>
-          )}
-          <button className="btn ghost small" onClick={() => lineView.open(ply, 'better')}>
-            Show the better line
-          </button>
-          <button className="btn ghost small show-best" onClick={() => setPracticePly(ply)}>
-            {mine ? `Try your own moves` : `Explore`}
-          </button>
-        </div>
-      )}
       {noteHere && (
         <div className="note-card">
           <span className="eyebrow">{noteHere.kind === 'good_idea' ? 'Good idea' : 'Worth knowing'}</span>
@@ -724,7 +671,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
           {noteHere.kind === 'mistake' && <AiExplain game={game} ply={noteHere.betterPly} bestSan={noteCmp?.bestSan} compact />}
         </div>
       )}
-      {(!noteHere || noteHere.kind === 'good_idea') && evalAt && mine && !evalAt.isBest && <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} compact />}
       {plyNotes.map((f, i) => (
         <CoachText key={i} text={f.evidence} className={`ply-note ${f.kind === 'strength' ? 'good' : ''}`} />
       ))}
@@ -735,38 +681,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
       )}
     </>
   );
-  const browseBanner = (
-    <>
-      <div className="board-controls">
-        <button className="icon" onClick={() => (setActive(undefined), setPly(0))} aria-label="Start">
-          «
-        </button>
-        <button className="icon" onClick={prev} aria-label="Previous move">
-          ‹
-        </button>
-        <button className="btn primary next-btn" onClick={next} disabled={ply >= game.plies.length}>
-          {upcoming && !doneIds.has(upcoming.id) ? 'Next: stop & think' : 'Next'} ›
-        </button>
-        <button className="icon" onClick={() => (setActive(undefined), setPly(game.plies.length))} aria-label="End">
-          »
-        </button>
-      </div>
-      {nextMoment && !upcoming && (
-        <div className="actions center">
-          <button className="btn ghost" onClick={() => startMomentAt(nextMoment)}>
-            Skip ahead to the next lesson ({moveLabel(game.plies[nextMoment.ply - 1])})
-          </button>
-        </div>
-      )}
-      {ply >= game.plies.length && (
-        <div className="actions center">
-          <button className="btn primary" onClick={() => navigate(`/game/${game.id}/drills`)}>
-            Game over — practise the drills →
-          </button>
-        </div>
-      )}
-    </>
-  );
   const browseDetails = evalAt ? (
     <p className="muted small">
       Engine after {moveLabel(game.plies[ply - 1])}: {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))} (your view)
@@ -774,86 +688,179 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   ) : null;
 
   const focused = practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels;
-  const panels: Panels = focused ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
-  // Phones: a question (lesson, Find it first, Show me…) goes above the centred board; while just
-  // browsing, the graph and moves stay above it and the text goes below.
-  const promptAbove = phone && !!focused;
+  const panels: Panels = focused ?? { board: browseBoard, prompt: browsePrompt, banner: null, details: browseDetails, stateKey };
+  const steps = !practice && !lesson && !runner && !findFirst.panels && lineView.active ? lineView.info : undefined;
+  const mode: 'browse' | 'focus' | 'steps' = !focused ? 'browse' : steps ? 'steps' : 'focus';
   const marks = Object.fromEntries(
     moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : x.tier === 'note' ? ('note' as const) : ('bad' as const)]),
   );
 
-  const promptBox = <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>;
+  // ---------------------------------------------------------- bottom sheet (Why?, More)
+  const [sheet, setSheet] = useState<null | 'more' | 'why'>(null);
+  useEffect(() => setSheet(null), [stateKey]);
+
+  // One short, concrete sentence for the bubble: a detector's board fact first, then Stockfish.
+  const plyFinding = ply > 0 ? game.findings.filter((f) => f.ply === ply && f.kind === 'weakness' && f.confidence !== 'low').sort((a, b) => b.severity - a.severity)[0] : undefined;
+  const plyStrength = ply > 0 ? game.findings.find((f) => f.ply === ply && f.kind === 'strength' && f.category === 'found_tactic') : undefined;
+  const bubbleLine =
+    ply === 0
+      ? lessonCount
+        ? `Tap Next to play through the game. I'll stop for ${lessonCount === 1 ? 'one short lesson' : `${lessonCount} short lessons`} and ask you first.`
+        : 'Tap Next to play through the game — nothing big went wrong, so no lessons this time.'
+      : noteHere?.kind === 'good_idea'
+        ? noteHere.text.lesson
+        : plyFinding && !hiddenPlies.has(ply)
+          ? plyFinding.evidence
+          : plyStrength
+            ? plyStrength.evidence
+            : engineNote?.kind === 'trap'
+              ? engineNote.text
+              : evalAt && !evalAt.isBest && evalAt.bestSan
+                ? verdict === 'equal'
+                  ? `As good as Stockfish's ${evalAt.bestSan}.`
+                  : verdict === 'good'
+                    ? `${evalAt.bestSan} (green arrow) was a little more precise.`
+                    : `Stockfish preferred ${evalAt.bestSan} (green arrow).`
+                : cls === 'great'
+                  ? 'The only good move here — well found.'
+                  : cls === 'brilliant'
+                    ? 'A sound sacrifice — Stockfish agrees.'
+                    : "Stockfish's top choice.";
+  const viewPly = active ? active.ply - 1 : steps ? ply : ply;
+  const evalHere = practice ? undefined : whites[viewPly];
+  const yourView = (w: number) => (game.userColor === 'w' ? w : -w);
+  const browseHead =
+    ply === 0 ? (
+      <b>Start</b>
+    ) : (
+      <>
+        <b>{moveLabel(current!)}</b>
+        {cls && <QualityBadge cls={cls} label />}
+        <span className="gr-head-eval">{evalHere !== undefined ? evalText(yourView(evalHere)) : ''}</span>
+      </>
+    );
+  const moreExtra = !!(noteHere || plyNotes.length || engineNote || (evalAt && !evalAt.isBest));
+
+  // ---------------------------------------------------------- action bar
+  const goodOrWorse = !!cls && ['good', 'inaccuracy', 'mistake', 'blunder'].includes(cls);
+  const canRefute = (game.analysis?.positions[ply]?.lines[0]?.pv.length ?? 0) > 0;
+  const atEnd = ply >= game.plies.length;
+  const nextLabel = atEnd ? 'Drills' : upcoming && !doneIds.has(upcoming.id) ? 'Next: stop & think' : 'Next';
+  const actionBar = (
+    <div className="gr-actions">
+      {goodOrWorse && <ActionButton icon={<Icon name="why" />} label="Why?" onClick={() => setSheet('why')} />}
+      {goodOrWorse && canRefute && <ActionButton icon={<Icon name="showme" />} label="Show me" onClick={() => lineView.open(ply, 'refutation')} />}
+      <ActionButton icon={<Icon name="try" />} label="Try moves" disabled={ply === 0} onClick={() => setPracticePly(ply)} />
+      {evalAt && !evalAt.isBest && evalAt.bestSan && <ActionButton icon={<Icon name="best" />} label="Best" onClick={() => lineView.open(ply, 'better')} />}
+      <button className="btn primary gr-next" onClick={atEnd ? () => navigate(`/game/${game.id}/drills`) : next}>
+        {nextLabel} ›
+      </button>
+    </div>
+  );
+
+  // ---------------------------------------------------------- sheet contents
+  const whyCmp = useMemo(() => (sheet === 'why' && ply > 0 ? gameMoveComparison(game, ply) : undefined), [sheet, game, ply]);
+  const whySheet = evalAt ? (
+    <div className="gr-why">
+      {plyFinding && !hiddenPlies.has(ply) && <CoachText text={plyFinding.evidence} className="why-headline" />}
+      {verdict && evalAt.bestSan && !evalAt.isBest && (
+        <p className="engine-line">
+          <span className="engine-chip">Stockfish</span> preferred {evalAt.bestSan}: {formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of {formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view.
+        </p>
+      )}
+      {whyCmp?.comparison && (
+        <div className="why-box">
+          <span className="eyebrow">Why {whyCmp.bestSan} leads to a better position</span>
+          <CoachText text={whyCmp.comparison.summary} />
+        </div>
+      )}
+      {mine ? <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} auto /> : <p className="muted small">The AI explains your own moves; for your opponent's, use Show me to see what Stockfish would punish it with.</p>}
+    </div>
+  ) : null;
+  const moreSheet = (
+    <div className="gr-more-body">
+      {mode === 'browse' ? browsePrompt : panels.prompt}
+      {active && seenBefore && (
+        <div className="seen-before">
+          <span className="eyebrow">You've seen this before</span>
+          <p>
+            {seenBefore.exact ? 'The same kind of mistake' : 'A related mistake'} came up in your game vs <b>{seenBefore.game.opponentName}</b>: {seenBefore.finding.evidence}
+            {seenBefore.count >= 2 ? ` That's ${seenBefore.count + 1} games now.` : ''}
+          </p>
+          <button className="link" onClick={() => navigate(`/game/${seenBefore.game.id}/review?ply=${seenBefore.finding.ply}`)}>
+            Open that position →
+          </button>
+        </div>
+      )}
+      {panels.details}
+      {mode === 'browse' && moments.length > 0 && (
+        <div className="moment-index">
+          <span className="eyebrow">Lessons & notes</span>
+          {moments.map((x) => (
+            <button key={x.id} className={`chip ${x.kind === 'good_idea' ? 'good' : ''}`} onClick={() => (setSheet(null), x.tier === 'note' ? (setActive(undefined), setPracticePly(null), setPly(x.ply)) : startMomentAt(x))}>
+              {doneIds.has(x.id) ? '✓ ' : x.kind === 'good_idea' ? '★ ' : x.tier === 'lesson' ? '? ' : ''}
+              {moveLabel(game.plies[x.ply - 1])}
+            </button>
+          ))}
+        </div>
+      )}
+      {mode === 'browse' && nextMoment && !upcoming && (
+        <button className="btn ghost small" onClick={() => (setSheet(null), startMomentAt(nextMoment))}>
+          Skip ahead to the next lesson ({moveLabel(game.plies[nextMoment.ply - 1])})
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <HoverProvider>
-      <div className={`rv ${active ? 'in-moment' : ''} ${promptAbove ? 'prompt-above' : ''}`} ref={topRef}>
-        <div className="rv-top">
-          {whites.length > 1 && (
-            <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={jump} />
-          )}
-          <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={jump} />
-          {promptAbove && promptBox}
-        </div>
-        <div className="rv-grid">
-          <div className="rv-board">
-            <div className="board-with-eval">
-              <EvalColumn whiteCp={practice ? undefined : whites[active ? active.ply - 1 : ply]} orientation={game.userColor} />
-              <div className="bwe-board">
-                <Board {...panels.board} />
-              </div>
-            </div>
-          </div>
-          <div className="rv-bottom" ref={bottomRef}>
-          {!promptAbove && promptBox}
-          <div className="rv-banner">{panels.banner}</div>
-          <aside className="rv-side">
-            {active && seenBefore && (
-              <div className="seen-before">
-                <span className="eyebrow">You've seen this before</span>
-                <p>
-                  {seenBefore.exact ? 'The same kind of mistake' : 'A related mistake'} came up in your game vs <b>{seenBefore.game.opponentName}</b>:{' '}
-                  {seenBefore.finding.evidence}
-                  {seenBefore.count >= 2 ? ` That's ${seenBefore.count + 1} games now.` : ''}
-                </p>
-                <button className="link" onClick={() => navigate(`/game/${seenBefore.game.id}/review?ply=${seenBefore.finding.ply}`)}>
-                  Open that position →
-                </button>
-              </div>
-            )}
-            {panels.details}
-            <div className="legend">
-              <span>
-                <i style={{ background: 'rgb(214,128,38)' }} /> your move
-              </span>
-              <span>
-                <i style={{ background: 'rgb(196,64,64)' }} /> opponent
-              </span>
-              <span>
-                <i style={{ background: 'rgb(46,140,92)' }} /> better
-              </span>
-              <span>
-                <i style={{ background: 'rgb(60,108,196)' }} /> your guess
-              </span>
-              {(['brilliant', 'great', 'best', 'equal', 'good', 'inaccuracy', 'mistake', 'blunder'] as const).map((c) => (
-                <span key={c}>
-                  <QualityBadge cls={c} label />
+      <div className={`gr mode-${mode}`} ref={topRef}>
+        <EvalStrip whiteCp={evalHere} userColor={game.userColor} />
+        {mode === 'browse' ? (
+          <CoachBubble head={browseHead} onMore={() => setSheet('more')} extra={moreExtra}>
+            <CoachText text={bubbleLine} />
+          </CoachBubble>
+        ) : mode === 'steps' ? (
+          <CoachBubble
+            head={
+              <>
+                <b>{steps!.title}</b>
+                <span className="gr-head-eval">
+                  {Math.max(0, steps!.idx + 1)}/{steps!.total}
                 </span>
-              ))}
-            </div>
-            {moments.length > 0 && (
-              <div className="moment-index">
-                <span className="eyebrow">Lessons & notes</span>
-                {moments.map((x) => (
-                  <button key={x.id} className={`chip ${active?.id === x.id ? 'on' : ''} ${x.kind === 'good_idea' ? 'good' : ''}`} onClick={() => (x.tier === 'note' ? (setActive(undefined), setPracticePly(null), setPly(x.ply)) : startMomentAt(x))}>
-                    {doneIds.has(x.id) ? '✓ ' : x.kind === 'good_idea' ? '★ ' : x.tier === 'lesson' ? '? ' : ''}
-                    {moveLabel(game.plies[x.ply - 1])}
-                  </button>
-                ))}
-              </div>
-            )}
-          </aside>
-          </div>
+              </>
+            }
+          >
+            <CoachText text={steps!.caption} />
+          </CoachBubble>
+        ) : (
+          <CoachBubble tall onMore={() => setSheet('more')}>
+            {panels.prompt}
+          </CoachBubble>
+        )}
+        <BoardZone>
+          <Board {...panels.board} />
+        </BoardZone>
+        <div className="gr-strip">
+          <button className="gr-arrow" aria-label="Previous move" onClick={prev}>
+            <Icon name="back" size={20} />
+          </button>
+          <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={jump} />
+          <button className="gr-arrow" aria-label="Next move" onClick={next}>
+            <Icon name="forward" size={20} />
+          </button>
         </div>
+        {mode === 'browse' && actionBar}
+        {mode === 'focus' && <div className="gr-dock">{panels.banner}</div>}
+        {mode === 'steps' && (
+          <DockSheet onClose={lineView.close}>
+            {panels.prompt}
+            {panels.banner}
+          </DockSheet>
+        )}
+        <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'why' ? `Why? — ${current ? moveLabel(current) : ''}` : mode === 'browse' ? (current ? moveLabel(current) : 'Start') : 'The full explanation'}>
+          {sheet === 'why' ? whySheet : moreSheet}
+        </BottomSheet>
       </div>
     </HoverProvider>
   );
