@@ -199,3 +199,12 @@ describe('regression: a quick win vs king2008abhi (flagged: "lessons about devel
     expect(g.findings.some((f) => f.category === 'time_management' && /Qxg5/.test(f.evidence))).toBe(false);
   });
 });
+
+describe('regression: a discovered check in a line (AyeNaing1, 26...Nxb3) froze the analysis', () => {
+  it('finishes: a check given by a piece that did not move is not walked toward the king', () => {
+    // Stockfish's line 26...g6 27.Rxc5 Qxc5 28.Bf3 Bb8+: the bishop leaves h2 and the h6 rook gives the check.
+    const t = Date.now();
+    detectPattern('5rk1/2q3pp/p6r/n1p4B/3p4/1P1P4/1B3PPb/2RQ1R1K b - - 4 26', 'a5b3', ['d1b3', 'g8h8'], ['g7g6', 'c1c5', 'c7c5', 'h5f3', 'h2b8', 'h1g1'], []);
+    expect(Date.now() - t).toBeLessThan(2000);
+  });
+});

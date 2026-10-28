@@ -219,8 +219,12 @@ function openedLine(fs: Frame[]): PatternHit | undefined {
     const { move, after } = fs[i];
     if (!move.san.includes('+') || !['b', 'r', 'q'].includes(move.piece)) continue;
     const k = kingSquare(after, other(move.color as Color));
-    const df = Math.sign(k.charCodeAt(0) - move.to.charCodeAt(0));
-    const dr = Math.sign(Number(k[1]) - Number(move.to[1]));
+    const fd = k.charCodeAt(0) - move.to.charCodeAt(0);
+    const rd = Number(k[1]) - Number(move.to[1]);
+    // A discovered check comes from another piece: the one that moved isn't on a line with the king.
+    if (fd !== 0 && rd !== 0 && Math.abs(fd) !== Math.abs(rd)) continue;
+    const df = Math.sign(fd);
+    const dr = Math.sign(rd);
     for (let f = move.to.charCodeAt(0) + df, r = Number(move.to[1]) + dr; `${String.fromCharCode(f)}${r}` !== k; f += df, r += dr) {
       const s = `${String.fromCharCode(f)}${r}`;
       if (pieceAt(start, s)?.type === 'p') return { tag: 'opened_line', side: 'refutation', at: i, evidence: `the pawn that stood on ${s} is gone, so ${move.san} reaches the king` };

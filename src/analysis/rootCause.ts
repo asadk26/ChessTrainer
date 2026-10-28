@@ -143,7 +143,8 @@ export function detectPieceToRim(ctx: Ctx, i: number): Finding[] {
   const p = ctx.plies[i];
   if (p.color !== ctx.userColor || (p.piece !== 'n' && p.piece !== 'b') || p.captured) return [];
   const rim = (sq: string) => sq[0] === 'a' || sq[0] === 'h';
-  if (!rim(p.to) || rim(p.from)) return [];
+  // A retreat with check isn't stuck (and passing the turn would let it take the king).
+  if (!rim(p.to) || rim(p.from) || /[+#]/.test(p.san)) return [];
   const opp = other(ctx.userColor);
   const chasers = attackersOf(p.fenBefore, p.from, opp).filter((s) => PIECE_VALUE[pieceAt(p.fenBefore, s)!.type] < PIECE_VALUE[p.piece]);
   if (!chasers.length) return [];

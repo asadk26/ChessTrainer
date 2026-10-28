@@ -170,6 +170,14 @@ export interface MomentInput {
 
 export { isStateFinding };
 
+/** The finding a moment teaches: the tactic that decided the move (a fork, a discovered attack…), whatever category carries it. */
+export function primaryFinding(fs: Finding[]): Finding | undefined {
+  const tactic = (f: Finding) => (f.facts.pattern ? (f.facts.patternSide === 'better' ? 1 : 0) : 2);
+  return [...fs]
+    .filter((f) => f.severity >= 2)
+    .sort((a, b) => tactic(a) - tactic(b) || PRIMARY_ORDER.indexOf(a.category as CategoryId) - PRIMARY_ORDER.indexOf(b.category as CategoryId))[0];
+}
+
 export function buildMoments(input: MomentInput): TeachingMoment[] {
   const { plies, evals, positions, findings, userColor, prior } = input;
   const byPly = new Map<number, Finding[]>();
@@ -197,11 +205,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     .slice(0, MAX_MISTAKE_MOMENTS);
 
   const moments: TeachingMoment[] = scored.map(({ ply, fs, score, priority }, rank) => {
-    // The tactic that decided the move (a fork, a discovered attack…) is the lesson, whatever category carries it.
-    const tactic = (f: Finding) => (f.facts.pattern ? (f.facts.patternSide === 'better' ? 1 : 0) : 2);
-    const primary = [...fs]
-      .filter((f) => f.severity >= 2)
-      .sort((a, b) => tactic(a) - tactic(b) || PRIMARY_ORDER.indexOf(a.category as CategoryId) - PRIMARY_ORDER.indexOf(b.category as CategoryId))[0];
+    const primary = primaryFinding(fs)!;
     const idx = ply - 1;
     const played = plies[idx];
     const reply = plies[idx + 1];
