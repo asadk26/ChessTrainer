@@ -13,7 +13,7 @@ import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
 import { COLOR_NAME } from '../chess/board';
-import { PATTERN_LABEL, detectPattern } from './patterns';
+import { PATTERN_PHRASE, detectPattern } from './patterns';
 import { verdictOf } from './engineReview';
 
 /** Chronological key: PGN date when available, import time otherwise. */
@@ -38,21 +38,34 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     const p = game.plies[i];
     const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
     const hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
-    if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence };
+    if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}) };
   });
   return out;
 }
 
-const TACTICAL: string[] = ['blunder', 'missed_threat', 'calculation'];
+/** Findings about a missed chance of your own: a better-line tactic is what they're about. */
+const MISSED: string[] = ['tactical_blindness'];
 
-/** Attach a decisive tactical pattern (not a plain hanging piece) to the finding about that move. */
+/**
+ * Attach the tactic that decided a move to the findings about it, so the takeaway comes from what
+ * the board shows (a discovered attack, a fork…) rather than from the generic category text.
+ * A plain hanging piece isn't a named tactic: it only records how the piece was lost.
+ */
 export function annotatePatterns(findings: Finding[], patterns: NonNullable<StoredGame['patterns']>, plies: PlyRecord[]) {
   for (const f of findings) {
     const hit = patterns[f.ply];
-    if (f.kind !== 'weakness' || !hit || hit.tag === 'hanging_piece' || hit.side !== 'refutation' || !TACTICAL.includes(f.category)) continue;
+    if (f.kind !== 'weakness' || !hit || isStateFinding(f)) continue;
+    if (hit.tag === 'hanging_piece') {
+      // Allowing mate is about the checks, not about the pawn the first check happens to take.
+      if (hit.side === 'refutation' && hit.hanging && !f.facts.mate) f.facts = { ...f.facts, hanging: hit.hanging };
+      continue;
+    }
+    // The opponent's tactic explains any mistake on that move except a missed win of your own;
+    // a tactic in the better line only explains a missed win.
+    if (hit.side === 'refutation' ? MISSED.includes(f.category) : !MISSED.includes(f.category)) continue;
     const p = plies[f.ply - 1];
-    f.facts = { ...f.facts, pattern: hit.tag, patternEvidence: hit.evidence };
-    f.evidence = `${moveLabel(p)} walked into a ${PATTERN_LABEL[hit.tag].toLowerCase()}: ${hit.evidence}.`;
+    f.facts = { ...f.facts, pattern: hit.tag, patternSide: hit.side, patternEvidence: hit.evidence };
+    f.evidence = `${moveLabel(p)} ${PATTERN_PHRASE[hit.tag][hit.side]}: ${hit.evidence}.`;
   }
 }
 
@@ -101,7 +114,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
     explanations[f.ply] = explainMove({ plies: game.plies, evals: moves, positions, contexts, ply: f.ply, betterPly, findings });
   }
   const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
-  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions), won: userOutcome(game) === 'win' });
+  const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions), won: userOutcome(game) === 'win', lost: userOutcome(game) === 'loss' });
   const drills = generateDrills(game.id, moments);
   return {
     game: {

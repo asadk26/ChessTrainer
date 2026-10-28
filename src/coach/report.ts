@@ -1,5 +1,5 @@
 // Builds the concise post-game coaching report from findings + history.
-import { PATTERN_FOCUS, PATTERN_LABEL, type PatternTag } from '../analysis/patterns';
+import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, type PatternTag } from '../analysis/patterns';
 import type { CategoryId, Color, Finding, GameReport, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
 import { COLOR_NAME, materialPhrase, other } from '../chess/board';
@@ -15,6 +15,7 @@ export interface ReportInput {
   contexts?: Map<number, PlyContext>;
   /** The player won (as confirmed or per the PGN). */
   won?: boolean;
+  lost?: boolean;
   /** How the game ended, when it matters (won by resignation from a worse position, an early resignation). */
   ending?: string;
 }
@@ -29,7 +30,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 14;
+export const REPORT_VERSION = 15;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -47,6 +48,11 @@ function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
 /** Low-confidence findings are speculative: kept in storage, never used for coaching claims. */
 export const isCredible = (f: Finding) => f.confidence !== 'low';
 const confWeight = (f: Finding) => (f.confidence === 'high' ? 1 : f.confidence === 'low' ? 0 : 0.6);
+
+/** Findings about the state of the game (slow development, the clock…), not about one move. */
+export function isStateFinding(f: Finding): boolean {
+  return ['development', 'passive_piece', 'time_management'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
+}
 
 /** A finding that can count toward a pattern (in this game or as history). */
 export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f);
@@ -339,12 +345,37 @@ export function focusFor(theme: ThemeId, findings: Finding[]): { focusTitle: str
   const meta = THEMES[theme];
   // A specific tactic decided the game (a discovered attack, a fork…): that is the lesson, not
   // the generic theme text.
+  // It can come from a neighbouring theme (a fork found on a "calculation" move), as long as it
+  // mattered at least as much as anything in this theme.
+  const credible = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low';
+  const top = Math.max(0, ...findings.filter((f) => credible(f) && themeOf(f.category) === theme).map((f) => f.severity));
   const decided = findings
-    .filter((f) => f.kind === 'weakness' && f.facts.pattern && f.severity >= 2 && f.confidence !== 'low' && themeOf(f.category) === theme)
-    .sort((a, b) => b.severity - a.severity)[0];
+    .filter((f) => credible(f) && f.facts.pattern && f.facts.patternSide !== 'better' && (themeOf(f.category) === theme || f.severity >= top))
+    .sort((a, b) => b.severity - a.severity || Number(themeOf(b.category) === theme) - Number(themeOf(a.category) === theme))[0];
   if (decided) {
     const tag = decided.facts.pattern as PatternTag;
-    return { focusTitle: PATTERN_FOCUS[tag].title, focusDetail: PATTERN_FOCUS[tag].detail, clause: `you walked into a ${PATTERN_LABEL[tag].toLowerCase()}`, label: PATTERN_LABEL[tag] };
+    return { focusTitle: PATTERN_FOCUS[tag].title, focusDetail: PATTERN_FOCUS[tag].detail, clause: `you ${PATTERN_PHRASE[tag].refutation}`, label: PATTERN_LABEL[tag] };
+  }
+  if (theme === 'loose_pieces') {
+    // "Blunder check" is only the lesson when a piece really was simply left hanging. Allowing mate,
+    // or losing material to a reply we can't name, needs the full checks-captures-attacks search.
+    const here = findings.filter((f) => f.kind === 'weakness' && themeOf(f.category) === theme && f.severity >= 2 && f.confidence !== 'low');
+    if (here.some((f) => f.facts.mate && f.severity >= 3))
+      return {
+        ...meta,
+        focusTitle: 'Before every move, look at the checks your opponent will have next.',
+        focusDetail: 'Checkmates at this level almost always start with a check you never looked at. Before each move, list every check your opponent would have afterwards — especially queen and rook checks near your king — and make sure none of them works.',
+        clause: 'you allowed a checkmate',
+        label: 'Allowing mate',
+      };
+    if (here.length && !here.some((f) => f.facts.hanging === 'moved' || f.facts.hanging === 'left'))
+      return {
+        ...meta,
+        focusTitle: "Before you commit, look at your opponent's checks, captures and attacks after your move.",
+        focusDetail: "Material went in this game to replies that weren't simple captures of a loose piece. Before each move, picture the position after it and ask what your opponent's most forcing reply is: checks first, then captures, then attacks.",
+        clause: "moves lost material to replies you didn't check",
+        label: 'Checking the reply',
+      };
   }
   if (theme === 'king_safety') {
     const ks = findings.filter((f) => f.category === 'king_safety' && countsAsPattern(f));
@@ -438,7 +469,13 @@ export function buildReport(input: ReportInput): GameReport {
   const openingWeak = findings.some((f) => countsAsPattern(f) && (f.category === 'development' || (f.category === 'king_safety' && f.facts.notCastled)));
   const solidOpening = openingStrengths.length >= 2 && !openingWeak;
   const lead = strongGroups[0];
-  if (!lead) {
+  // Real mistakes that didn't add up to a strong theme still aren't a "clean game".
+  const slips = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && !isStateFinding(f));
+  if (!lead && slips.length) {
+    headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${slips.length === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+  } else if (!lead && input.lost) {
+    headline = `No single mistake decided this game — it slipped away a little at a time. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+  } else if (!lead) {
     const start = input.won ? 'A strong win' : 'A clean game';
     headline = solidOpening
       ? `${start}: solid opening fundamentals and no serious mistakes for me to flag. Keep the same habits next game.`

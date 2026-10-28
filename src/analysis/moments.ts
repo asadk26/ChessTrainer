@@ -15,10 +15,11 @@ import type {
   TeachingMoment,
 } from '../domain/types';
 import { CATEGORIES } from '../domain/categories';
+import type { PatternTag } from './patterns';
 import { playLine } from '../chess/board';
 import { buildMomentText, goodIdeaText } from '../coach/templates';
 import { CP_TOLERANCE, pd, positionCp, scoreToCp, winPercent } from './evaluation';
-import { countsAsPattern } from '../coach/report';
+import { countsAsPattern, isStateFinding } from '../coach/report';
 
 export interface PriorGameFindings {
   gameId: string;
@@ -42,6 +43,9 @@ const PREDICT_FIRST: CategoryId[] = [
 
 /** Categories where the instructive reply is the engine's punishing one, not what the opponent actually played. */
 export const ENGINE_REPLY_CATEGORIES: string[] = ['blunder', 'missed_threat', 'calculation', 'gave_back_material', 'allowed_counterplay', 'unnecessary_complications'];
+
+/** Whether a moment teaches the engine's punishing reply rather than what the opponent actually played. */
+export const usesEngineReply = (m: Pick<TeachingMoment, 'category' | 'tactic'>) => ENGINE_REPLY_CATEGORIES.includes(m.category) || m.tactic?.side === 'refutation';
 
 /** Priority when several findings share a move. */
 const PRIMARY_ORDER: CategoryId[] = [
@@ -161,9 +165,7 @@ export interface MomentInput {
   explanations?: Record<number, MoveExplanation>;
 }
 
-export function isStateFinding(f: Finding): boolean {
-  return ['development', 'passive_piece', 'time_management'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
-}
+export { isStateFinding };
 
 export function buildMoments(input: MomentInput): TeachingMoment[] {
   const { plies, evals, positions, findings, userColor, prior } = input;
@@ -192,9 +194,11 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     .slice(0, MAX_MISTAKE_MOMENTS);
 
   const moments: TeachingMoment[] = scored.map(({ ply, fs, score, priority }, rank) => {
+    // The tactic that decided the move (a fork, a discovered attack…) is the lesson, whatever category carries it.
+    const tactic = (f: Finding) => (f.facts.pattern ? (f.facts.patternSide === 'better' ? 1 : 0) : 2);
     const primary = [...fs]
       .filter((f) => f.severity >= 2)
-      .sort((a, b) => PRIMARY_ORDER.indexOf(a.category as CategoryId) - PRIMARY_ORDER.indexOf(b.category as CategoryId))[0];
+      .sort((a, b) => tactic(a) - tactic(b) || PRIMARY_ORDER.indexOf(a.category as CategoryId) - PRIMARY_ORDER.indexOf(b.category as CategoryId))[0];
     const idx = ply - 1;
     const played = plies[idx];
     const reply = plies[idx + 1];
@@ -204,7 +208,9 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     const betterPos = positions[worsePly - 1];
     const bestPv = betterPos.lines[0]?.pv ?? [];
 
-    const predict = PREDICT_FIRST.includes(primary.category as CategoryId) && !!positions[ply].lines.length;
+    // A tactic the opponent's reply carried out is taught from the engine's punishing line.
+    const engineReply = ENGINE_REPLY_CATEGORIES.includes(primary.category) || (!!primary.facts.pattern && primary.facts.patternSide !== 'better');
+    const predict = (PREDICT_FIRST.includes(primary.category as CategoryId) || engineReply) && !!positions[ply].lines.length;
     const steps: MomentStepKind[] = predict
       ? ['intro', 'predict', 'reveal', 'find_better', 'lesson']
       : ['intro', 'find_better', 'reveal', 'lesson'];
@@ -213,13 +219,13 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     const replyPos = positions[ply];
     const acceptableReplyUcis = Array.from(
       new Set([
-        ...(reply && !ENGINE_REPLY_CATEGORIES.includes(primary.category) ? [reply.uci] : []),
-        ...acceptableMoves(replyPos, undefined, ENGINE_REPLY_CATEGORIES.includes(primary.category) ? 5 : 10),
+        ...(reply && !engineReply ? [reply.uci] : []),
+        ...acceptableMoves(replyPos, undefined, engineReply ? 5 : 10),
       ]),
     );
 
     const sequence =
-      ENGINE_REPLY_CATEGORIES.includes(primary.category)
+      engineReply
         ? [{ fen: played.fenAfter, san: played.san, from: played.from, to: played.to, caption: '' }, ...playLine(played.fenAfter, replyPos.lines[0]?.pv ?? [], 4)]
         : framesFromGame(plies, ply, related);
 
@@ -249,6 +255,7 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
       refutationUci,
       refutationSan,
       category: primary.category,
+      tactic: primary.facts.pattern ? { tag: primary.facts.pattern as PatternTag, side: primary.facts.patternSide === 'better' ? 'better' : 'refutation' } : undefined,
       categories: Array.from(new Set(fs.map((f) => f.category))),
       significance: score,
       steps,

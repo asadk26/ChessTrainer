@@ -1,7 +1,7 @@
 // Turns teaching moments into short drills that reinforce the *concept*.
 import type { CategoryId, Color, Drill, DrillType, TeachingMoment } from '../domain/types';
 import { COLOR_NAME, other, playLine } from '../chess/board';
-import { ENGINE_REPLY_CATEGORIES } from '../analysis/moments';
+import { usesEngineReply } from '../analysis/moments';
 
 export const PROBLEM_OPTIONS = [
   'It leaves a piece hanging',
@@ -55,7 +55,7 @@ function drillFor(m: TeachingMoment, type: DrillType, gameId: string): Drill | u
     }
     case 'predict_response': {
       if (!m.acceptableReplyUcis.length) return undefined;
-      const punishing = ENGINE_REPLY_CATEGORIES.includes(m.category);
+      const punishing = usesEngineReply(m);
       const solutionUci = punishing ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
       return {
         ...base,

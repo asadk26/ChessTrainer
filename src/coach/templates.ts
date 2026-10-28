@@ -1,7 +1,7 @@
 // Deterministic coaching language. This is the voice the app uses when no LLM
 // is configured, and the fallback for any field an LLM response leaves out.
 // Tone: a calm human coach talking to a ~850 player. Engine numbers stay out.
-import { PATTERN_LABEL, PATTERN_RULE, type PatternTag } from '../analysis/patterns';
+import { PATTERN_LABEL, PATTERN_PHRASE, PATTERN_RULE, PATTERN_RULE_MISSED, type PatternTag } from '../analysis/patterns';
 import type { Color, Finding, MomentText, MoveExplanation, PlyRecord } from '../domain/types';
 import { gerundPhrase } from '../analysis/movePurpose';
 import { betterSentence } from '../analysis/explain';
@@ -44,7 +44,7 @@ export interface MomentTextInput {
 export function momentTitle(f: Finding, played: PlyRecord): string {
   const mv = `${played.moveNumber}${played.color === 'w' ? '.' : '...'}${played.san}`;
   // A specific tactic decided it: name it.
-  if (f.facts.pattern) return `${mv} — walked into a ${PATTERN_LABEL[f.facts.pattern as PatternTag].toLowerCase()}`;
+  if (f.facts.pattern) return `${mv} — ${PATTERN_PHRASE[f.facts.pattern as PatternTag][f.facts.patternSide === 'better' ? 'better' : 'refutation']}`;
   switch (f.category) {
     case 'premature_attack':
       return `${mv} — active, but what's the follow-up?`;
@@ -55,6 +55,10 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
     case 'tactical_blindness':
       return f.facts.mateIn ? `${mv} — there was checkmate` : `${mv} — a chance to win material`;
     case 'blunder':
+      if (f.facts.mate) return `${mv} — allowed checkmate`;
+      // "Left unprotected" only when the board shows it simply hanging; otherwise just say what it cost.
+      if (!f.facts.hanging) return `${mv} — it lost material`;
+      if (f.facts.hanging === 'already') return `${mv} — a piece already under attack`;
       return f.facts.victimPiece === 'pawn' ? `${mv} — a pawn that could just be taken` : `${mv} — a piece left unprotected`;
     case 'missed_threat':
       return `${mv} — what was your opponent threatening?`;
@@ -96,10 +100,46 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
 
 /** Moment text, with the board-based "what you were going for" and "why the better move is better" woven in. */
 export function buildMomentText(input: MomentTextInput): MomentText {
-  const t = buildCategoryText(input);
+  const t = withTactic(buildCategoryText(input), input);
   const why = input.explain ? betterSentence(input.explain) : undefined;
   if (!why) return t;
   return { ...t, why, betterOther: `Not quite. ${why}` };
+}
+
+/**
+ * When a specific tactic decided the move, it is the lesson: the question, the reveal and the
+ * takeaway all come from what the board showed, whatever category the finding has.
+ */
+function withTactic(t: MomentText, input: MomentTextInput): MomentText {
+  const { primary: f, played, mover, bestSan } = input;
+  const tag = f.facts.pattern as PatternTag | undefined;
+  if (!tag) return t;
+  const ev = s(f.facts.patternEvidence);
+  const opp = COLOR_NAME[other(mover)];
+  const label = PATTERN_LABEL[tag].toLowerCase();
+  if (f.facts.patternSide === 'better') {
+    const ask = `There's a ${label} for you here. Can you find it?`;
+    return {
+      ...t,
+      question: ask,
+      betterPrompt: ask,
+      betterCorrect: `Yes! ${bestSan ? `${bestSan}: ` : ''}${ev}.`,
+      betterOther: `Not quite. ${capitalise(ev)}.`,
+      reveal: `${capitalise(ev)}.`,
+      lesson: PATTERN_RULE_MISSED[tag] ?? PATTERN_RULE[tag],
+    };
+  }
+  const hint = tag === 'knight_fork' || tag === 'fork' || tag === 'discovered_attack' ? ' Look for a move that makes two threats at once.' : tag === 'back_rank' ? ' Look at the checks.' : '';
+  return {
+    ...t,
+    question: `After ${played.san}, what can ${opp} do?${hint} Play ${opp}'s strongest reply.`,
+    predictCorrect: `Exactly — ${ev}.`,
+    predictOther: `Look again: ${ev}.`,
+    reveal: `${capitalise(ev)} — a ${label}.`,
+    betterPrompt: `Find a move that doesn't allow that.`,
+    betterCorrect: `Good — that takes the sting out of it.`,
+    lesson: PATTERN_RULE[tag],
+  };
 }
 
 function buildCategoryText(input: MomentTextInput): MomentText {
@@ -201,37 +241,58 @@ function buildCategoryText(input: MomentTextInput): MomentText {
         betterOther: `Not quite. Look at ${target}: you can take it${by} — ${bestSan}.`,
         reveal: `${bestSan} wins ${target}${facts.targetLoose ? ' because it was attacked by something cheaper' : ''}. After ${list(facts.bestLine)}, you are clearly ahead.`,
         lesson:
-          'Before an active-looking move, scan every capture first — especially your pawns attacking bigger pieces. A free piece beats an attack.',
+          facts.attackerPiece === 'pawn'
+            ? 'Before an active-looking move, scan every capture first — especially your pawns attacking bigger pieces. A free piece beats an attack.'
+            : 'Before an active-looking move, scan every capture you have first. A free piece beats an attack.',
       };
     }
-    case 'blunder':
-      if (facts.pattern) {
-        // The reply is a tactic (a discovered attack, a fork…), not just a free capture.
-        const tag = facts.pattern as PatternTag;
-        const ev = s(facts.patternEvidence);
+    case 'blunder': {
+      const replyLine = Array.isArray(facts.replyLine) ? (facts.replyLine as string[]) : [];
+      if (facts.mate)
         return {
           ...base,
-          question: `After ${played.san}, what can ${opp} do? Look for a move that makes two threats at once. Play ${opp}'s strongest reply.`,
-          predictCorrect: `Exactly — ${ev}.`,
-          predictOther: `Look again: ${ev}.`,
-          reveal: `${capitalise(ev)}: a ${PATTERN_LABEL[tag].toLowerCase()}. You can't answer both threats, so material is lost.`,
-          betterPrompt: `Find a move that doesn't allow that.`,
-          betterCorrect: `Good — that takes the sting out of it.`,
-          lesson: PATTERN_RULE[tag],
+          question: `After ${played.san}, what can ${opp} do? Look at every check. Play ${opp}'s strongest reply.`,
+          predictCorrect: `Exactly — ${replyLine[0]} starts a forced mate.`,
+          predictOther: `Look at the checks: ${replyLine[0]} starts a forced mate.`,
+          reveal: `This allows a forced mate: ${list(replyLine)}.`,
+          betterPrompt: `Find a move that keeps your king safe.`,
+          betterCorrect: 'Good — no mate after that.',
+          lesson: "Before every move, look at the checks your opponent would have next — especially queen and rook checks near your king.",
         };
-      }
+      if (facts.hanging === 'moved' || facts.hanging === 'left')
+        return {
+          ...base,
+          question: `After ${played.san}, what can ${opp} do? Play ${opp}'s strongest reply.`,
+          predictCorrect: `Exactly — ${s(facts.captureSan) || reply?.san} wins material.`,
+          predictOther: `Look again: ${s(facts.captureSan) || replyLine[0]} wins material.`,
+          reveal: `${s(facts.captureSan)} simply takes the ${s(facts.victimPiece)} on ${s(facts.victimSquare)}. ${facts.hanging === 'moved' ? 'The piece you just moved' : 'That piece'} wasn't protected well enough.`,
+          betterPrompt: `Find a move that doesn't leave anything loose.`,
+          betterCorrect: 'Good — nothing hangs after that.',
+          lesson: 'Before you let go of a piece, ask: can it be captured for free on its new square — and did moving it leave something else unprotected?',
+        };
+      if (facts.hanging === 'already')
+        return {
+          ...base,
+          question: `Your ${s(facts.victimPiece)} on ${s(facts.victimSquare)} was already under attack. What does ${opp} do after ${played.san}? Play it on the board.`,
+          predictCorrect: `Yes — ${s(facts.captureSan)} takes it.`,
+          predictOther: `${s(facts.captureSan)} takes the ${s(facts.victimPiece)} — it was already attacked.`,
+          reveal: `The ${s(facts.victimPiece)} on ${s(facts.victimSquare)} was attacked more times than it was defended, and ${played.san} didn't change that. ${s(facts.captureSan)} wins it.`,
+          betterPrompt: `Find a move that saves the ${s(facts.victimPiece)}.`,
+          betterCorrect: 'Good — the threat is handled.',
+          lesson: "After every opponent move, ask: what does that move attack? Deal with threats before following your own plan.",
+        };
+      // Material was lost, but not to a simple capture of a loose piece and not to a tactic we can
+      // name: teach the search, not a "blunder check" that wouldn't have found it.
       return {
         ...base,
-        question: `After ${played.san}, what can ${opp} do? Play ${opp}'s strongest reply.`,
-        predictCorrect: `Exactly — ${s(facts.captureSan) || reply?.san} wins material.`,
-        predictOther: `Look again: ${s(facts.captureSan) || s(Array.isArray(facts.replyLine) ? facts.replyLine[0] : '')} wins material.`,
-        reveal: facts.mate
-          ? `This allows a forced mate: ${list(facts.replyLine)}.`
-          : `${s(facts.captureSan)} simply takes the ${s(facts.victimPiece)} on ${s(facts.victimSquare)}. ${facts.movedPieceHung ? 'The piece you just moved' : 'That piece'} had no protection.`,
-        betterPrompt: `Find a move that doesn't leave anything loose.`,
-        betterCorrect: 'Good — nothing hangs after that.',
-        lesson: 'Before you let go of a piece, ask: can it be captured for free on its new square — and did moving it leave something else unprotected?',
+        question: `After ${played.san}, what is ${opp}'s strongest reply? Play it on the board.`,
+        predictCorrect: `Exactly — that's the problem with ${played.san}.`,
+        predictOther: `${opp}'s strongest answer is ${replyLine[0] ?? ''}.`,
+        reveal: `After ${list(replyLine.slice(0, 4))}, ${opp} wins material.`,
+        betterPrompt: `What's a safer move here?`,
+        lesson: "Before you commit, look at your opponent's checks, captures and attacks after your move.",
       };
+    }
     case 'missed_threat':
       return {
         ...base,

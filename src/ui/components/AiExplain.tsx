@@ -4,13 +4,13 @@ import { aiReady, explainPosition } from '../actions';
 import { useApp } from '../store';
 import { CoachText } from './CoachText';
 import { EXPLAIN_VERSION } from '../../coach/momentContext';
-import { PATTERN_LABEL, PATTERN_RULE, type PatternTag } from '../../analysis/patterns';
+import { PATTERN_LABEL, PATTERN_RULE, PATTERN_RULE_MISSED, type PatternTag } from '../../analysis/patterns';
 
 /** The pattern behind a move as a tag plus its one-line rule. */
-export function PatternChip({ tag }: { tag: PatternTag }) {
+export function PatternChip({ tag, side }: { tag: PatternTag; side?: 'refutation' | 'better' }) {
   return (
     <p className="pattern-line small">
-      <span className="pattern-tag">{PATTERN_LABEL[tag]}</span> {PATTERN_RULE[tag]}
+      <span className="pattern-tag">{PATTERN_LABEL[tag]}</span> {(side === 'better' && PATTERN_RULE_MISSED[tag]) || PATTERN_RULE[tag]}
     </p>
   );
 }
@@ -116,7 +116,7 @@ export function AiExplain({
         <>
           <span className="eyebrow">Why? · {cached.model === 'none' ? 'from Stockfish' : 'AI, grounded in Stockfish'}</span>
           <CoachText text={cached.headline || cached.whyBetter} className="why-headline" />
-          {cached.patternTag && <PatternChip tag={cached.patternTag} />}
+          {cached.patternTag && <PatternChip tag={cached.patternTag} side={cached.patternSide} />}
           {cached.model !== 'none' && (
             <details className="why-more">
               <summary className="small">More</summary>

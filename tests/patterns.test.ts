@@ -52,7 +52,7 @@ describe('pattern tags on real mistakes', () => {
 describe('pattern stats across games', () => {
   it('counts per tag, per month, real games only', () => {
     const a = game('queen-blunder-game', 'a', Date.UTC(2026, 8, 3));
-    const b = game('kingside-storm-game', 'b', Date.UTC(2026, 9, 3));
+    const b = game('black-win-game', 'b', Date.UTC(2026, 9, 3));
     const coach = { ...game('chaotic-game', 'c'), adaptive: { sessionId: 's', skill: 'conversion' as const } };
     const stats = patternStats([a, b, coach]);
     const hanging = stats.find((x) => x.tag === 'hanging_piece')!;
@@ -121,5 +121,59 @@ describe('regression: chunkmonkey420 vs Atayan48 (flagged: "it was a discovered 
   });
   it('no longer claims 16.Nxf6+ "would have won the knight" (it was an even trade)', () => {
     expect(g.findings.some((x) => x.ply === p16 && x.category === 'tactical_blindness')).toBe(false);
+  });
+});
+
+describe('the takeaway comes from the tactic found (sample of chunkmonkey420 games)', () => {
+  const moment = (g: ReturnType<typeof game>, ply: number) => g.moments.find((m) => m.ply === ply)!;
+  const BLUNDER_CHECK = 'Before you let go of a piece, ask: can it be captured for free on its new square — and did moving it leave something else unprotected?';
+
+  it('a queen check that also hits a loose knight is a fork, not "a piece left unprotected" (vs Jose-Dang, 11.Nb5 Qa5+)', () => {
+    const g = game('josedang-game');
+    expect(g.patterns?.[21]).toMatchObject({ tag: 'fork', side: 'refutation' });
+    expect(g.patterns?.[21]?.evidence).toBe('Qa5+ attacks the king and the knight on b5 at once');
+    expect(moment(g, 21).text.title).toBe('11.Nb5 — walked into a fork');
+    expect(moment(g, 21).text.lesson).toBe(PATTERN_RULE.fork);
+    expect(moment(g, 21).tactic).toEqual({ tag: 'fork', side: 'refutation' });
+  });
+  it('keeps the blunder-check lesson only for a piece that was simply hanging (vs Jose-Dang, 5.Nxe5 Nxe5)', () => {
+    const g = game('josedang-game');
+    expect(g.patterns?.[9]).toMatchObject({ tag: 'hanging_piece', hanging: 'moved' });
+    expect(moment(g, 9).text.title).toBe('5.Nxe5 — a piece left unprotected');
+    expect(moment(g, 9).text.lesson).toBe(BLUNDER_CHECK);
+  });
+  it('a back-rank tactic is the lesson even when the move is also a rook round trip (vs Harrisonisbadatchess69, 19...Rfd8)', () => {
+    const g = game('harrison-game');
+    const m = moment(g, 38);
+    expect(m.text.title).toBe('19...Rfd8 — walked into a back-rank attack');
+    expect(m.text.lesson).toBe(PATTERN_RULE.back_rank);
+    expect(g.report?.focus.title).toBe('Give your king an escape square before the back rank gets busy.');
+  });
+  it('a piece already under attack is a missed threat, not "left unprotected" (vs aditya_satyam, 7.d3 Qxg4)', () => {
+    const g = game('aditya-game');
+    expect(g.patterns?.[13]).toMatchObject({ tag: 'hanging_piece', hanging: 'already' });
+    expect(g.findings.find((f) => f.ply === 13)?.category).toBe('missed_threat');
+    expect(moment(g, 13).text.lesson).not.toBe(BLUNDER_CHECK);
+  });
+  it('a discovered attack on a "calculation" move teaches the discovered-attack rule; a late mate still gets flagged (vs halfmast530)', () => {
+    const g = game('halfmast-game');
+    expect(moment(g, 30).text.lesson).toBe(PATTERN_RULE.discovered_attack); // 15...Nd2
+    const mate = g.findings.find((f) => f.ply === 34 && f.facts.mate)!; // 17...Qh4?? Qxf7+ Kd8 Qd7#
+    expect(mate.severity).toBe(2); // the game was already lost: shown, but not the lesson of the game
+    expect(g.report?.headline).toMatch(/^You walked into a discovered attack\./);
+  });
+  it('allowing mate in one is "allowed checkmate" with a checks lesson (vs Blundering32, 7...f5 Qf7#)', () => {
+    const g = game('blundering-game');
+    const m = moment(g, 14);
+    expect(m.text.title).toBe('7...f5 — allowed checkmate');
+    expect(m.text.lesson).toMatch(/checks your opponent would have next/);
+    expect(g.report?.focus.title).toBe('Before every move, look at the checks your opponent will have next.');
+  });
+  it('a trade is not a hanging piece (vs jnhbleachie, 7...Nxc3 bxc3)', () => {
+    const g = game('jnhbleachie-game');
+    expect(g.patterns?.[14]).toBeUndefined();
+  });
+  it('a loss with no decisive mistake is not called "a clean game"', () => {
+    for (const n of ['josedang-game', 'harrison-game', 'aditya-game', 'halfmast-game', 'blundering-game', 'jnhbleachie-game'] as const) expect(game(n).report?.headline).not.toMatch(/clean game/i);
   });
 });

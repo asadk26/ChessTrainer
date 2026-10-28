@@ -22,7 +22,7 @@ import type { PriorGameFindings } from '../analysis/moments';
 const band = (cp: number) => BAND_LABEL[bandOf(cp)].toLowerCase();
 
 /** Bumped when the explanation's input or rules change, so older cached explanations are redone on request. */
-export const EXPLAIN_VERSION = 'why3';
+export const EXPLAIN_VERSION = 'why4';
 
 /** Below this win% gap the two moves are close: say so in one line instead of inventing reasons. */
 export const SMALL_DIFFERENCE = 6;
@@ -53,6 +53,8 @@ export interface MomentContext {
   fallbackReason?: string;
   /** Deterministic tactical pattern for this move, if any. */
   pattern?: PatternTag;
+  /** Whether the opponent's reply carried out that pattern, or it was the player's own missed chance. */
+  patternSide?: 'refutation' | 'better';
   /** For the one-line small-difference answer. */
   summary?: { playedSan: string; bestSan?: string; evalPlayed: string; evalBest: string };
 }
@@ -194,7 +196,7 @@ export function buildMomentContext(game: StoredGame, ply: number, opts: { rating
   if (opportunity) ((facts as Record<string, unknown>).boardFacts as { bestMove: string[] }).bestMove.unshift(opportunity);
   const patternTag = pattern?.tag;
   const summary = { playedSan: played.san, bestSan: quality !== 'best' ? bestLine4[0] : undefined, evalPlayed: evalText(playedCp), evalBest: evalText(bestCp) };
-  return { facts, allowedMoves: allowed, grounding, smallDifference, fallbackReason, summary, pattern: patternTag };
+  return { facts, allowedMoves: allowed, grounding, smallDifference, fallbackReason, summary, pattern: patternTag, patternSide: pattern?.side };
 }
 
 /**
@@ -207,7 +209,7 @@ export function smallDifferenceExplanation(ctx: MomentContext, ply: number): AiE
   const line = s.bestSan
     ? `Small difference — ${s.playedSan} is fine. Stockfish slightly prefers ${s.bestSan} (${s.evalBest} instead of ${s.evalPlayed})${reason}`
     : `${s.playedSan} was Stockfish's choice.`;
-  return { ply, headline: line, patternTag: ctx.pattern, tryingTo: '', missed: '', whyBetter: line, opponentReply: '', difference: '', takeaway: '', pattern: '', confidence: 'small_difference', model: 'none', createdAt: Date.now(), grounding: ctx.grounding };
+  return { ply, headline: line, patternTag: ctx.pattern, patternSide: ctx.patternSide, tryingTo: '', missed: '', whyBetter: line, opponentReply: '', difference: '', takeaway: '', pattern: '', confidence: 'small_difference', model: 'none', createdAt: Date.now(), grounding: ctx.grounding };
 }
 
 export function momentPrompt(ctx: MomentContext): string {
@@ -231,6 +233,7 @@ export function parseMomentExplanation(text: string, ctx: MomentContext, ply: nu
   }
   // The tactical tag is ours (from the board), never the model's.
   out.patternTag = ctx.pattern;
+  out.patternSide = ctx.patternSide;
   if (!out.whyBetter && !out.takeaway) throw new UngroundedError('The AI answer was empty.');
   out.confidence = ctx.smallDifference || raw.confidence === 'small_difference' ? 'small_difference' : 'clear';
   // A real difference needs a concrete reason: a square or a move. If the answer only waves its

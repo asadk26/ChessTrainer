@@ -22,7 +22,7 @@ import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
 import { engineNotes, verdictOf } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
-import { ENGINE_REPLY_CATEGORIES } from '../../analysis/moments';
+import { usesEngineReply } from '../../analysis/moments';
 import { gamePlayedAt } from '../../analysis/pipeline';
 import { themeOf } from '../../coach/report';
 import { navigate, useApp } from '../store';
@@ -80,7 +80,7 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
   const mover = m.moverColor;
   const opp = other(mover);
   const oppName = COLOR_NAME[opp];
-  const engineReplyFirst = ENGINE_REPLY_CATEGORIES.includes(m.category);
+  const engineReplyFirst = usesEngineReply(m);
   const expectedReply = engineReplyFirst ? m.acceptableReplyUcis[0] : m.opponentReplyUci ?? m.acceptableReplyUcis[0];
   const expectedReplySan = expectedReply ? playLine(m.fenAfter, [expectedReply])[0]?.san : undefined;
   const betterPlayed = game.plies[m.betterPly - 1];

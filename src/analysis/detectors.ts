@@ -12,6 +12,7 @@ import {
   isCheckMove,
   isLegal,
   isLoose,
+  underThreat,
   kingInCenter,
   kingSquare,
   materialAfterLine,
@@ -118,13 +119,15 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
   const avoidable = e.materialAfterBest - e.materialAfterReply;
   const allowedMate = !!e.mateThreatAgainst && e.cpBefore > -5000;
 
-  if (allowedMate && e.winDrop >= 20) {
+  // Allowing mate is always worth a lesson unless the game was already gone.
+  if (allowedMate && (e.winDrop >= 20 || e.winBefore >= 10)) {
     return [
       {
         kind: 'weakness',
         category: 'blunder',
         ply: p.ply,
-        severity: 3,
+        // Already clearly lost: still worth showing, but not the lesson of the game.
+        severity: e.winDrop >= 20 ? 3 : 2,
         confidence: 'high',
         evidence: `${label(p)} allowed a forced mate (${e.replyLineSan.slice(0, 3).join(' ')}).`,
         facts: { mate: true, replyLine: e.replyLineSan.slice(0, 5), bestSan: e.bestSan, context: tags(c) },
@@ -186,7 +189,7 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
   }
   if (cap && cap.index === 0) {
     // The piece taken wasn't the one that moved. Was it already under attack before the move?
-    const alreadyLoose = isLoose(p.fenBefore, cap.square) && pieceAt(p.fenBefore, cap.square)?.color === ctx.userColor;
+    const alreadyLoose = underThreat(p.fenBefore, cap.square) && pieceAt(p.fenBefore, cap.square)?.color === ctx.userColor;
     if (alreadyLoose) {
       const prev = ctx.plies[i - 1];
       return [

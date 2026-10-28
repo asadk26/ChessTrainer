@@ -68,6 +68,13 @@ export function isLoose(fen: string, square: string): boolean {
   return cheapest < PIECE_VALUE[piece.type];
 }
 
+/** Loose, or attacked more times than it is defended: the opponent can win it as things stand. */
+export function underThreat(fen: string, square: string): boolean {
+  const piece = pieceAt(fen, square);
+  if (!piece || piece.type === 'k') return false;
+  return isLoose(fen, square) || attackersOf(fen, square, other(piece.color)).length > attackersOf(fen, square, piece.color).length;
+}
+
 /** Squares the piece on `square` attacks (pseudo-legal, ignoring pins), regardless of turn. */
 export function attackedSquares(fen: string, square: string): string[] {
   const piece = pieceAt(fen, square);

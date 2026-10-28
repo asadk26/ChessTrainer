@@ -225,6 +225,8 @@ export interface TeachingMoment {
   refutationUci?: string;
   refutationSan?: string;
   category: CategoryId | StrengthId;
+  /** The tactic that decided the move, when one did: what the opponent's reply did, or what you missed. */
+  tactic?: { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better' };
   categories: (CategoryId | StrengthId)[];
   significance: number;
   steps: MomentStepKind[];
@@ -416,7 +418,7 @@ export interface StoredGame {
    * Tactical pattern behind each of your mistakes/blunders (by ply), from the board and Stockfish's
    * lines — saved so patterns can be counted across games.
    */
-  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string }>;
+  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string; hanging?: 'moved' | 'left' | 'already' }>;
   /** Set on games played against the Adaptive Coach: they record training, not real-game weaknesses. */
   adaptive?: { sessionId: string; skill: AdaptiveSkill };
   /** "This seems wrong" notes the player left on the coaching. */
@@ -515,6 +517,8 @@ export interface AiExplanation {
   headline?: string;
   /** The tactical pattern behind the move (deterministic, from the board), if any. */
   patternTag?: import('../analysis/patterns').PatternTag;
+  /** 'better': a tactic the player missed; otherwise one the opponent's reply carried out. */
+  patternSide?: 'refutation' | 'better';
   tryingTo: string;
   missed: string;
   whyBetter: string;

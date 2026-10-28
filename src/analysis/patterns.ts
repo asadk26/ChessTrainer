@@ -4,14 +4,15 @@
 // Saved on every mistake/blunder so patterns can be counted across games.
 import { Chess, type Move, type Square } from 'chess.js';
 import type { Color, PieceType } from '../domain/types';
-import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, kingSquare, materialBalance, other, pieceAt } from '../chess/board';
+import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
   knight_fork: 'Knight fork',
+  fork: 'Fork',
   hanging_piece: 'Hanging piece',
   pin: 'Pin',
   discovered_attack: 'Discovered attack',
@@ -24,12 +25,37 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
 export const PATTERN_RULE: Record<PatternTag, string> = {
   in_between_move: 'Before recapturing automatically, check for a stronger in-between move — a check or a bigger threat first.',
   knight_fork: 'Look at every square a knight can jump to: one that hits two valuable pieces (or king and piece) wins material.',
+  fork: 'Look at every check and attack your opponent has next: one move that hits two things — often a check plus a loose piece — wins one of them.',
   hanging_piece: 'Before every move, ask: which pieces — mine and theirs — are undefended right now?',
   pin: "A pinned piece can't really move: pile up on it, and never line your own pieces up in front of your king or queen.",
   discovered_attack: 'When a piece moves off a line, check what the piece behind it suddenly attacks.',
   trapped_piece: 'Before a piece goes deep, make sure it has a safe square to come back to.',
   opened_line: 'Opening a file or diagonal toward a king helps whoever has more pieces aimed down it.',
   back_rank: 'Give your king an escape square (a "luft") before your back rank can be hit.',
+};
+
+/** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
+export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: string }> = {
+  in_between_move: { refutation: 'walked into an in-between move', better: 'missed an in-between move' },
+  knight_fork: { refutation: 'walked into a knight fork', better: 'missed a knight fork' },
+  fork: { refutation: 'walked into a fork', better: 'missed a fork' },
+  hanging_piece: { refutation: 'left a piece hanging', better: 'missed a free piece' },
+  pin: { refutation: 'walked into a pin', better: 'missed a pin' },
+  discovered_attack: { refutation: 'walked into a discovered attack', better: 'missed a discovered attack' },
+  trapped_piece: { refutation: 'let a piece get trapped', better: 'missed a chance to trap a piece' },
+  opened_line: { refutation: 'opened a line toward your king', better: 'missed a chance to open their king' },
+  back_rank: { refutation: 'walked into a back-rank attack', better: 'missed a back-rank attack' },
+};
+
+/** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
+export const PATTERN_RULE_MISSED: Partial<Record<PatternTag, string>> = {
+  knight_fork: 'Look at every square your knights can jump to: one that hits two valuable pieces (or king and piece) wins material.',
+  fork: 'Look at every check and attack you have: one move that hits two things — often a check plus a loose piece — wins one of them.',
+  pin: 'When an enemy piece stands in front of their king or queen, pin it — then pile up on it.',
+  discovered_attack: 'When one of your pieces stands in front of your bishop, rook or queen, ask what moving it with a threat would uncover.',
+  trapped_piece: 'When an enemy piece has gone deep, count its escape squares — if you can cover them all, it’s yours.',
+  opened_line: 'Open files and diagonals toward their king when your pieces are ready to use them.',
+  back_rank: 'When their king has no escape square, look for a rook or queen check on the back rank.',
 };
 
 export interface PatternHit {
@@ -39,6 +65,11 @@ export interface PatternHit {
   evidence: string;
   /** Ply index within the line (0 = first move of the line). */
   at: number;
+  /**
+   * For a hanging piece lost after your move: the piece you moved landed where it could be taken,
+   * your move left another piece unprotected, or it was already under attack and stayed there.
+   */
+  hanging?: 'moved' | 'left' | 'already';
 }
 
 interface Frame {
@@ -96,6 +127,25 @@ function knightFork(fs: Frame[]): PatternHit | undefined {
     const heavy = targets.filter((t) => t.type === 'k' || t.type === 'q' || t.type === 'r');
     if (targets.length >= 2 && heavy.length >= 1 && gainAfter(fs, i, move.color as Color) >= 2)
       return { tag: 'knight_fork', side: 'refutation', at: i, evidence: `${move.san} forks the ${targets.slice(0, 2).map((t) => (t.type === 'k' ? 'king' : sq(t.type, t.square))).join(' and the ')}` };
+  }
+}
+
+/** Any other piece hitting two things at once — a queen check that also hits a loose piece, a pawn fork. */
+function fork(fs: Frame[]): PatternHit | undefined {
+  for (let i = 0; i < Math.min(fs.length, 4); i++) {
+    const { move, after } = fs[i];
+    if (move.piece === 'n') continue;
+    const me = move.color as Color;
+    // Only targets it can really win: the king (check), or a piece that is loose or worth more than the attacker.
+    const targets = [
+      ...(move.san.includes('+') ? [{ type: 'k' as PieceType, square: kingSquare(after, other(me)) }] : []),
+      ...attackedEnemyPieces(after, move.to).filter((t) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3 && (isLoose(after, t.square) || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType])),
+    ];
+    if (targets.length < 2 || gainAfter(fs, i, me) < 2) continue;
+    // The forking piece must survive long enough to collect: one of the targets is taken later in the line.
+    const collected = fs.slice(i + 1).some((f) => f.move.color === me && targets.some((t) => t.type !== 'k' && t.square === f.move.to));
+    if (collected)
+      return { tag: 'fork', side: 'refutation', at: i, evidence: `${move.san} attacks the ${targets.slice(0, 2).map((t) => (t.type === 'k' ? 'king' : sq(t.type, t.square))).join(' and the ')} at once` };
   }
 }
 
@@ -178,7 +228,7 @@ function openedLine(fs: Frame[]): PatternHit | undefined {
   }
 }
 
-const DETECTORS = [backRank, knightFork, discovered, pin, inBetween, trapped, openedLine];
+const DETECTORS = [backRank, knightFork, discovered, fork, pin, inBetween, trapped, openedLine];
 
 /**
  * The pattern behind a move: first in what punished it (the move played + the opponent's best
@@ -198,17 +248,26 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     if (b && better[b.at]?.move.color === mover) return { ...b, side: 'better' };
   }
   if (categories.includes('stranded_piece')) return { tag: 'trapped_piece', side: 'refutation', at: 0, evidence: 'the piece that went in had no way back' };
-  // Hanging: the reply takes something the move left undefended, or the better move took something free.
+  // Hanging: the reply simply takes something, and it costs real material (not a trade).
   const reply = refutation[1]?.move;
   const afterPlayed = refutation[0]?.after;
-  if (reply?.captured && afterPlayed && hangingPieces(afterPlayed, mover).some((h) => h.square === reply.to))
-    return { tag: 'hanging_piece', side: 'refutation', at: 1, evidence: `after your move, the ${sq(reply.captured as PieceType, reply.to)} was undefended and ${reply.san} took it` };
-  const best = better[0]?.move;
-  if (best?.captured && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to))
-    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was hanging — ${best.san} takes it for free` };
-  if (categories.includes('blunder') || categories.includes('missed_threat')) {
-    if (reply?.captured) return { tag: 'hanging_piece', side: 'refutation', at: 1, evidence: `${reply.san} wins the ${sq(reply.captured as PieceType, reply.to)}` };
+  const net = (fs: Frame[], pov: Color) => (fs.length ? materialBalance(fs[fs.length - 1].after, pov) - materialBalance(fenBefore, pov) : 0);
+  const lostEnough = (t: PieceType, n: number) => n <= -(t === 'p' ? 1 : 2);
+  if (reply?.captured && afterPlayed && lostEnough(reply.captured as PieceType, net(refutation, mover))) {
+    const victim = sq(reply.captured as PieceType, reply.to);
+    const loose = isLoose(afterPlayed, reply.to);
+    const how = attackersOf(afterPlayed, reply.to, mover).length === 0 ? 'undefended' : loose ? 'attacked by something cheaper' : 'short of defenders';
+    if (reply.to === refutation[0].move.to) {
+      if (loose) return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'moved', evidence: `the ${victim} was ${how} after your move, and ${reply.san} took it` };
+    } else if (pieceAt(fenBefore, reply.to)?.color === mover && underThreat(fenBefore, reply.to)) {
+      return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'already', evidence: `the ${victim} was already under attack, your move didn't save it, and ${reply.san} took it` };
+    } else if (loose || categories.includes('blunder') || categories.includes('missed_threat')) {
+      return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'left', evidence: `your move left the ${victim} ${how}, and ${reply.san} took it` };
+    }
   }
+  const best = better[0]?.move;
+  if (best?.captured && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to) && net(better, mover) >= (best.captured === 'p' ? 1 : 2))
+    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was hanging — ${best.san} takes it for free` };
   return undefined;
 }
 
@@ -219,6 +278,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
     detail:
       "A discovered attack is two threats in one move: a piece steps off a line with its own threat, and the piece behind it suddenly attacks something too. Before grabbing material, look for enemy pieces lined up behind one of their own pieces — and ask what happens if the front one moves with a threat.",
   },
+  fork: { title: 'Before every move, look at the checks your opponent will have next.', detail: 'Most forks at this level are a queen (or bishop, rook or pawn) attacking two things at once — very often a check that also hits a loose piece. Before you move, list your opponent’s checks and ask whether any of them also attacks something undefended.' },
   knight_fork: { title: 'Check the squares their knights can jump to before you move.', detail: 'A knight on the right square attacks two pieces at once — often king and queen, or king and rook. Before every move, look at each enemy knight and the squares it can reach next.' },
   pin: { title: "Don't line your pieces up in front of your king or queen.", detail: 'A pinned piece can be attacked again and again because it can’t move away. Before putting a piece on a line with your king or queen behind it, check whether a bishop, rook or queen can pin it.' },
   in_between_move: { title: 'Before you recapture, look for a stronger in-between move.', detail: 'An in-between move — a check or a bigger threat played before the expected recapture — can change the whole exchange. Check for one, for both sides, whenever pieces are being traded.' },
