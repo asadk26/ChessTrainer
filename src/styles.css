@@ -649,3 +649,35 @@ p { margin: 0 0 0.75rem; }
 .line-steps li p { margin: 0; }
 .line-steps li.on { font-weight: 600; }
 .line-steps li.done { color: var(--muted); }
+
+/* ---------------------------------------------------------------- app shell (mobile-first) */
+.container { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+.screen-head { display: flex; align-items: center; gap: 0.5rem; margin: calc(0.2rem + env(safe-area-inset-top)) 0 0.9rem; min-height: 2.5rem; }
+.screen-head h1 { margin: 0; font-size: 1.45rem; flex: 1; min-width: 0; }
+.screen-actions { display: flex; gap: 0.35rem; }
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; flex: none;
+  border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink); cursor: pointer; padding: 0;
+}
+.icon-btn:hover { background: var(--surface-2); }
+.title-row { display: flex; align-items: center; gap: 0.5rem; }
+.title-row h1 { margin: 0; }
+.title-row .icon-btn { width: 2.1rem; height: 2.1rem; }
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center;
+  background: var(--card); border-top: 1px solid var(--line);
+  padding: 0.3rem env(safe-area-inset-right) calc(0.3rem + env(safe-area-inset-bottom)) env(safe-area-inset-left);
+}
+.tabbar a {
+  flex: 1; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+  padding: 0.3rem 0; color: var(--muted); text-decoration: none; font-size: 0.72rem; font-weight: 550; border-radius: 10px;
+}
+.tabbar a.on { color: var(--accent); }
+.tabbar a:active { background: var(--surface-2); }
+.review-board { top: 1rem; }
+.settings-screen .settings-grid { margin-top: 0; }
+a { color: var(--accent); }
+.export-row select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); max-width: 100%; }
+.games li:first-child { border-top: 0; }
+.card > p.chesscom-sync { margin: 0; }
+@media (max-width: 860px) { .title-row h1 { font-size: 1.2rem; } }

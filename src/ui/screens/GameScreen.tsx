@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from '../components/AppShell';
 import type { ReportItem, StoredGame } from '../../domain/types';
 import { enrichWithLlm, explainLessons, recoach, runAnalysis, setOutcome } from '../actions';
 import { navigate, useApp } from '../store';
@@ -287,9 +288,14 @@ export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab
   const header = (
     <div className={`game-header ${tab === 'review' ? 'compact' : ''}`}>
       <div>
-        <h1>
-          {game.headers.white} <span className="muted">vs</span> {game.headers.black}
-        </h1>
+        <div className="title-row">
+          <button className="icon-btn" aria-label="Back to games" onClick={() => navigate('/games')}>
+            <Icon name="back" />
+          </button>
+          <h1>
+            {game.headers.white} <span className="muted">vs</span> {game.headers.black}
+          </h1>
+        </div>
         <p className="muted small">
           <OutcomeSelect game={game} /> · <CopyPgn pgn={game.pgn} /> · you played {game.userColor === 'w' ? 'White' : 'Black'}
           {game.headers.date ? ` · ${game.headers.date}` : ''}

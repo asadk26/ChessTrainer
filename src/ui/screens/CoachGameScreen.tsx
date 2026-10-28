@@ -62,7 +62,7 @@ function SetupView({
       <h1>Adaptive Coach Game</h1>
       {pendingAnalysis(games).length > 0 && (
         <p className="feedback neutral small">
-          {pendingAnalysis(games).length} of your games aren’t analysed yet, so they don’t count here. Analyse them from the Dashboard for a better-informed plan.
+          {pendingAnalysis(games).length} of your games aren’t analysed yet, so they don’t count here. Analyse them from the Games tab for a better-informed plan.
         </p>
       )}
       <p className="muted">

@@ -21,7 +21,7 @@ export function useAiBlocker(): string | null {
   const { llm, settings } = useApp();
   if (!llm.provider) return null;
   if (!settings.useLlm) return null; // switched off on purpose: stay quiet
-  if (llm.requiresToken && !settings.coachToken) return 'To get AI explanations here, enter your access code in Dashboard → Show settings.';
+  if (llm.requiresToken && !settings.coachToken) return 'To get AI explanations here, enter your access code in Settings (gear icon on Home).';
   return null;
 }
 

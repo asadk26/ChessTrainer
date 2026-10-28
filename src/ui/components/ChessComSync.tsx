@@ -25,7 +25,7 @@ const setShared = (patch: Partial<typeof shared>) => {
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 
 /** Manual Chess.com sync (import only): a username setting and one button. No background polling. */
-export function ChessComSync() {
+export function ChessComSync({ compact = false }: { compact?: boolean }) {
   const { settings, updateSettings, refresh } = useApp();
   const cfg = settings.chesscom;
   const [editing, setEditing] = useState(!cfg);
@@ -50,17 +50,25 @@ export function ChessComSync() {
     try {
       const { message, imported } = await syncChessCom((t) => setStatus({ tone: 'neutral', text: t }));
       await refresh();
-      setStatus({ tone: 'good', text: imported.length ? `${message} They're ready to export now; analyse them below whenever you like.` : message });
+      setStatus({ tone: 'good', text: imported.length ? `${message} They're ready to export now; analyse them on the Games tab whenever you like.` : message });
     } catch (e) {
       const text =
         e instanceof SyncError
           ? e.message
-          : "Something went wrong while syncing. Your games are safe; try again later, or paste a PGN on the Import page.";
+          : "Something went wrong while syncing. Your games are safe; try again later, or paste a PGN with + on the Games tab.";
       setStatus({ tone: 'bad', text });
     } finally {
       setBusy(false);
     }
   };
+
+  // On the Games tab: just the sync button; the account itself is set up in Settings.
+  if (compact && !cfg)
+    return (
+      <p className="muted small chesscom-sync">
+        Sync your Chess.com games: <a href="#/settings">add your username in Settings</a>.
+      </p>
+    );
 
   if (editing || !cfg) {
     return (
@@ -125,9 +133,11 @@ export function ChessComSync() {
       <div className="row-between">
         <span>
           Chess.com: <b>{cfg.username}</b> <span className="muted small">· last {cfg.days} days · {classes}</span>{' '}
-          <button className="link small" onClick={() => setEditing(true)}>
-            change
-          </button>
+          {!compact && (
+            <button className="link small" onClick={() => setEditing(true)}>
+              change
+            </button>
+          )}
         </span>
         <button className="btn primary small" disabled={busy} onClick={sync}>
           {busy ? 'Syncing…' : 'Sync Chess.com'}

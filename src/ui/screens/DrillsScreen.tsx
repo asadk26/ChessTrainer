@@ -149,7 +149,7 @@ export function DrillList({ gameId }: { gameId?: string }) {
             Go again
           </button>
           <button className="btn primary" onClick={() => navigate('/')}>
-            Back to dashboard
+            Back to Home
           </button>
         </div>
       </div>

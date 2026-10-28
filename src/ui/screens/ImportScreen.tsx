@@ -6,6 +6,7 @@ import { identifyUser } from '../../profile/identify';
 import { SAMPLE_PGN } from '../../fixtures/sampleGame';
 import { importGame } from '../actions';
 import { navigate, useApp } from '../store';
+import { ScreenHeader } from '../components/AppShell';
 
 export function ImportScreen() {
   const { settings, refresh } = useApp();
@@ -39,7 +40,7 @@ export function ImportScreen() {
 
   return (
     <div className="narrow">
-      <h1>Import a game</h1>
+      <ScreenHeader title="Import a game" back="/games" />
       <p className="muted">Paste a PGN from Chess.com, Lichess or anywhere else. Everything stays in this browser.</p>
       <textarea
         className="pgn-input"
