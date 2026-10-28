@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -19,6 +19,8 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   trapped_piece: 'Trapped piece',
   opened_line: 'Opened line',
   back_rank: 'Back rank',
+  removed_defender: 'Removed defender',
+  unblocked_queen: 'Opened a line to your queen',
 };
 
 /** One reusable rule per pattern. */
@@ -32,6 +34,8 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   trapped_piece: 'Before a piece goes deep, make sure it has a safe square to come back to.',
   opened_line: 'Opening a file or diagonal toward a king helps whoever has more pieces aimed down it.',
   back_rank: 'Give your king an escape square (a "luft") before your back rank can be hit.',
+  removed_defender: 'Before you move a piece or pawn, ask what it was guarding — and whether that is still safe once it leaves.',
+  unblocked_queen: 'If your queen sits on a line with an enemy bishop, rook or queen, check what blocks that line before you move the blocker.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -45,6 +49,8 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   trapped_piece: { refutation: 'let a piece get trapped', better: 'missed a chance to trap a piece' },
   opened_line: { refutation: 'opened a line toward your king', better: 'missed a chance to open their king' },
   back_rank: { refutation: 'walked into a back-rank attack', better: 'missed a back-rank attack' },
+  removed_defender: { refutation: 'took the guard away from one of your pieces', better: 'missed a chance to remove a defender' },
+  unblocked_queen: { refutation: 'opened the line to your queen', better: 'missed a line opening onto their queen' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -232,6 +238,64 @@ function openedLine(fs: Frame[]): PatternHit | undefined {
   }
 }
 
+/**
+ * The move uncovered a line to your own queen: an enemy bishop, rook or queen attacks it now and
+ * didn't before (the square you left was the only change, so that unit was the blocker), and the
+ * opponent's line takes the queen.
+ */
+function unblockedQueen(fenBefore: string, fs: Frame[], mover: Color): PatternHit | undefined {
+  const played = fs[0]?.move;
+  if (!played || played.color !== mover || played.piece === 'q' || fs.length < 2) return;
+  const opp = other(mover);
+  const after = fs[0].after;
+  for (const row of new Chess(after).board())
+    for (const u of row) {
+      if (!u || u.color !== mover || u.type !== 'q') continue;
+      const was = attackersOf(fenBefore, u.square, opp);
+      const fresh = attackersOf(after, u.square, opp).filter((s) => !was.includes(s) && ['b', 'r', 'q'].includes(pieceAt(after, s)!.type));
+      if (!fresh.length) continue;
+      const taken = fs.slice(1).some((f) => f.move.color === opp && f.move.to === u.square);
+      const net = materialBalance(fs[fs.length - 1].after, mover) - materialBalance(fenBefore, mover);
+      if (!taken || net > -2) continue;
+      const slider = pieceAt(after, fresh[0])!;
+      const what = played.piece === 'p' ? 'pawn' : PIECE_NAME[played.piece as PieceType];
+      return {
+        tag: 'unblocked_queen',
+        side: 'refutation',
+        at: 1,
+        evidence: `the ${what} on ${played.from} was blocking the ${PIECE_NAME[slider.type as PieceType]} on ${fresh[0]} from your queen on ${u.square}; after ${played.san}, the line was open`,
+      };
+    }
+}
+
+/**
+ * The move took away the guard of another unit: the piece or pawn that moved defended it, no longer
+ * does, and without it the unit can be taken for free — which the reply does, at a real cost.
+ */
+function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternHit | undefined {
+  const played = fs[0]?.move;
+  const reply = fs[1]?.move;
+  // A capture that abandons a guard is a grab (greedy queen raids…): that's the lesson, not the guard.
+  if (!played || played.captured || !reply?.captured || reply.to === played.to || fs[0].move.color !== mover) return;
+  const x = reply.to;
+  const unit = pieceAt(fenBefore, x);
+  if (!unit || unit.color !== mover || unit.type === 'k') return;
+  const opp = other(mover);
+  const guards = attackersOf(fenBefore, x, mover);
+  if (!guards.includes(played.from as never) || attackersOf(fs[0].after, x, mover).includes(played.to as never)) return;
+  const free = (fen: string) => isLoose(fen, x) || attackersOf(fen, x, opp).length > attackersOf(fen, x, mover).length;
+  if (free(fenBefore) || !free(fs[0].after)) return;
+  const net = materialBalance(fs[fs.length - 1].after, mover) - materialBalance(fenBefore, mover);
+  if (net > -(unit.type === 'p' ? 1 : 2)) return;
+  const what = played.piece === 'p' ? 'pawn' : PIECE_NAME[played.piece as PieceType];
+  return {
+    tag: 'removed_defender',
+    side: 'refutation',
+    at: 1,
+    evidence: `the ${what} on ${played.from} was ${guards.length === 1 ? 'the only guard of' : 'needed to guard'} the ${sq(unit.type as PieceType, x)}; after ${played.san}, ${reply.san} took it`,
+  };
+}
+
 const DETECTORS = [backRank, knightFork, discovered, fork, pin, inBetween, trapped, openedLine];
 
 /**
@@ -251,6 +315,10 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     const b = d(better);
     if (b && better[b.at]?.move.color === mover) return { ...b, side: 'better' };
   }
+  const unblocked = unblockedQueen(fenBefore, refutation, mover);
+  if (unblocked) return unblocked;
+  const guard = removedDefender(fenBefore, refutation, mover);
+  if (guard) return guard;
   if (categories.includes('stranded_piece')) return { tag: 'trapped_piece', side: 'refutation', at: 0, evidence: 'the piece that went in had no way back' };
   // Hanging: the reply simply takes something, and it costs real material (not a trade).
   const reply = refutation[1]?.move;
@@ -261,11 +329,17 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     const victim = sq(reply.captured as PieceType, reply.to);
     const loose = isLoose(afterPlayed, reply.to);
     const how = attackersOf(afterPlayed, reply.to, mover).length === 0 ? 'undefended' : loose ? 'attacked by something cheaper' : 'short of defenders';
-    if (reply.to === refutation[0].move.to) {
-      if (loose) return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'moved', evidence: `the ${victim} was ${how} after your move, and ${reply.san} took it` };
+    // "Hanging" means it could be taken for free: undefended, attacked by something cheaper, or (a piece)
+    // simply outnumbered. A pawn pushed into an outnumbered square is a break that failed, not a loose
+    // pawn; and a piece lost to a longer line isn't hanging, whatever the category says.
+    const outnumbered = reply.captured !== 'p' && attackersOf(afterPlayed, reply.to, opp).length > attackersOf(afterPlayed, reply.to, mover).length;
+    if (!loose && !outnumbered) {
+      // falls through to the missed-capture check below
+    } else if (reply.to === refutation[0].move.to) {
+      return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'moved', evidence: `the ${victim} was ${how} after your move, and ${reply.san} took it` };
     } else if (pieceAt(fenBefore, reply.to)?.color === mover && underThreat(fenBefore, reply.to)) {
       return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'already', evidence: `the ${victim} was already under attack, your move didn't save it, and ${reply.san} took it` };
-    } else if (loose || categories.includes('blunder') || categories.includes('missed_threat')) {
+    } else {
       return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'left', evidence: `your move left the ${victim} ${how}, and ${reply.san} took it` };
     }
   }
@@ -289,5 +363,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
   back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  unblocked_queen: { title: 'Before you move a blocker, check the line it was blocking.', detail: 'When your queen sits on the same file, rank or diagonal as an enemy bishop, rook or queen, the piece or pawn in between is all that keeps it safe. Before you move that blocker — even to capture something — check what it uncovers.' },
+  removed_defender: { title: 'Before you move a piece, ask what it was guarding.', detail: 'Every piece and pawn may be the only thing protecting something else. Before you move one, look at what it defends right now — if that piece or pawn would be left loose, keep the guard or protect it another way first.' },
   hanging_piece: { title: 'Before you let go of a piece, check whether it can simply be taken.', detail: 'Do a two-second blunder check on every move: for the square you are moving to, and for the piece you are moving away from — what can now be captured for free?' },
 };

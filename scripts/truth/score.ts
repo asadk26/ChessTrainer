@@ -2,7 +2,9 @@
 // Runs the app's own coaching (detectors, patterns, moments, report) on the cached engine output,
 // labels each ground-truth move the way the app explains it, and scores it per README-ground-truth.md:
 // 1 for the primary label, 0.5 for a secondary one, 0 otherwise, and a hard fail for a must_not label.
-//   --verbose   every moment, with the app's evidence and lesson
+//   --verbose            every moment, with the app's evidence and lesson
+//   --holdout-details    also list holdout moments one by one (by default only their score is shown,
+//                        so detectors are tuned on the tune split alone)
 import type { Finding, StoredGame } from '../../src/domain/types.ts';
 import { coachFromPositions } from '../../src/analysis/pipeline.ts';
 import { primaryFinding } from '../../src/analysis/moments.ts';
@@ -10,6 +12,7 @@ import { isStateFinding } from '../../src/coach/report.ts';
 import { cachedPositions, loadTruth, storedGame, type TruthGame, type TruthMoment } from './data.ts';
 
 const verbose = process.argv.includes('--verbose');
+const holdoutDetails = process.argv.includes('--holdout-details');
 const truth = loadTruth();
 
 // ------------------------------------------------------------ the app's label for a move
@@ -32,6 +35,8 @@ function appLabel(f: Finding): string {
       opened_line: ['opened_line_to_own_king', 'opened_line_missed'],
       back_rank: ['back_rank_mate_allowed', 'mate_missed'],
       hanging_piece: ['hanging_piece', 'free_capture_missed'],
+      removed_defender: ['removed_defender', 'removed_defender_missed'],
+      unblocked_queen: ['opened_line_to_own_queen', 'opened_line_to_queen_missed'],
     };
     if (map[pattern]) return map[pattern][better ? 1 : 0];
   }
@@ -128,20 +133,29 @@ console.log('\nGround truth v1 — the app vs hand-verified labels\n');
 splitSummary('tune');
 splitSummary('holdout');
 
-// Per-label precision / recall over every moment (both splits), on the primary label.
-const labels = new Set<string>([...results.map((r) => r.m.primary_label), ...results.map((r) => r.got.label)]);
+// hanging_piece precision per split: the label the app falls back on, so it should rise as specific detectors take over.
+for (const split of ['tune', 'holdout'] as const) {
+  const rs = results.filter((r) => r.m.split === split);
+  const app = rs.filter((r) => r.got.label === 'hanging_piece').length;
+  const hit = rs.filter((r) => r.got.label === 'hanging_piece' && r.m.primary_label === 'hanging_piece').length;
+  console.log(`hanging_piece precision (${split}): ${hit}/${app} = ${pct(hit, app)}`);
+}
+
+// Per-label precision / recall on the primary label (tune only unless --holdout-details).
+const shown = holdoutDetails ? results : results.filter((r) => r.m.split === 'tune');
+const labels = new Set<string>([...shown.map((r) => r.m.primary_label), ...shown.map((r) => r.got.label)]);
 labels.delete('not_flagged');
 labels.delete('unclassified');
-console.log(`\n${pad('label', 28)} ${pad('truth', 6)}${pad('app', 5)}${pad('hit', 5)}${pad('precision', 11)}recall`);
+console.log(`\n${holdoutDetails ? 'all moments' : 'tune moments'}\n${pad('label', 28)} ${pad('truth', 6)}${pad('app', 5)}${pad('hit', 5)}${pad('precision', 11)}recall`);
 for (const l of [...labels].sort()) {
-  const truthN = results.filter((r) => r.m.primary_label === l).length;
-  const appN = results.filter((r) => r.got.label === l).length;
-  const hit = results.filter((r) => r.m.primary_label === l && r.got.label === l).length;
+  const truthN = shown.filter((r) => r.m.primary_label === l).length;
+  const appN = shown.filter((r) => r.got.label === l).length;
+  const hit = shown.filter((r) => r.m.primary_label === l && r.got.label === l).length;
   console.log(`${pad(l, 28)} ${pad(String(truthN), 6)}${pad(String(appN), 5)}${pad(String(hit), 5)}${pad(pct(hit, appN), 11)}${pct(hit, truthN)}`);
 }
 
 console.log('\nEvery moment (✓ exact · ½ secondary · ✗ wrong · ? unclassified · – not flagged · ‼ hard fail):');
-for (const split of ['tune', 'holdout'] as const) {
+for (const split of holdoutDetails ? (['tune', 'holdout'] as const) : (['tune'] as const)) {
   console.log(`  ${split}`);
   for (const r of results.filter((x) => x.m.split === split)) {
     const mark = r.hardFail ? '‼' : r.score === 1 ? '✓' : r.score === 0.5 ? '½' : r.got.label === 'unclassified' ? '?' : r.got.label === 'not_flagged' ? '–' : '✗';

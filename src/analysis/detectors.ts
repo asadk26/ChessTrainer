@@ -1432,8 +1432,10 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     const here: Finding[] = [];
     const seen = () => [...inherited, ...here];
     here.push(...detectPerpetual(ctx, i));
+    // Taking something defended and losing the capturing piece to the recapture is its own lesson
+    // (count the defenders), whichever piece recaptures — so it comes before the generic material loss.
+    if (!here.length && !ctx.evals[i].mateThreatAgainst) here.push(...detectDefendedGrab(ctx, i));
     if (!here.length) here.push(...detectMaterialLoss(ctx, i));
-    if (!here.length) here.push(...detectDefendedGrab(ctx, i));
     if (!here.length) here.push(...detectMissedFork(ctx, i));
     here.push(...detectMissedTactic(ctx, i));
     here.push(...detectAllowedCounterplay(ctx, i, here));

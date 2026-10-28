@@ -14,7 +14,8 @@ describe('how the game ended', () => {
 
   it('says when you won by resignation from a worse position', () => {
     expect(win.report!.story).toMatch(/^You won because White resigned \(or ran out of time\) right after 15\.\.\.Bxf2\+ — but that move actually left White better/);
-    expect(win.findings.find((f) => f.ply === 30)).toMatchObject({ category: 'blunder', confidence: 'high' });
+    // The f2 pawn was defended by the king: Kxf2 wins the bishop — a defended grab, not a loose piece.
+    expect(win.findings.find((f) => f.ply === 30)).toMatchObject({ category: 'defended_grab', confidence: 'high' });
   });
 
   it("doesn't call an even knight trade free material (10...Nxc3 11.bxc3)", () => {

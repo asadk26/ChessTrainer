@@ -31,6 +31,31 @@ describe('pattern tags on real mistakes', () => {
     const d = game('draw-game');
     expect(d.patterns?.[38]).toBeUndefined(); // 19...e4, a premature pawn break
   });
+  it('a piece moved where it is taken for free is hanging', () => {
+    // 1...Bg4?? Qxg4: nothing defends g4.
+    expect(detectPattern('2b3k1/5ppp/8/8/8/8/5PPP/3Q2K1 b - - 0 1', 'c8g4', ['d1g4'], [], [])).toMatchObject({ tag: 'hanging_piece', hanging: 'moved' });
+  });
+  it('a piece that is merely defended — lost only to an exchange — is not hanging', () => {
+    // 1...Nd4 is defended by the e5 pawn; Nxd4 exd4 is an even trade, nothing is lost.
+    expect(detectPattern('6k1/5ppp/2n5/4p3/8/5N2/5PPP/6K1 b - - 0 1', 'c6d4', ['f3d4', 'e5d4'], [], [])).toBeUndefined();
+  });
+  it('a pawn push that takes the only guard away from a piece is a removed defender', () => {
+    // 1.a5?? — the a4 pawn was the only guard of the b5 knight: Rxb5.
+    const hit = detectPattern('1r4k1/5ppp/8/1N6/P7/8/5PPP/6K1 w - - 0 1', 'a4a5', ['b8b5'], [], []);
+    expect(hit).toMatchObject({ tag: 'removed_defender', side: 'refutation' });
+    expect(hit!.evidence).toBe('the pawn on a4 was the only guard of the knight on b5; after a5, Rxb5 took it');
+  });
+  it('a capture that abandons a guard is a grab, not a removed defender', () => {
+    // 1.Qxa7 leaves the d5 knight to Rxd5: the lesson is the grab, so no removed-defender tag.
+    const hit = detectPattern('3r2k1/p4ppp/8/3N4/8/8/3Q1PPP/6K1 w - - 0 1', 'd2a7', ['d8d5'], [], []);
+    expect(hit?.tag).not.toBe('removed_defender');
+  });
+  it('moving the pawn that shielded your queen opens the line to it', () => {
+    // 1...c4?? — the c5 pawn was blocking the g1 bishop from the b6 queen: Bxb6.
+    const hit = detectPattern('6k1/5ppp/1q6/2p5/8/8/6PP/6BK b - - 0 1', 'c5c4', ['g1b6'], [], []);
+    expect(hit).toMatchObject({ tag: 'unblocked_queen', side: 'refutation' });
+    expect(hit!.evidence).toBe('the pawn on c5 was blocking the bishop on g1 from your queen on b6; after c4, the line was open');
+  });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
     const hit = detectPattern(f, 'e1e2', ['e8d7'], ['b5c7', 'e8d7', 'c7a8'], []);
@@ -144,11 +169,11 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     expect(moment(g, 21).text.lesson).toBe(PATTERN_RULE.fork);
     expect(moment(g, 21).tactic).toEqual({ tag: 'fork', side: 'refutation' });
   });
-  it('keeps the blunder-check lesson only for a piece that was simply hanging (vs Jose-Dang, 5.Nxe5 Nxe5)', () => {
+  it('a capture of a defended pawn is "count the defenders", not "left unprotected" (vs Jose-Dang, 5.Nxe5 Nxe5)', () => {
     const g = game('josedang-game');
-    expect(g.patterns?.[9]).toMatchObject({ tag: 'hanging_piece', hanging: 'moved' });
-    expect(moment(g, 9).text.title).toBe('5.Nxe5 — a piece left unprotected');
-    expect(moment(g, 9).text.lesson).toBe(BLUNDER_CHECK);
+    expect(g.findings.find((f) => f.ply === 9)).toMatchObject({ category: 'defended_grab' });
+    expect(moment(g, 9).text.title).toBe('5.Nxe5 — that pawn was defended');
+    expect(moment(g, 9).text.lesson).not.toBe(BLUNDER_CHECK);
   });
   it('a back-rank tactic is the lesson even when the move is also a rook round trip (vs Harrisonisbadatchess69, 19...Rfd8)', () => {
     const g = game('harrison-game');
