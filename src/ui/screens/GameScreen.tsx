@@ -46,7 +46,7 @@ function useAnalysis(game: StoredGame | undefined) {
         setProgress(null);
         await refresh();
         // AI is used only where it adds most: explanations for this game's 1–2 lessons.
-        if (llm.provider && settings.useLlm && (!llm.requiresToken || settings.coachToken)) void explainLessons(g.id).then(() => refresh());
+        if (llm.provider && settings.useLlm && settings.autoLessonAi !== false && (!llm.requiresToken || settings.coachToken)) void explainLessons(g.id).then(() => refresh());
       })
       .catch(async (e) => {
         setProgress(null);
@@ -60,7 +60,7 @@ function useAnalysis(game: StoredGame | undefined) {
   const explained = useRef<string | null>(null);
   useEffect(() => {
     if (!game || game.status !== 'analyzed' || explained.current === game.id) return;
-    if (!llm.provider || !settings.useLlm || (llm.requiresToken && !settings.coachToken)) return;
+    if (!llm.provider || !settings.useLlm || settings.autoLessonAi === false || (llm.requiresToken && !settings.coachToken)) return;
     const missing = game.moments.some((m) => m.tier === 'lesson' && m.kind === 'mistake' && !game.aiExplanations?.[m.betterPly]);
     explained.current = game.id;
     if (missing)

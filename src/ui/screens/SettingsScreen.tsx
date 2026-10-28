@@ -56,6 +56,12 @@ export function SettingsScreen() {
             )}
             {llm.provider && (
               <label className="check">
+                <input type="checkbox" checked={settings.autoLessonAi !== false} disabled={!settings.useLlm} onChange={(e) => updateSettings({ autoLessonAi: e.target.checked })} />
+                <span>Explain each game's lessons automatically (up to 2 AI requests per game, saved). Why? on other moves only runs when you tap "Ask the AI coach".</span>
+              </label>
+            )}
+            {llm.provider && (
+              <label className="check">
                 <input type="checkbox" checked={settings.betaCoach !== false} disabled={!settings.useLlm} onChange={(e) => updateSettings({ betaCoach: e.target.checked })} />
                 <span>
                   <span className="beta-badge">Beta</span> AI Coach tab — the AI's own whole-game review, shown next to the built-in coach for comparison

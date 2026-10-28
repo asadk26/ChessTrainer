@@ -897,3 +897,4 @@ a { color: var(--accent); }
 .line-point .eyebrow { display: block; margin-bottom: 0.1rem; }
 .gr-bubble .line-point { display: none; }
 .gr-dock-sheet .line-steps.at-end { display: none; }
+.ai-ask { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.4rem; }

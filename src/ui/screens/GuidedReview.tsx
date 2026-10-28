@@ -783,7 +783,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
       )}
       {mine ? (
         aiOn ? (
-          <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} auto />
+          <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} askLabel="Ask the AI coach" />
         ) : (
           <p className="muted small ai-status">{aiBlocker ?? (llm.provider ? 'AI explanations are switched off (Settings) — the explanation above is from Stockfish.' : 'AI explanations aren’t set up on this deployment — the explanation above is from Stockfish.')}</p>
         )

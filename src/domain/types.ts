@@ -470,6 +470,8 @@ export interface PlayerSettings {
   analysisDepth: number;
   focus?: { title: string; detail: string; theme: ThemeId; setAt: number; gameId: string };
   useLlm: boolean;
+  /** Write AI explanations for each game's 1–2 lessons without asking (default on). Why? on other moves is always on request. */
+  autoLessonAi?: boolean;
   /** Access code for a hosted AI coach (COACH_ACCESS_TOKEN). Never included in exports. */
   coachToken?: string;
   /** Optional Chess.com syncing (public API, no login). */

@@ -70,16 +70,20 @@ export function AiExplain({
   bestSan,
   auto = false,
   compact = false,
+  askLabel,
 }: {
   game: StoredGame;
   ply: number;
   bestSan?: string;
-  /** Generate without a click (used for the game's 1–2 lessons). */
+  /** Generate without a click (used for the game's 1–2 lessons, unless switched off in Settings). */
   auto?: boolean;
   compact?: boolean;
+  /** Label of the request button; with a note that it uses one AI request. */
+  askLabel?: string;
 }) {
-  const { refresh } = useApp();
+  const { refresh, settings } = useApp();
   const available = useAiAvailable();
+  const autoOn = auto && settings.autoLessonAi !== false;
   const blocker = useAiBlocker();
   // Explanations written before the current rules (concrete reasons, engine facts) are redone on request.
   const stored = game.aiExplanations?.[ply];
@@ -103,9 +107,9 @@ export function AiExplain({
     }
   };
   useEffect(() => {
-    if (auto && available && !cached && state === 'idle' && !failedAuto.has(key)) void run(false, true);
+    if (autoOn && available && !cached && state === 'idle' && !failedAuto.has(key)) void run(false, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto, available, cached, ply]);
+  }, [autoOn, available, cached, ply]);
 
   if (!available && !cached) {
     return blocker ? <p className={`ai-box muted small ${compact ? 'compact' : ''}`}>{blocker}</p> : null;
@@ -125,12 +129,19 @@ export function AiExplain({
           )}
           {available && cached.model !== 'none' && (
             <button className="link small" disabled={state === 'loading'} onClick={() => run(true)}>
-              {state === 'loading' ? 'Regenerating…' : 'Regenerate'}
+              {state === 'loading' ? 'Regenerating…' : 'Regenerate (uses 1 AI request)'}
             </button>
           )}
         </>
       ) : state === 'loading' ? (
         <p className="muted small">The coach is writing an explanation…</p>
+      ) : askLabel ? (
+        <div className="ai-ask">
+          <button className="btn ghost small why-btn" onClick={() => run()}>
+            {askLabel}
+          </button>
+          <span className="muted small">Uses 1 AI request · saved for next time</span>
+        </div>
       ) : (
         <button className="btn ghost small why-btn" onClick={() => run()}>
           Why?
