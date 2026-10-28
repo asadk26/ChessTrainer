@@ -19,9 +19,10 @@ export interface PatternStat {
 
 export const patternsOf = (g: StoredGame) => g.patterns ?? gamePatterns(g);
 
-export function patternStats(games: StoredGame[]): PatternStat[] {
+/** `side`: only tactics the opponent used against you ('refutation') or ones you missed ('better'). */
+export function patternStats(games: StoredGame[], side?: 'refutation' | 'better'): PatternStat[] {
   const real = games.filter((g) => g.status === 'analyzed' && isRealGame(g)).sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
-  const tagged = real.map((g) => ({ g, p: patternsOf(g) }));
+  const tagged = real.map((g) => ({ g, p: Object.fromEntries(Object.entries(patternsOf(g)).filter(([, h]) => !side || h.side === side)) }));
   const tags = new Set(tagged.flatMap((x) => Object.values(x.p).map((h) => h.tag)));
   return [...tags]
     .map((tag): PatternStat => {

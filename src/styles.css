@@ -738,3 +738,29 @@ a { color: var(--accent); }
 .focus-more[open] summary::after { content: ' ▴'; }
 .focus-more p:first-of-type { margin-top: 0.5rem; }
 .sparkline.down { color: var(--warn); }
+
+/* ---------------------------------------------------------------- progress */
+.progress-screen h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 1.1rem 0 0.45rem; }
+.record { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.record-main { font-size: 1.35rem; }
+.record-main .w { color: var(--accent); }
+.record-main .d { color: var(--muted); }
+.record-main .l { color: var(--warn); }
+.result-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--track); margin: 0.35rem 0 0.1rem; }
+.result-bar span { display: block; height: 100%; }
+.result-bar .w { background: var(--accent); }
+.result-bar .d { background: var(--muted); opacity: 0.45; }
+.result-bar .l { background: var(--warn); }
+.result-table { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.rt-head { display: flex; justify-content: space-between; gap: 0.6rem; align-items: baseline; }
+.rt-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; }
+.tactic-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+.tl-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.tl-body { display: flex; gap: 0.8rem; align-items: flex-start; margin-top: 0.35rem; }
+.tl-text { flex: 1; min-width: 0; }
+.tl-text p { margin: 0 0 0.2rem; }
+.month-bars { display: flex; gap: 4px; flex: none; }
+.month-bars > span { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.mb-track { width: 13px; height: 30px; background: var(--track); border-radius: 3px; display: flex; align-items: flex-end; overflow: hidden; }
+.mb-track i { display: block; width: 100%; background: var(--accent); }
+.month-bars em { font-size: 0.62rem; font-style: normal; color: var(--muted); line-height: 1; }
