@@ -50,7 +50,7 @@ export function TabBar() {
   );
 }
 
-const PATHS: Record<TabId | 'gear' | 'plus' | 'back', ReactNode> = {
+const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'trash', ReactNode> = {
   home: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
   games: (
     <>
@@ -79,12 +79,13 @@ const PATHS: Record<TabId | 'gear' | 'plus' | 'back', ReactNode> = {
     </>
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  trash: <path d="M4 7h16M9 7V4.5h6V7M6.5 7l.9 12.5a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9L17.5 7M10 11v5.5M14 11v5.5" />,
   back: <path d="M15 5l-7 7 7 7" />,
 };
 
-export function Icon({ name }: { name: keyof typeof PATHS }) {
+export function Icon({ name, size = 22 }: { name: keyof typeof PATHS; size?: number }) {
   return (
-    <svg className="ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="ico" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {PATHS[name]}
     </svg>
   );

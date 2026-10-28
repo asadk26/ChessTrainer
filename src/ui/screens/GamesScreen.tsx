@@ -130,7 +130,7 @@ function GameRow({ g }: { g: StoredGame }) {
             }
           }}
         >
-          ×
+          <Icon name="trash" size={17} />
         </button>
       </span>
     </li>
