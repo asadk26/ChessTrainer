@@ -11,38 +11,41 @@ const coach = (n: Parameters<typeof fixtureGame>[0]) => {
 };
 const LOOSE = /check whether it can simply be taken|let go of a piece/;
 
-describe('golden: chunkmonkey420 vs Drearydoc (A16) — loosened kingside, knight to the rim, a defended pawn', () => {
+// Ground truth (tests/truth): 12.f3 was Stockfish's own top move. The root cause is 13.Nh3 — the knight
+// went to the rim, where …exf3 Rxf3 g4 forks it and the rook — then 16.Bxg4 took a pawn the f6 knight defended.
+describe('golden: chunkmonkey420 vs Drearydoc (A16) — knight to the rim into a pawn fork, then a defended pawn', () => {
   const { game: g, drills } = coach('drearydoc-game');
   const f = (ply: number, cat: string) => g.findings.find((x) => x.ply === ply && x.category === cat);
 
-  it('finds the setup: 12.f3 loosened the king, …g5 drove the knight to the rim', () => {
-    expect(f(23, 'king_pawns')?.evidence).toMatch(/^12\.f3 loosened the pawns in front of your king, and Black's pawns came forward with tempo \(12\.\.\.g5, 14\.\.\.exf3, 15\.\.\.g4\)/);
-    expect(f(25, 'piece_to_rim')?.evidence).toBe('12...g5 drove your knight to the rim: 13.Nh3, where it has only two safe squares.');
+  it('never blames 12.f3, Stockfish’s top move', () => {
+    const r = g.report!;
+    expect(g.findings.some((x) => x.ply === 23 && x.kind === 'weakness')).toBe(false);
+    expect([r.headline, r.story ?? '', r.focus.title, r.focus.detail, ...r.hurt.map((h) => h.text)].join(' ')).not.toMatch(/12\.f3/);
+    expect(g.moments.some((m) => m.ply === 23)).toBe(false);
   });
-  it('names the decisive mistake: 16.Bxg4 took a pawn defended by the knight on f6', () => {
+  it('13.Nh3: the knight on the rim walks into a pawn fork (…exf3 Rxf3 g4)', () => {
+    const m = g.moments.find((x) => x.ply === 25);
+    expect(m?.tactic?.tag).toMatch(/fork/);
+    expect(f(25, 'piece_to_rim') ?? g.findings.find((x) => x.ply === 25 && x.facts.pattern)).toBeTruthy();
+  });
+  it('16.Bxg4 took a pawn defended by the knight on f6', () => {
     expect(f(31, 'defended_grab')?.evidence).toBe('16.Bxg4 took the pawn on g4, but it was defended by the knight on f6 — Nxg4 won your bishop.');
     expect(g.findings.some((x) => x.ply === 31 && x.category === 'premature_capture')).toBe(false);
   });
-  it('tells the story in order — setup, decisive mistake, result', () => {
+  it('tells the story in order: 13.Nh3, then the decisive 16.Bxg4, then the mate', () => {
     const s = g.report!.story!;
     const at = (t: string) => s.indexOf(t);
-    expect(at('12.f3')).toBeGreaterThanOrEqual(0);
-    expect(at('12.f3')).toBeLessThan(at('13.Nh3'));
-    expect(at('13.Nh3')).toBeLessThan(at('Then the decisive mistake: 16.Bxg4'));
+    expect(at('13.Nh3')).toBeGreaterThanOrEqual(0);
+    expect(at('13.Nh3')).toBeLessThan(at('16.Bxg4'));
     expect(at('16.Bxg4')).toBeLessThan(at('checkmate on move 36'));
-    expect(s).toMatch(/With your king exposed/);
   });
-  it('the lesson is counting defenders, plus king safety — never the generic blunder check', () => {
+  it('leads with 13.Nh3 and 16.Bxg4, and the lesson is counting defenders — never the generic blunder check', () => {
     const r = g.report!;
-    expect(r.headline).toMatch(/^You took a defended pawn and lost the piece that took it \(16\.Bxg4\), after 12\.f3 loosened the pawns in front of your king and your knight was driven to the rim \(13\.Nh3\)\./);
+    expect(r.headline).toMatch(/16\.Bxg4/);
+    expect(r.headline).toMatch(/13\.Nh3/);
     expect(r.focus.title).toBe('Before you capture, count the defenders.');
-    expect(r.focus.detail).toMatch(/Also from this game: leave the pawns in front of your castled king alone/);
     expect(`${r.headline} ${r.focus.title} ${r.focus.detail}`).not.toMatch(LOOSE);
     expect(g.moments.find((m) => m.ply === 31)?.text.lesson).toMatch(/^Before you capture, count the defenders/);
-    expect(g.moments.find((m) => m.ply === 25)?.text.title).toBe('13.Nh3 — a knight on the rim');
-  });
-  it('12.f3 (Stockfish’s own choice) is in the story, never a "find a better move" lesson', () => {
-    expect(g.moments.some((m) => m.ply === 23)).toBe(false);
   });
   it('drills the decisive move as "spot the danger": …Nxg4', () => {
     const d = drills.find((x) => x.ply === 31)!;
