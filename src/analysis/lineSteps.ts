@@ -53,7 +53,8 @@ export function stepCaption(fenBefore: string, uci: string, pov: Color, prevTo?:
   if (pin && parts.length < 3) parts.push(pin.replace(/^the \w+ on \w\d /, '').replace(/^pins/, 'pins'));
   if (inCheck) parts.unshift(legal === 1 ? 'the only legal move out of check' : 'gets out of check');
   else if (legal === 1) parts.unshift('the only legal move');
-  if (!parts.length) parts.push(mine ? 'a quiet improving move' : 'a quiet move');
+  // Nothing to say about it: just the move, rather than filler like "a quiet move".
+  if (!parts.length) return `${mv.san}.`;
   return `${mv.san} ${parts.slice(0, 3).join(', ')}.`.replace(/ ,/g, ',');
 }
 

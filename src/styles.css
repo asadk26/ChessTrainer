@@ -775,11 +775,12 @@ a { color: var(--accent); }
    the action bar, all fitted to the viewport above the tab bar. Longer text opens in a sheet. */
 :root { --tabbar-h: 62px; }
 .tabbar { box-sizing: border-box; min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
-.container:has(> .game-page.tab-review) { padding-bottom: 0; }
+.container:has(> .game-page.tab-review) { padding-bottom: 0; overflow-x: clip; }
 .game-page.tab-review {
   --pad: 1.25rem;
   height: calc(100dvh - var(--pad) - var(--tabbar-h) - env(safe-area-inset-bottom));
-  max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden;
+  /* No overflow clipping here: the board and sheets run edge to edge, past this box's padding. */
+  max-width: 640px; margin: 0 auto; display: flex; flex-direction: column;
 }
 @media (max-width: 860px) { .game-page.tab-review { --pad: 0.9rem; } }
 .game-page.tab-review > .game-header { flex: none; gap: 0.15rem; margin-bottom: 0.35rem; }
@@ -853,9 +854,10 @@ a { color: var(--accent); }
   border-radius: 16px 16px 0 0; padding: 0 12px 6px; box-shadow: 0 -6px 16px var(--shadow); transition: transform 0.15s;
 }
 .gr-dock-sheet .move-caption { display: none; }
-@media (max-height: 720px) { .gr-dock-sheet .line-steps { display: none; } .gr-dock-sheet .muted.small { display: none; } }
+@media (max-height: 720px) { .gr-dock-sheet .line-steps { display: none; } .gr-dock-sheet .line-point { margin-top: 0.3rem; } .gr-dock-sheet .muted.small { display: none; } }
 .gr-dock-sheet .line-steps { margin: 0 0 0.4rem; }
-.gr-dock-sheet .board-controls { margin: 0; }
+.gr-dock-sheet .board-controls { margin: 0; position: sticky; bottom: 0; z-index: 1; background: var(--card); padding: 6px 0 2px; }
+.gr-dock-sheet { max-height: 52%; }
 
 .gr-sheet-wrap { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
 .gr-sheet-wrap.open { pointer-events: auto; }
@@ -890,3 +892,8 @@ a { color: var(--accent); }
   .gr-dock .btn { padding: 0.35rem 0.75rem; font-size: 0.86rem; min-height: 36px; }
   .gr-dock .actions { gap: 0.35rem; }
 }
+
+.line-point { background: var(--surface-2); border-radius: 10px; padding: 0.45rem 0.65rem; margin: 0 0 0.5rem; font-size: 0.9rem; }
+.line-point .eyebrow { display: block; margin-bottom: 0.1rem; }
+.gr-bubble .line-point { display: none; }
+.gr-dock-sheet .line-steps.at-end { display: none; }

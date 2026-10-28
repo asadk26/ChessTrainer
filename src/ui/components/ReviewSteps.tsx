@@ -8,7 +8,14 @@ import { Verdict, type Panels } from './reviewParts';
 import { CoachText } from './CoachText';
 import { gapBetween, qualityOf, qualityOfGap, type Quality } from '../../analysis/moveQuality';
 import { scoreToCp } from '../../analysis/evaluation';
+
+/** Plain words for an evaluation from your side. */
+const bandText = (cp: number) => (cp >= 300 ? "you're winning" : cp >= 120 ? "you're clearly better" : cp >= 40 ? "you're slightly better" : cp > -40 ? 'about equal' : cp > -120 ? "you're slightly worse" : cp > -300 ? "you're clearly worse" : "you're losing");
 import { lineSteps } from '../../analysis/lineSteps';
+import { materialText } from '../../analysis/linePoint';
+import { compareLines } from '../../analysis/compareLines';
+import { positionCp } from '../../analysis/evaluation';
+import { evalText } from '../../coach/momentContext';
 import { moveLabel } from '../../chess/pgn';
 import { uciToSan } from '../../chess/board';
 import { evaluateMove } from '../actions';
@@ -119,6 +126,37 @@ export function useLineView(game: StoredGame) {
       : lineSteps(p.fenBefore, a.positions[view.ply - 1]?.lines[0]?.pv ?? [], game.userColor, 5);
   }, [game, view?.ply, view?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The point of the line, said after its last move: what it wins, where Stockfish stands, and —
+  // for your own moves — how it compares with the better move.
+  const point = useMemo(() => {
+    if (!view || !steps.length || !game.analysis) return undefined;
+    const p = game.plies[view.ply - 1];
+    const a = game.analysis;
+    const start = view.kind === 'refutation' ? p.fenAfter : p.fenBefore;
+    const material = materialText(start, steps[steps.length - 1].fen, game.userColor);
+    const pos = view.kind === 'refutation' ? a.positions[view.ply] : a.positions[view.ply - 1];
+    // Engine scores are for the side to move; turn them into your point of view.
+    const toMove = view.kind === 'refutation' ? (p.color === 'w' ? 'b' : 'w') : p.color;
+    const cp = pos ? (toMove === game.userColor ? positionCp(pos) : -positionCp(pos)) : undefined;
+    let compare: string | undefined;
+    if (view.kind === 'refutation' && p.color === game.userColor && a.positions[view.ply - 1]?.lines[0]) {
+      const before = a.positions[view.ply - 1];
+      const c = compareLines({
+        fen: p.fenBefore,
+        mover: p.color,
+        preferred: { ucis: before.lines[0].pv, cp: scoreToCp(before.lines[0].score) },
+        other: { ucis: [p.uci, ...(a.positions[view.ply]?.lines[0]?.pv ?? [])], cp: cp ?? 0 },
+      });
+      if (c?.clear) compare = c.summary;
+    }
+    const parts = [
+      material ? `${material.charAt(0).toUpperCase()}${material.slice(1)}.` : 'No material changes hands in these moves.',
+      cp !== undefined ? `Stockfish: ${bandText(cp)} (${evalText(cp)}).` : '',
+      compare ?? '',
+    ];
+    return parts.filter(Boolean).join(' ');
+  }, [game, view?.ply, view?.kind, steps]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const panels = ((): Panels | null => {
     if (!view || !steps.length) return null;
     const p = game.plies[view.ply - 1];
@@ -140,7 +178,7 @@ export function useLineView(game: StoredGame) {
           <p className="move-caption">
             <b>{title}</b> <span className="muted">· move {Math.max(0, view.idx + 1)} of {steps.length}</span>
           </p>
-          <ol className="line-steps">
+          <ol className={`line-steps ${last && point ? 'at-end' : ''}`}>
             {steps.map((x, i) => (
               <li key={i} className={i === view.idx ? 'on' : i < view.idx ? 'done' : 'todo'}>
                 {i <= view.idx ? <CoachText text={x.caption} /> : <span className="muted">…</span>}
@@ -148,6 +186,12 @@ export function useLineView(game: StoredGame) {
             ))}
           </ol>
           {view.idx < 0 && <p className="muted small">Tap Next to play the first move.</p>}
+          {last && point && (
+            <div className="line-point">
+              <span className="eyebrow">Where it leads</span>
+              <CoachText text={point} />
+            </div>
+          )}
         </>
       ),
       banner: (
@@ -178,6 +222,7 @@ export function useLineView(game: StoredGame) {
     ? {
         title: view.kind === 'refutation' ? `What goes wrong after ${moveLabel(game.plies[view.ply - 1])}` : `The better line instead of ${moveLabel(game.plies[view.ply - 1])}`,
         caption: view.idx >= 0 ? steps[view.idx].caption : 'Tap Next to play the first move.',
+        point: view.idx >= steps.length - 1 ? point : undefined,
         idx: view.idx,
         total: steps.length,
       }

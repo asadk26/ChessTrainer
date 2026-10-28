@@ -10,7 +10,7 @@ import { Verdict, type Panels } from '../components/reviewParts';
 import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoard';
 import { useLessonRunner } from '../components/LessonRunner';
 import { EvalChange } from '../components/EvalBar';
-import { AiExplain } from '../components/AiExplain';
+import { AiExplain, useAiAvailable, useAiBlocker } from '../components/AiExplain';
 import { classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
 import { QualityBadge, whiteEvals } from '../components/ReviewVisuals';
 import { ActionButton, BoardZone, BottomSheet, CoachBubble, DockSheet, EvalStrip } from '../components/ReviewShell';
@@ -508,7 +508,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const [doneIds, setDoneIds] = useState<Set<string>>(() => new Set(game.completedMomentIds));
   // The practice board for one decision (position before that move), or null.
   const [practicePly, setPracticePly] = useState<number | null>(exploring ? initialPly! : null);
-  const practice = usePracticeBoard(game, practicePly, () => setPracticePly(null));
+  // Opened from the action bar: straight into "play your own moves".
+  const [practiceTry, setPracticeTry] = useState(false);
+  const practice = usePracticeBoard(game, practicePly, () => (setPracticePly(null), setPracticeTry(false)), practiceTry ? 'try' : 'overview');
   const topRef = useRef<HTMLDivElement>(null);
 
   const finish = (m: TeachingMoment, completed: boolean) => {
@@ -521,14 +523,14 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     active,
     () => active && finish(active, true),
     () => active && finish(active, false),
-    (p) => setPracticePly(p),
+    (p) => (setPracticeTry(false), setPracticePly(p)),
   );
   const lesson = useLessonRunner(
     game,
     active,
     () => active && finish(active, true),
     () => active && finish(active, false),
-    (p) => setPracticePly(p),
+    (p) => (setPracticeTry(false), setPracticePly(p)),
   );
   const seenBefore = useSeenBefore(game, active);
   // Only lessons stop the play-through; notes are shown in passing.
@@ -664,7 +666,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
             }
           />
           {noteHere.kind === 'mistake' && (
-            <button className="btn ghost small" onClick={() => setPracticePly(noteHere.betterPly)}>
+            <button className="btn ghost small" onClick={() => (setPracticeTry(false), setPracticePly(noteHere.betterPly))}>
               Explore
             </button>
           )}
@@ -725,7 +727,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
                   ? 'The only good move here — well found.'
                   : cls === 'brilliant'
                     ? 'A sound sacrifice — Stockfish agrees.'
-                    : "Stockfish's top choice.";
+                    : '';
   const viewPly = active ? active.ply - 1 : steps ? ply : ply;
   const evalHere = practice ? undefined : whites[viewPly];
   const yourView = (w: number) => (game.userColor === 'w' ? w : -w);
@@ -745,12 +747,14 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const goodOrWorse = !!cls && ['good', 'inaccuracy', 'mistake', 'blunder'].includes(cls);
   const canRefute = (game.analysis?.positions[ply]?.lines[0]?.pv.length ?? 0) > 0;
   const atEnd = ply >= game.plies.length;
+  // Try your own moves: instead of your move here, or — after your opponent's move — as your reply.
+  const tryPly = ply > 0 && current?.color === game.userColor ? ply : game.plies[ply]?.color === game.userColor ? ply + 1 : undefined;
   const nextLabel = atEnd ? 'Drills' : upcoming && !doneIds.has(upcoming.id) ? 'Next: stop & think' : 'Next';
   const actionBar = (
     <div className="gr-actions">
       {goodOrWorse && <ActionButton icon={<Icon name="why" />} label="Why?" onClick={() => setSheet('why')} />}
-      {goodOrWorse && canRefute && <ActionButton icon={<Icon name="showme" />} label="Show me" onClick={() => lineView.open(ply, 'refutation')} />}
-      <ActionButton icon={<Icon name="try" />} label="Try moves" disabled={ply === 0} onClick={() => setPracticePly(ply)} />
+      {(cls === 'mistake' || cls === 'blunder') && canRefute && <ActionButton icon={<Icon name="showme" />} label="Show me" onClick={() => lineView.open(ply, 'refutation')} />}
+      <ActionButton icon={<Icon name="try" />} label="Try moves" disabled={tryPly === undefined} onClick={() => (setPracticeTry(true), setPracticePly(tryPly!))} />
       {evalAt && !evalAt.isBest && evalAt.bestSan && <ActionButton icon={<Icon name="best" />} label="Best" onClick={() => lineView.open(ply, 'better')} />}
       <button className="btn primary gr-next" onClick={atEnd ? () => navigate(`/game/${game.id}/drills`) : next}>
         {nextLabel} ›
@@ -759,6 +763,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   );
 
   // ---------------------------------------------------------- sheet contents
+  const aiOn = useAiAvailable();
+  const aiBlocker = useAiBlocker();
+  const { llm } = useApp();
   const whyCmp = useMemo(() => (sheet === 'why' && ply > 0 ? gameMoveComparison(game, ply) : undefined), [sheet, game, ply]);
   const whySheet = evalAt ? (
     <div className="gr-why">
@@ -774,7 +781,22 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
           <CoachText text={whyCmp.comparison.summary} />
         </div>
       )}
-      {mine ? <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} auto /> : <p className="muted small">The AI explains your own moves; for your opponent's, use Show me to see what Stockfish would punish it with.</p>}
+      {mine ? (
+        aiOn ? (
+          <AiExplain game={game} ply={ply} bestSan={evalAt.bestSan} auto />
+        ) : (
+          <p className="muted small ai-status">{aiBlocker ?? (llm.provider ? 'AI explanations are switched off (Settings) — the explanation above is from Stockfish.' : 'AI explanations aren’t set up on this deployment — the explanation above is from Stockfish.')}</p>
+        )
+      ) : (
+        <>
+          <p className="muted small">This was {game.opponentName}'s move.</p>
+          {(cls === 'mistake' || cls === 'blunder') && canRefute && (
+            <button className="btn ghost small" onClick={() => (setSheet(null), lineView.open(ply, 'refutation'))}>
+              Show how to punish it
+            </button>
+          )}
+        </>
+      )}
     </div>
   ) : null;
   const moreSheet = (

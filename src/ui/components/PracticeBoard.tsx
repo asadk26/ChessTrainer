@@ -70,7 +70,8 @@ interface TryMove extends SequenceFrame {
   quality?: Quality;
 }
 
-export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: () => void): Panels | null {
+/** `startIn: 'try'` opens straight on "play your own moves" (Guided Review's Try moves button). */
+export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: () => void, startIn: 'overview' | 'try' = 'overview'): Panels | null {
   const [mode, setMode] = useState<Mode>('overview');
   const [lineView, setLineView] = useState<'preferred' | 'other'>('preferred');
   const [lineStep, setLineStep] = useState(0);
@@ -87,7 +88,7 @@ export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: 
   useEffect(() => {
     token.current++;
     const my = token.current;
-    setMode('overview');
+    setMode(startIn === 'try' && ply !== null && game.plies[ply - 1]?.color === game.userColor ? 'try' : 'overview');
     setLineView('preferred');
     setLineStep(0);
     setLongLine(false);
