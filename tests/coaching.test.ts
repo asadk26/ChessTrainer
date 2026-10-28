@@ -74,12 +74,15 @@ describe('sample game coaching (from recorded Stockfish output)', () => {
     expect(game.report!.recurring).not.toMatch(/appeared in \d+ of/);
   });
 
-  it('generates 2-3 varied drills', () => {
+  it('generates 2-3 board drills, one per moment, never multiple choice', () => {
     expect(drills.length).toBeGreaterThanOrEqual(2);
     expect(drills.length).toBeLessThanOrEqual(3);
-    expect(new Set(drills.map((d) => d.type)).size).toBe(drills.length);
-    const predict = drills.find((d) => d.type === 'predict_response');
-    expect(predict?.acceptableUcis).toContain('a7b7');
+    expect(new Set(drills.map((d) => d.ply)).size).toBe(drills.length);
+    for (const d of drills) {
+      expect(['find_better', 'predict_response']).toContain(d.type);
+      expect(d.options).toBeUndefined();
+      expect(d.acceptableUcis?.length).toBeGreaterThan(0);
+    }
   });
 });
 

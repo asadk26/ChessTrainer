@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Arrow, Drill, StoredGame } from '../../domain/types';
 import { FlagButton } from '../components/FlagButton';
 import { Board } from '../components/Board';
@@ -6,12 +6,15 @@ import { CoachText, HoverProvider } from '../components/CoachText';
 import { navigate, useApp } from '../store';
 import { repo } from '../../storage/repo';
 import { categoryLabel } from '../../domain/categories';
+import { PATTERN_LABEL } from '../../analysis/patterns';
 import { playLine, sideToMove } from '../../chess/board';
-import { closeToBest, evaluateMove } from '../actions';
+import { closeToBest, evaluateMove, recoach } from '../actions';
+import { REPORT_VERSION } from '../../coach/report';
+import { ScreenHeader } from '../components/AppShell';
 
 const TYPE_LABEL: Record<Drill['type'], string> = {
   find_better: 'Find the better move',
-  predict_response: 'Predict the response',
+  predict_response: 'Spot the danger',
   identify_problem: 'Identify the problem',
   choose_plan: 'Choose the plan',
 };
@@ -71,7 +74,8 @@ function DrillRunner({ drill, onNext, hasNext, game }: { drill: Drill; onNext: (
       <div className="review-panel card">
         <div className="moment-head">
           <span className="tag">{TYPE_LABEL[drill.type]}</span>
-          <span className="muted small">{categoryLabel(drill.category)}</span>
+          {/* What it's about only after answering: before, it would give the answer away. */}
+          {done && <span className="muted small">{drill.tactic ? PATTERN_LABEL[drill.tactic] : categoryLabel(drill.category)}</span>}
         </div>
         <CoachText text={drill.prompt} className="prompt" />
         {drill.options && (
@@ -126,12 +130,14 @@ export function DrillList({ gameId }: { gameId?: string }) {
   const { drills, attempts, games } = useApp();
   const solved = useMemo(() => new Set(attempts.filter((a) => a.correct).map((a) => a.drillId)), [attempts]);
   const list = useMemo(() => {
-    const ds = drills.filter((d) => !gameId || d.gameId === gameId);
+    // Multiple-choice drills from older versions are retired (too many overlapping answers);
+    // their games get board drills when they're re-coached.
+    const ds = drills.filter((d) => (!gameId || d.gameId === gameId) && (d.type === 'find_better' || d.type === 'predict_response'));
     if (gameId) return ds;
     // Unsolved first, then oldest attempts — light spaced repetition.
     return [...ds].sort((a, b) => Number(solved.has(a.id)) - Number(solved.has(b.id)) || b.createdAt - a.createdAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drills.length, gameId]);
+  }, [drills.map((d) => d.id + d.type).join('|'), gameId]);
   const [idx, setIdx] = useState(0);
   const [finished, setFinished] = useState(false);
 
@@ -176,11 +182,25 @@ export function DrillList({ gameId }: { gameId?: string }) {
 }
 
 export function DrillsScreen() {
+  const { games, refresh } = useApp();
+  const [updating, setUpdating] = useState(false);
+  // Games coached by an older version get today's drills (board drills, current wording) first.
+  useEffect(() => {
+    const stale = games.filter((g) => g.status === 'analyzed' && g.report && g.report.voice === 'template' && (g.report.version ?? 1) < REPORT_VERSION);
+    if (!stale.length) return;
+    setUpdating(true);
+    void (async () => {
+      for (const g of stale) await recoach(g.id);
+      await refresh();
+      setUpdating(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <HoverProvider>
-      <h1>Drills</h1>
-      <p className="muted">Positions from your own games, chosen to reinforce the concept — not to memorise engine lines.</p>
-      <DrillList />
+      <ScreenHeader title="Drills" />
+      <p className="muted">Positions from your own games: spot the danger, or find the better move.</p>
+      {updating ? <p className="muted">Updating drills from your latest coaching…</p> : <DrillList />}
     </HoverProvider>
   );
 }

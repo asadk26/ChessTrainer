@@ -51,7 +51,8 @@ describe('coaching a game where you are far ahead', () => {
     expect(m.acceptableReplyUcis[0]).toBe('f3g4'); // ...Qg4+
     const d = drills.find((x) => x.ply === 45)!;
     expect(d.type).toBe('predict_response');
-    expect(d.prompt).toMatch(/most dangerous/);
+    expect(d.prompt).toMatch(/strongest reply/);
+    expect(d.explanation.length).toBeGreaterThan(20);
   });
 });
 

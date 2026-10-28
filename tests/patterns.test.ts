@@ -119,6 +119,14 @@ describe('regression: chunkmonkey420 vs Atayan48 (flagged: "it was a discovered 
     expect(g.report?.focus.title).toBe("Before you capture, ask what your opponent's reply can uncover.");
     expect(g.report?.headline).toMatch(/^You walked into a discovered attack\./);
   });
+  it('drills it as "spot the danger": play …Ne5, and the answer names the discovered attack', () => {
+    const f = fixtureGame('atayan-game');
+    const d = coachFromPositions(f.game, f.positions, []).drills.find((x) => x.ply === p16)!;
+    expect(d.type).toBe('predict_response');
+    expect(d.prompt).toBe("You played Nxd6 (arrow). What's Black's strongest reply? Play it for Black.");
+    expect(d.solutionSan).toBe('Ne5');
+    expect(d.explanation).toMatch(/discovered attack/);
+  });
   it('no longer claims 16.Nxf6+ "would have won the knight" (it was an even trade)', () => {
     expect(g.findings.some((x) => x.ply === p16 && x.category === 'tactical_blindness')).toBe(false);
   });

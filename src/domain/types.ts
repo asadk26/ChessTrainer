@@ -365,6 +365,8 @@ export interface Drill {
   /** Multiple-choice drills. */
   options?: string[];
   correctIndex?: number;
+  /** The tactic the position is about, when one was found (shown after answering). */
+  tactic?: import('../analysis/patterns').PatternTag;
   /** Arrow shown with the question (e.g. "you want to play this"). */
   questionArrow?: Arrow;
   explanation: string;
