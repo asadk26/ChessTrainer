@@ -799,4 +799,3 @@ a { color: var(--accent); }
   .game-page.tab-review .rv-side .legend { display: none; }
   .game-page.tab-review .rv.prompt-above .eval-graph, .game-page.tab-review .rv.prompt-above .move-strip { display: none; }
 }
-}
