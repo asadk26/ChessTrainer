@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ScreenHeader } from '../components/AppShell';
 import type { AdaptiveSession, AdaptiveSkill, Color } from '../../domain/types';
 import { navigate, useApp } from '../store';
 import { Board } from '../components/Board';
@@ -59,7 +60,7 @@ function SetupView({
 
   return (
     <div className="narrow coach-game">
-      <h1>Adaptive Coach Game</h1>
+      <ScreenHeader title="Play the coach" />
       {pendingAnalysis(games).length > 0 && (
         <p className="feedback neutral small">
           {pendingAnalysis(games).length} of your games aren’t analysed yet, so they don’t count here. Analyse them from the Games tab for a better-informed plan.

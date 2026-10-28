@@ -714,3 +714,27 @@ a { color: var(--accent); }
 .status-pill.analyzing { color: var(--accent); }
 .gr-right .icon.subtle { display: inline-flex; align-items: center; justify-content: center; }
 .gr-right .icon.subtle:hover { color: var(--warn); }
+
+/* ---------------------------------------------------------------- home */
+.home .card { margin-bottom: 0.8rem; }
+.latest-game { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.55rem 0 0.4rem; cursor: pointer; }
+.latest-game:focus-visible { outline: 2px solid var(--accent); border-radius: 8px; }
+.latest-headline { margin: 0.2rem 0 0.7rem; font-size: 0.95rem; }
+.latest-card .actions { margin: 0.2rem 0 0; align-items: center; }
+.latest-progress .progress { margin: 0.45rem 0 0; }
+.stats-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 0.8rem; display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.stat-value { font-size: 1.55rem; font-weight: 700; line-height: 1.15; }
+.stat-sub { font-size: 0.75rem; color: var(--muted); }
+.stat-sub.up { color: var(--accent); }
+.stat-sub.down { color: var(--warn); }
+.sparkline { width: 100%; height: 22px; color: var(--accent); margin-top: 0.25rem; }
+@media (max-width: 380px) { .stat { padding: 0.65rem 0.6rem; } .stat-value { font-size: 1.3rem; } }
+.home .focus-card h2 { font-size: 1.15rem; margin-bottom: 0.3rem; }
+.focus-more summary { cursor: pointer; color: var(--accent); font-size: 0.88rem; font-weight: 550; list-style: none; }
+.focus-more summary::-webkit-details-marker { display: none; }
+.focus-more summary::after { content: ' ▾'; font-size: 0.75rem; }
+.focus-more[open] summary::after { content: ' ▴'; }
+.focus-more p:first-of-type { margin-top: 0.5rem; }
+.sparkline.down { color: var(--warn); }
