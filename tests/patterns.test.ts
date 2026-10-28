@@ -54,7 +54,13 @@ describe('pattern tags on real mistakes', () => {
     // 1...c4?? — the c5 pawn was blocking the g1 bishop from the b6 queen: Bxb6.
     const hit = detectPattern('6k1/5ppp/1q6/2p5/8/8/6PP/6BK b - - 0 1', 'c5c4', ['g1b6'], [], []);
     expect(hit).toMatchObject({ tag: 'unblocked_queen', side: 'refutation' });
-    expect(hit!.evidence).toBe('the pawn on c5 was blocking the bishop on g1 from your queen on b6; after c4, the line was open');
+    expect(hit!.evidence).toBe('the pawn on c5 was blocking the bishop on g1 from your queen on b6, and c4 moved it');
+  });
+  it('a pawn fork counts even when a desperado evens out the material inside the line', () => {
+    // 1.Kh1?? g4 hits the f3 rook and h3 knight; 2.Rxf6 gxh3 — even on material, but the fork did it.
+    const hit = detectPattern('6k1/8/5n2/6p1/8/5R1N/8/6K1 w - - 0 1', 'g1h1', ['g5g4', 'f3f6', 'g4h3'], [], []);
+    expect(hit).toMatchObject({ tag: 'pawn_fork', side: 'refutation' });
+    expect(hit!.evidence).toBe('g4 attacks the rook on f3 and the knight on h3 at once');
   });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';

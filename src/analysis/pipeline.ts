@@ -34,8 +34,11 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
   if (!a) return out;
   a.moves.forEach((e, i) => {
     const v = verdictOf(e);
-    if (e.color !== game.userColor || (v !== 'mistake' && v !== 'blunder')) return;
     const p = game.plies[i];
+    // Every move the coach teaches gets its mechanism, even when the position was already lost and
+    // the verdict is milder (allowing mate from -5 is still a back-rank lesson).
+    const taught = game.findings.some((f) => f.ply === p.ply && f.kind === 'weakness' && f.severity >= 2);
+    if (e.color !== game.userColor || (v !== 'mistake' && v !== 'blunder' && !taught)) return;
     const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
     const hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
     if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}) };

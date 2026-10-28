@@ -126,7 +126,7 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
   const opp = COLOR_NAME[other(mover)];
   const label = PATTERN_LABEL[tag].toLowerCase();
   if (f.facts.patternSide === 'better') {
-    const ask = `There's a ${label} for you here. Can you find it?`;
+    const ask = `There's ${article(label)} for you here. Can you find it?`;
     return {
       ...t,
       question: ask,
@@ -137,13 +137,13 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
       lesson: PATTERN_RULE_MISSED[tag] ?? PATTERN_RULE[tag],
     };
   }
-  const hint = tag === 'knight_fork' || tag === 'fork' || tag === 'discovered_attack' ? ' Look for a move that makes two threats at once.' : tag === 'back_rank' ? ' Look at the checks.' : '';
+  const hint = tag === 'knight_fork' || tag === 'fork' || tag === 'pawn_fork' || tag === 'discovered_attack' ? ' Look for a move that makes two threats at once.' : tag === 'back_rank' ? ' Look at the checks.' : '';
   return {
     ...t,
     question: `After ${played.san}, what can ${opp} do?${hint} Play ${opp}'s strongest reply.`,
     predictCorrect: `Exactly — ${ev}.`,
     predictOther: `Look again: ${ev}.`,
-    reveal: `${capitalise(ev)} — a ${label}.`,
+    reveal: `${capitalise(ev)} — ${article(label)}.`,
     betterPrompt: `Find a move that doesn't allow that.`,
     betterCorrect: `Good — that takes the sting out of it.`,
     lesson: PATTERN_RULE[tag],
@@ -509,4 +509,6 @@ export function goodIdeaText(f: Finding, played: PlyRecord, mover: Color): {
   };
 }
 
-const capitalise = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+// A sentence that starts with a pawn move ("g4 attacks…", "exf3…") keeps its lowercase SAN.
+const capitalise = (t: string) => (/^[a-h](x[a-h])?[1-8]/.test(t) ? t : t.charAt(0).toUpperCase() + t.slice(1));
+const article = (noun: string) => (/^[aeiou]/i.test(noun) ? `an ${noun}` : `a ${noun}`);

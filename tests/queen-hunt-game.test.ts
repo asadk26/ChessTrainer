@@ -11,6 +11,11 @@ describe('a convincing win with a mating finish', () => {
   const game = coachFromPositions(g, positions, []).game;
   const r = game.report!;
 
+  it('flags the missed mate in 2 (still winning) as a lesson, not as the headline of a won game', () => {
+    expect(game.findings.find((f) => f.ply === 56)).toMatchObject({ category: 'tactical_blindness', facts: { mateIn: 2, stillWinning: true } });
+    expect(r.headline).not.toMatch(/missed a checkmate/);
+  });
+
   it("doesn't headline a king-safety problem that never really cost anything", () => {
     expect(r.headline).toMatch(/^A strong win/);
     expect(game.findings.find((f) => f.category === 'king_safety')?.confidence).toBe('medium');

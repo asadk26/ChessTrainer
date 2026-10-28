@@ -24,10 +24,10 @@ function appLabel(f: Finding): string {
   if (f.facts.mate) return pattern === 'back_rank' ? 'back_rank_mate_allowed' : 'mate_allowed';
   if (f.facts.mateIn) return 'mate_missed';
   if (pattern) {
-    const forkSan = String(f.facts.patternEvidence ?? '').split(' ')[0];
     const map: Record<string, [string, string]> = {
       knight_fork: ['fork_allowed', 'fork_missed'],
-      fork: [/^[a-h]/.test(forkSan) ? 'pawn_fork_allowed' : 'fork_allowed', 'fork_missed'],
+      fork: ['fork_allowed', 'fork_missed'],
+      pawn_fork: ['pawn_fork_allowed', 'pawn_fork_missed'],
       discovered_attack: ['discovered_attack_allowed', 'discovered_attack_missed'],
       in_between_move: ['in_between_move', 'in_between_move_missed'],
       pin: ['pin_allowed', 'pin_exploit_missed'],

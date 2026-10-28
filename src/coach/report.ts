@@ -1,5 +1,5 @@
 // Builds the concise post-game coaching report from findings + history.
-import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, type PatternTag } from '../analysis/patterns';
+import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, PATTERN_RULE, type PatternTag } from '../analysis/patterns';
 import type { CategoryId, Color, Finding, GameReport, MoveEval, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
 import { rootCause } from '../analysis/rootCause';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
@@ -34,7 +34,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 18;
+export const REPORT_VERSION = 19;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -60,8 +60,11 @@ export function isStateFinding(f: Finding): boolean {
   return ['development', 'passive_piece', 'time_management', 'king_pawns', 'pawn_storm'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
 }
 
-/** A finding that can count toward a pattern (in this game or as history). */
-export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f);
+/**
+ * A finding that can count toward a pattern (in this game or as history). A slip that cost nothing
+ * (a quicker mate missed while the move played still mates) is a lesson, not a pattern or a headline.
+ */
+export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f) && !f.facts.stillWinning;
 
 function plyLabel(plies: PlyRecord[], ply: number): string {
   const p = plies[ply - 1];
@@ -76,7 +79,8 @@ export function groupByTheme(findings: Finding[]): ThemeGroup[] {
   const groups = new Map<ThemeId, Finding[]>();
   for (const f of findings) {
     if (!countsAsPattern(f)) continue;
-    const t = themeOf(f.category);
+    // A move that walked into a tactic (a pawn fork after a retreat to the rim…) belongs with tactics.
+    const t = f.facts.pattern && f.facts.patternSide !== 'better' && f.facts.pattern !== 'hanging_piece' ? 'tactics' : themeOf(f.category);
     if (!t) continue;
     groups.set(t, [...(groups.get(t) ?? []), f]);
   }
@@ -132,6 +136,9 @@ function conversionClause(f: Finding, plies: PlyRecord[], opp: string): string {
   }
 }
 
+/** "On 13.Nh3, …" — unless the evidence already starts with the move. */
+const onMove = (e: { label: string; finding: Finding }) => (e.finding.evidence.startsWith(e.label) ? e.finding.evidence : `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
+
 function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): string {
   const eps = episodes(group, plies);
   const opp = COLOR_NAME[other(userColor)];
@@ -153,13 +160,13 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
     case 'tactics': {
       const mates = eps.filter((e) => e.finding.facts.mateIn);
       if (mates.length >= 2) {
-        const rest = eps.filter((e) => !mates.includes(e)).map((e) => `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
+        const rest = eps.filter((e) => !mates.includes(e)).map(onMove);
         const each = mates.map((e) => `move ${plies[e.finding.ply - 1].moveNumber} (${e.finding.facts.bestSan} instead of ${plies[e.finding.ply - 1].san})`);
         return [`You missed a checkmate ${mates.length === 2 ? 'twice' : `${mates.length} times`}: ${joinList(each)}. ${mates.every((e) => plies[e.finding.ply - 1].captured) ? 'Each time you took material instead — but mate ends the game, so checks come first.' : 'Checks come first: mate ends the game.'}`, ...rest].join(' ');
       }
       return [...eps]
         .sort((a, b) => b.finding.severity - a.finding.severity)
-        .map((e) => `On ${e.label}, ${lowerFirst(e.finding.evidence)}`)
+        .map(onMove)
         .join(' ');
     }
     case 'king_safety': {
@@ -328,7 +335,8 @@ function again(clause: string): string {
 }
 
 function capitalise(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  // A sentence that starts with a pawn move ("g4 attacks…") keeps its lowercase SAN.
+  return /^[a-h](x[a-h])?[1-8]/.test(s) ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
@@ -484,7 +492,7 @@ export function buildReport(input: ReportInput): GameReport {
   const solidOpening = openingStrengths.length >= 2 && !openingWeak;
   const lead = strongGroups[0];
   // Real mistakes that didn't add up to a strong theme still aren't a "clean game".
-  const slips = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && !isStateFinding(f));
+  const slips = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && !isStateFinding(f) && !f.facts.stillWinning);
   if (rc && decisiveLesson) {
     const centre = rc.setup.some((f) => f.category === 'king_safety' && f.facts.notCastled);
     const setup = rc.setup
@@ -522,7 +530,7 @@ export function buildReport(input: ReportInput): GameReport {
     recurring: recurringText(groups, plies, prior),
     focus: {
       title: focusMeta.focusTitle,
-      detail: [focusMeta.focusDetail, decisiveLesson && rc?.setup[0] && SETUP_LESSON[rc.setup[0].category] ? `Also from this game: ${SETUP_LESSON[rc.setup[0].category]}` : ''].filter(Boolean).join(' '),
+      detail: [focusMeta.focusDetail, decisiveLesson && rc?.setup[0] ? setupLesson(rc.setup[0]) : ''].filter(Boolean).join(' '),
       theme: focusTheme,
       ...(chosen || decisiveLesson ? {} : { generic: true }),
     },
@@ -553,6 +561,8 @@ const SETUP_CATEGORIES = ['king_pawns', 'pawn_storm', 'piece_to_rim', 'king_safe
 /** How a set-up move reads inside the headline ("after 12.f3 loosened the pawns in front of your king"). */
 function setupClause(f: Finding, userColor: Color): string | undefined {
   const mv = moveOf(f);
+  // The tactic the setup move walked into says more than its category (13.Nh3: a pawn fork, not just "the rim").
+  if (f.facts.pattern && f.facts.patternSide !== 'better') return `${mv} ${PATTERN_PHRASE[f.facts.pattern as PatternTag].refutation}`;
   switch (f.category) {
     case 'king_pawns':
       return `${mv} loosened the pawns in front of your king`;
@@ -566,6 +576,13 @@ function setupClause(f: Finding, userColor: Color): string | undefined {
       return `${mv} weakened your pawns`;
   }
   return undefined;
+}
+
+/** The set-up move's lesson for the focus detail: its tactic's rule when it walked into one, else its category's. */
+function setupLesson(f: Finding): string {
+  const tag = f.facts.pattern as PatternTag | undefined;
+  const lesson = tag && f.facts.patternSide !== 'better' ? lowerFirst(PATTERN_RULE[tag]) : SETUP_LESSON[f.category];
+  return lesson ? `Also from this game: ${lesson}` : '';
 }
 
 /** A second, set-up lesson, added to the focus detail. */

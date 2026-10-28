@@ -239,7 +239,26 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
   const e = ctx.evals[i];
   const before = ctx.positions[i];
   const best = before.lines[0];
-  if (!best || e.isBest || pd(e) < 10) return [];
+  if (!best || e.isBest) return [];
+
+  // A short mate missed is a lesson even when the move played still wins: the habit (look at every
+  // check, ask whether one is mate) is what costs games when the position isn't already won.
+  const after = ctx.positions[i + 1];
+  const playedMateIn = after?.terminal === 'checkmate' ? 0 : after?.lines[0]?.score.type === 'mate' && after.lines[0].score.value < 0 ? -after.lines[0].score.value : undefined;
+  if (best.score.type === 'mate' && best.score.value > 0 && best.score.value <= 2 && pd(e) < 10 && (playedMateIn === undefined || playedMateIn >= best.score.value)) {
+    return [
+      {
+        kind: 'weakness',
+        category: 'tactical_blindness',
+        ply: p.ply,
+        severity: 2,
+        confidence: 'high',
+        evidence: `There was a mate in ${best.score.value}: ${e.bestLineSan.slice(0, best.score.value * 2 - 1).join(' ')}.`,
+        facts: { mateIn: best.score.value, bestSan: e.bestSan, bestLine: e.bestLineSan, stillWinning: true },
+      },
+    ];
+  }
+  if (pd(e) < 10) return [];
 
   if (best.score.type === 'mate' && best.score.value > 0 && best.score.value <= 3) {
     return [
@@ -1279,7 +1298,8 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
   }
 
   const hangs = moveFindings.filter(
-    (f) => (f.category === 'blunder' || f.category === 'missed_threat' || f.category === 'gave_back_material') && f.severity >= 2,
+    // Any piece simply lost — a defended grab included (the capturing piece was taken back).
+    (f) => ['blunder', 'missed_threat', 'gave_back_material', 'defended_grab'].includes(f.category) && f.severity >= 2,
   );
   if (hangs.length === 0 && mine.length >= 12) {
     out.push({ kind: 'strength', category: 'no_hanging', ply: 0, severity: 2, confidence: 'high', evidence: 'No pieces left hanging all game.', facts: {} });
