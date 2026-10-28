@@ -52,6 +52,8 @@ function appLabel(f: Finding): string {
     king_safety: 'king_safety',
   };
   if (byCategory[f.category]) return byCategory[f.category];
+  // "Your X was already under attack, and your move didn't deal with it" (v2, sir-Deniy 17...Qb6+).
+  if (f.category === 'missed_threat' && f.facts.threatFrom !== undefined) return 'threat_ignored';
   // "It could just be taken" is what these say when the board shows the piece simply lost; other
   // categories (counterplay against your king…) keep their own text whatever was captured.
   if (f.facts.hanging && ['blunder', 'missed_threat', 'gave_back_material'].includes(f.category)) return 'hanging_piece';
@@ -129,7 +131,7 @@ function splitSummary(split: 'tune' | 'holdout') {
   );
 }
 
-console.log('\nGround truth v1 — the app vs hand-verified labels\n');
+console.log(`\nGround truth v${truth.version} — the app vs hand-verified labels\n`);
 splitSummary('tune');
 splitSummary('holdout');
 

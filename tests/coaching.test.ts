@@ -26,13 +26,19 @@ describe('sample game coaching (from recorded Stockfish output)', () => {
     expect(at(25)).toEqual(expect.arrayContaining(['pointless_check', 'inefficient_moves']));
   });
 
-  it('treats 8.dxe5 as a soft note about central tension, not a major mistake', () => {
-    const f = game.findings.find((x) => x.ply === 15)!;
-    expect(f.category).toBe('central_tension');
-    expect(f.severity).toBe(1);
+  it("never criticises 8.dxe5 — it was Stockfish's own move", () => {
+    expect(game.analysis!.moves[14].isBest).toBe(true);
+    expect(game.findings.some((x) => x.ply === 15 && x.kind === 'weakness')).toBe(false);
     expect(game.moments.some((m) => m.ply === 15)).toBe(false);
-    expect(game.report!.hurt.some((h) => h.plies?.includes(15))).toBe(false);
-    expect(game.report!.minorNotes.some((n) => n.plies?.includes(15))).toBe(true);
+    expect([...game.report!.hurt, ...game.report!.minorNotes].some((h) => h.plies?.includes(15))).toBe(false);
+  });
+
+  it('no move within 0.3 of Stockfish’s choice gets a mistake finding (unless a later move in the pair cost it)', () => {
+    for (const f of game.findings.filter((x) => x.kind === 'weakness' && x.ply > 0 && game.plies[x.ply - 1].color === 'w')) {
+      const e = game.analysis!.moves[Number(f.facts.worsePly ?? f.ply) - 1];
+      if (['development', 'time_management', 'passive_piece'].includes(f.category)) continue;
+      expect(e.isBest || e.cpBefore - e.cpAfter > 30, `${f.ply}:${f.category}`).toBe(true);
+    }
   });
 
   it('recognises 15.f4 as a good idea against the uncastled king', () => {

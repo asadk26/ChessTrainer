@@ -39,6 +39,7 @@ export interface CleanGame {
   must_not_lesson: string[];
 }
 export interface GroundTruth {
+  version: number;
   label_definitions: Record<string, string>;
   moments: TruthMoment[];
   clean_games: CleanGame[];

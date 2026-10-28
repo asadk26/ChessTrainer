@@ -35,7 +35,7 @@ import {
 } from '../chess/board';
 import { COLOR_NAME } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
-import { pd, scoreToCp, winPercent } from './evaluation';
+import { MATE_CP, pd, scoreToCp, winPercent } from './evaluation';
 import { buildContexts, underKingPressure } from './context';
 import { describeMove } from './movePurpose';
 import { detectPattern } from './patterns';
@@ -1467,5 +1467,25 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   findings.push(...detectStrandedPiece(ctx));
   findings.push(...detectRookOnOpenFile(ctx));
   findings.push(...detectGameLevel(ctx, findings));
-  return findings;
+  // A move as good as Stockfish's never gets a mistake lesson, whatever followed it. A finding about
+  // a pair of moves (a round trip) is judged on the move it blames for the cost.
+  return findings.filter((f) => {
+    if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;
+    if (ABOUT_THE_GAME.includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled)) return true;
+    return !nearBest(ctx.evals[Number(f.facts.worsePly ?? f.ply) - 1]);
+  });
+}
+
+/** Findings about the state of the game (attached to a move, but not about it). */
+const ABOUT_THE_GAME: string[] = ['development', 'time_management', 'passive_piece'];
+
+/** Within this many centipawns of Stockfish's choice, a move is as good as best. */
+export const NEAR_BEST_CP = 30;
+
+/** Stockfish's own move, or within 0.3 of it. With a forced mate on the board, only the best move counts. */
+export function nearBest(e: MoveEval | undefined): boolean {
+  if (!e) return false;
+  if (e.isBest) return true;
+  if (Math.abs(e.cpBefore) >= MATE_CP - 1000 || Math.abs(e.cpAfter) >= MATE_CP - 1000) return false;
+  return e.cpBefore - e.cpAfter <= NEAR_BEST_CP;
 }

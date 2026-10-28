@@ -1,4 +1,4 @@
-# Ground truth: chunkmonkey420 key moments (v1)
+# Ground truth: chunkmonkey420 key moments (v2)
 
 `ground-truth.json` is a hand-verified test set for Passed Pawn's move analysis.
 Each moment was found by Stockfish (depth 14) and its *mechanism* (why the move lost or what was missed) was checked with deeper lines (depth 18+).
@@ -30,6 +30,7 @@ These are real games from chunkmonkey420, so treat the labels as a regression su
 - Engine numbers will differ slightly from the app's engine depth. Match on ply/SAN, not on exact centipawns.
 - `Sparrrowfalls 27.Qxb5` only shows up as a mistake at depth ≥ 18. If the app runs shallower, it's allowed to miss it (score 0, not a fail).
 - **Correction:** in Drearydoc, **12.f3 was Stockfish's top move**. The root cause is 13.Nh3 (pawn fork after ...exf3 Rxf3 g4), then 16.Bxg4. Any earlier regression test that blamed 12.f3 for "loosening the kingside" is wrong and should be replaced by `expected_summary` here.
+- **v2:** sir-Deniy 17...Qb6+ relabeled from `removed_defender` to `threat_ignored` (the rook was already attacked; the queen never guarded it). Ground-truth fixes like this are allowed, but only when the mechanism is verified on the board, never to make a score go up.
 - Add new games as they're reviewed. Put roughly one in three into `holdout`, chosen before looking at what the app says about them.
 
 ## Running it in this repo

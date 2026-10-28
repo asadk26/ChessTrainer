@@ -11,7 +11,9 @@ describe.skipIf(!findStockfishScript())('Stockfish integration', () => {
       const { game, drills } = await analyzeGame(sampleStored(), engine, { depth: 10, prior: [] });
       expect(game.analysis!.positions).toHaveLength(34);
       const cats = game.findings.map((f) => `${f.ply}:${f.category}`);
-      expect(cats).toEqual(expect.arrayContaining(['21:inefficient_moves', '25:pointless_check', '29:opened_vs_king', '15:central_tension']));
+      expect(cats).toEqual(expect.arrayContaining(['21:inefficient_moves', '25:pointless_check', '29:opened_vs_king']));
+      // 8.dxe5 is Stockfish's own move: no criticism of it.
+      expect(cats.filter((c) => c.startsWith('15:'))).toEqual([]);
       expect(game.report!.focus.theme).toBe('active_without_followup');
       expect(drills.length).toBeGreaterThanOrEqual(2);
     } finally {

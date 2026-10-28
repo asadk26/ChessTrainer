@@ -1,9 +1,13 @@
 {
-  "version": 1,
+  "version": 2,
+  "changelog": [
+    "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand."
+  ],
   "created": "2026-10-28",
   "player": "chunkmonkey420",
   "engine_note": "Evals: Stockfish 19 lite, single thread, depth 14 per move, cp from the mover's view; win_pct_drop uses the Lichess win% curve. Mechanisms checked with depth-18 lines. Expect small numeric differences from deeper engines; labels are what matter.",
   "label_definitions": {
+    "threat_ignored": "A piece was already attacked (by the opponent's last move) and the player's move does not deal with it.",
     "hanging_piece": "A piece/pawn moved to or left on a square where it can be captured for free immediately, with no tactic needed.",
     "defended_target_grab": "Capturing something that is defended, so the capturing piece is lost (e.g. bishop takes a knight-defended pawn).",
     "removed_defender": "The moved unit (piece or pawn) was the only defender of another unit/square that becomes capturable.",
@@ -52,10 +56,18 @@
       "kind": "mistake",
       "primary_label": "defended_target_grab",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 279, "eval_after_cp_mover": -527, "win_pct_drop": 61.1, "best_move": "Rd8", "opponent_best_reply": "Bxg4" },
+      "engine": {
+        "eval_before_cp_mover": 279,
+        "eval_after_cp_mover": -527,
+        "win_pct_drop": 61.1,
+        "best_move": "Rd8",
+        "opponent_best_reply": "Bxg4"
+      },
       "mechanism": "Rook captured the g4 pawn, which was defended by the f3 bishop; 29.Bxg4 wins the rook for a pawn.",
       "expected_lesson": "Count a target's defenders before capturing it.",
-      "must_not_label": ["development"],
+      "must_not_label": [
+        "development"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -69,11 +81,21 @@
       "fen_before": "r2r2k1/pQp2ppp/1b4q1/8/4N3/P3P3/1P1R1PPP/3R2K1 b - - 2 20",
       "kind": "mistake",
       "primary_label": "back_rank_mate_allowed",
-      "secondary_labels": ["no_luft"],
-      "engine": { "eval_before_cp_mover": -261, "eval_after_cp_mover": -9970, "win_pct_drop": 27.3, "best_move": "Re8", "opponent_best_reply": "Qxb8+" },
+      "secondary_labels": [
+        "no_luft"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -261,
+        "eval_after_cp_mover": -9970,
+        "win_pct_drop": 27.3,
+        "best_move": "Re8",
+        "opponent_best_reply": "Qxb8+"
+      },
       "mechanism": "Leaves the back rank defended only by the rooks: Qxb8+ Rxb8 Rd8+ Rxd8 Rxd8# (mate in 3).",
       "expected_lesson": "Give the king an escape square (luft) and watch back-rank checks.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -87,11 +109,21 @@
       "fen_before": "1k4r1/3R4/R7/P7/8/2r5/7P/7K w - - 0 42",
       "kind": "mistake",
       "primary_label": "mate_allowed",
-      "secondary_labels": ["no_luft"],
-      "engine": { "eval_before_cp_mover": 83, "eval_after_cp_mover": -9990, "win_pct_drop": 57.2, "best_move": "Rad6", "opponent_best_reply": "Rh3#" },
+      "secondary_labels": [
+        "no_luft"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 83,
+        "eval_after_cp_mover": -9990,
+        "win_pct_drop": 57.2,
+        "best_move": "Rad6",
+        "opponent_best_reply": "Rh3#"
+      },
       "mechanism": "King on h1 has no escape squares; 42...Rh3# is mate.",
       "expected_lesson": "Before each move in an ending with rooks, check whether the enemy rook has a mating check.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "holdout"
     },
@@ -105,11 +137,21 @@
       "fen_before": "rn2k2r/pp3ppp/2pqp3/8/1nBN4/5P2/PPP1QP1P/2KR3R w kq - 0 17",
       "kind": "missed_opportunity",
       "primary_label": "discovered_attack_missed",
-      "secondary_labels": ["fork"],
-      "engine": { "eval_before_cp_mover": 679, "eval_after_cp_mover": -87, "win_pct_drop": 50.4, "best_move": "Nxe6", "opponent_best_reply": "Qf4+" },
+      "secondary_labels": [
+        "fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 679,
+        "eval_after_cp_mover": -87,
+        "win_pct_drop": 50.4,
+        "best_move": "Nxe6",
+        "opponent_best_reply": "Qf4+"
+      },
       "mechanism": "17.Nxe6! moves the d4 knight off the d-file, uncovering the d1 rook onto the d6 queen while the knight hits g7/c7.",
       "expected_lesson": "When a piece stands between your long-range piece and their queen/king, look at every move of that piece.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -123,11 +165,21 @@
       "fen_before": "r2r2k1/p4pp1/n3pq1p/1p1p3P/5PR1/P3N3/1PP1QP2/2KR4 w - - 1 27",
       "kind": "mistake",
       "primary_label": "opened_line_to_own_king",
-      "secondary_labels": ["greedy_queen_capture"],
-      "engine": { "eval_before_cp_mover": 0, "eval_after_cp_mover": -62, "win_pct_drop": 5.7, "best_move": "Rdg1", "opponent_best_reply": "Rab8" },
+      "secondary_labels": [
+        "greedy_queen_capture"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 0,
+        "eval_after_cp_mover": -62,
+        "win_pct_drop": 5.7,
+        "best_move": "Rdg1",
+        "opponent_best_reply": "Rab8"
+      },
       "mechanism": "Taking b5 with the queen (king castled queenside) allows 27...Rab8! and Qxb2+. Needs depth >= 18 to see (depth 14 rates it as small).",
       "expected_lesson": "Before grabbing material, check whether the capture opens a file/diagonal toward your own king.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "medium",
       "split": "holdout"
     },
@@ -141,11 +193,22 @@
       "fen_before": "r5k1/5p2/p1Nb3p/2pQ2p1/8/2P1KPP1/PP5q/R7 b - - 1 30",
       "kind": "mistake",
       "primary_label": "discovered_attack_allowed",
-      "secondary_labels": ["removed_defender", "winning_move_missed"],
-      "engine": { "eval_before_cp_mover": 965, "eval_after_cp_mover": 0, "win_pct_drop": 47.2, "best_move": "Re8+", "opponent_best_reply": "Ne7+" },
+      "secondary_labels": [
+        "removed_defender",
+        "winning_move_missed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 965,
+        "eval_after_cp_mover": 0,
+        "win_pct_drop": 47.2,
+        "best_move": "Re8+",
+        "opponent_best_reply": "Ne7+"
+      },
       "mechanism": "Bishop left d6 (stopped guarding e7). 31.Ne7+ moves the c6 knight with check and uncovers Qd5 onto the a8 rook. 30...Re8+ was winning.",
       "expected_lesson": "A knight check that uncovers a queen line wins material: check what a moving enemy piece uncovers, and what your moved piece was guarding.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -160,7 +223,13 @@
       "kind": "mistake",
       "primary_label": "hanging_piece",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 447, "eval_after_cp_mover": -220, "win_pct_drop": 53, "best_move": "Na6", "opponent_best_reply": "Qxg4" },
+      "engine": {
+        "eval_before_cp_mover": 447,
+        "eval_after_cp_mover": -220,
+        "win_pct_drop": 53,
+        "best_move": "Na6",
+        "opponent_best_reply": "Qxg4"
+      },
       "mechanism": "Bishop moved to g4, where the queen captures it (Qxg4) and nothing defends it.",
       "expected_lesson": "Before letting go, check if the destination square is attacked and undefended.",
       "must_not_label": [],
@@ -176,12 +245,22 @@
       "ply": 34,
       "fen_before": "r5k1/ppp2ppp/5q2/8/8/N2P1Q2/PPP2KPP/R1B1r3 b - - 2 17",
       "kind": "mistake",
-      "primary_label": "removed_defender",
-      "secondary_labels": ["hanging_piece"],
-      "engine": { "eval_before_cp_mover": 486, "eval_after_cp_mover": -502, "win_pct_drop": 72.1, "best_move": "Qxf3+", "opponent_best_reply": "Kxe1" },
-      "mechanism": "The queen was the only defender of the e1 rook; moving it (even with check) lets Kxe1.",
-      "expected_lesson": "Ask what the moving piece was defending.",
-      "must_not_label": [],
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "hanging_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 486,
+        "eval_after_cp_mover": -502,
+        "win_pct_drop": 72.1,
+        "best_move": "Qxf3+",
+        "opponent_best_reply": "Kxe1"
+      },
+      "mechanism": "The e1 rook was already attacked by the king on f2 (after 16...Re1+ 17.Kf2) and nothing defended it. 17...Qb6+ is a check but does not save the rook: Kxe1 wins it. 17...Qxf3+ was best (trade queens with check, then the rook can get away). White missed it in the game (18.Kg3).",
+      "expected_lesson": "Before making your own move, ask what the opponent's last move attacks.",
+      "must_not_label": [
+        "removed_defender"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -196,10 +275,18 @@
       "kind": "mistake",
       "primary_label": "check_blocked_with_tempo",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": -159, "eval_after_cp_mover": -483, "win_pct_drop": 21.3, "best_move": "Rc8", "opponent_best_reply": "Bg3" },
+      "engine": {
+        "eval_before_cp_mover": -159,
+        "eval_after_cp_mover": -483,
+        "win_pct_drop": 21.3,
+        "best_move": "Rc8",
+        "opponent_best_reply": "Bg3"
+      },
       "mechanism": "13.Bg3 blocks the check while attacking the queen; the queen ends up misplaced.",
       "expected_lesson": "Before giving a check, look for blocks that come with tempo.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "medium",
       "split": "tune"
     },
@@ -213,8 +300,16 @@
       "fen_before": "2b2rk1/5npp/8/1p1PRP2/6Pq/2P2Q1B/7P/1R4K1 w - - 1 32",
       "kind": "mistake",
       "primary_label": "fork_allowed",
-      "secondary_labels": ["knight_fork"],
-      "engine": { "eval_before_cp_mover": 520, "eval_after_cp_mover": -296, "win_pct_drop": 62, "best_move": "Re3", "opponent_best_reply": "Ng5" },
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 520,
+        "eval_after_cp_mover": -296,
+        "win_pct_drop": 62,
+        "best_move": "Re3",
+        "opponent_best_reply": "Ng5"
+      },
       "mechanism": "32...Ng5 forks the f3 queen, h3 bishop and e4 rook.",
       "expected_lesson": "Check every square an enemy knight can reach next move.",
       "must_not_label": [],
@@ -231,8 +326,16 @@
       "fen_before": "2b2rk1/6pp/8/1p1P1P2/2n3Pq/2P2Q1B/7P/1R2R1K1 w - - 5 34",
       "kind": "mistake",
       "primary_label": "removed_defender",
-      "secondary_labels": ["hanging_piece"],
-      "engine": { "eval_before_cp_mover": 528, "eval_after_cp_mover": -67, "win_pct_drop": 43.6, "best_move": "Re2", "opponent_best_reply": "Qxh3" },
+      "secondary_labels": [
+        "hanging_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 528,
+        "eval_after_cp_mover": -67,
+        "win_pct_drop": 43.6,
+        "best_move": "Re2",
+        "opponent_best_reply": "Qxh3"
+      },
       "mechanism": "The f3 queen was the only defender of the h3 bishop; after Qe2, Qxh3.",
       "expected_lesson": "Ask what the moving piece was defending.",
       "must_not_label": [],
@@ -249,11 +352,21 @@
       "fen_before": "4k3/6pp/2q5/8/2P5/8/5Q1P/5K2 w - - 5 51",
       "kind": "mistake",
       "primary_label": "skewer_allowed",
-      "secondary_labels": ["king_and_queen_same_line"],
-      "engine": { "eval_before_cp_mover": 0, "eval_after_cp_mover": -1062, "win_pct_drop": 48, "best_move": "Qe3+", "opponent_best_reply": "Qh1+" },
+      "secondary_labels": [
+        "king_and_queen_same_line"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 0,
+        "eval_after_cp_mover": -1062,
+        "win_pct_drop": 48,
+        "best_move": "Qe3+",
+        "opponent_best_reply": "Qh1+"
+      },
       "mechanism": "Queen and king end up on the 2nd rank: Qh1+ Ke2 Qxh2+ and Qxa2.",
       "expected_lesson": "Never leave your king and queen on the same line an enemy queen/rook can reach.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -267,11 +380,21 @@
       "fen_before": "r2qr1k1/1B3p2/n2b3B/3Pp3/2Q5/P5Pb/1P3P1P/R3R1K1 w - - 1 24",
       "kind": "mistake",
       "primary_label": "missed_bigger_capture",
-      "secondary_labels": ["removed_defender"],
-      "engine": { "eval_before_cp_mover": 525, "eval_after_cp_mover": -96, "win_pct_drop": 46.1, "best_move": "Bxa8", "opponent_best_reply": "Qf6" },
+      "secondary_labels": [
+        "removed_defender"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 525,
+        "eval_after_cp_mover": -96,
+        "win_pct_drop": 46.1,
+        "best_move": "Bxa8",
+        "opponent_best_reply": "Qf6"
+      },
       "mechanism": "24.Bxa8 won a rook and kept the light-squared bishop on the long diagonal; Bxa6 took a knight and left the diagonal/f3 square, letting Black counterattack.",
       "expected_lesson": "Compare all captures; prefer the one that keeps key defenders in place.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "medium",
       "split": "tune"
     },
@@ -285,11 +408,21 @@
       "fen_before": "2kr1b1r/pp1n1ppB/2p1p3/8/q4B2/3Q4/PPP3PP/1K1R3R b - - 4 14",
       "kind": "missed_opportunity",
       "primary_label": "free_capture_missed",
-      "secondary_labels": ["queen_line_rank"],
-      "engine": { "eval_before_cp_mover": 585, "eval_after_cp_mover": -18, "win_pct_drop": 41.3, "best_move": "Qxf4", "opponent_best_reply": "Bg5" },
+      "secondary_labels": [
+        "queen_line_rank"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 585,
+        "eval_after_cp_mover": -18,
+        "win_pct_drop": 41.3,
+        "best_move": "Qxf4",
+        "opponent_best_reply": "Bg5"
+      },
       "mechanism": "Qa4 attacked the undefended f4 bishop along the 4th rank (also on move 13). 14...Qxf4 wins a piece.",
       "expected_lesson": "After every move, trace your queen's lines (ranks, files, diagonals) to the end.",
-      "must_not_label": ["development"],
+      "must_not_label": [
+        "development"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -303,8 +436,16 @@
       "fen_before": "2k2q2/pp1nb2Q/2p1pr2/8/8/3R4/PPP3PP/1K1R4 b - - 8 22",
       "kind": "mistake",
       "primary_label": "hanging_piece",
-      "secondary_labels": ["trap_missed"],
-      "engine": { "eval_before_cp_mover": 447, "eval_after_cp_mover": -525, "win_pct_drop": 71.2, "best_move": "Rh6", "opponent_best_reply": "Rxd7" },
+      "secondary_labels": [
+        "trap_missed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 447,
+        "eval_after_cp_mover": -525,
+        "win_pct_drop": 71.2,
+        "best_move": "Rh6",
+        "opponent_best_reply": "Rxd7"
+      },
       "mechanism": "Rf1 leaves the d7 knight to Rxd7. 22...Rh6 would have trapped the queen on h7.",
       "expected_lesson": "Check which of your pieces are undefended after the move; look for trapping the enemy queen.",
       "must_not_label": [],
@@ -321,11 +462,21 @@
       "fen_before": "R7/3k4/4r3/5K2/8/8/8/8 b - - 29 76",
       "kind": "mistake",
       "primary_label": "skewer_allowed",
-      "secondary_labels": ["king_and_piece_same_line"],
-      "engine": { "eval_before_cp_mover": 2, "eval_after_cp_mover": -497, "win_pct_drop": 36.4, "best_move": "Re1", "opponent_best_reply": "Ra6+" },
+      "secondary_labels": [
+        "king_and_piece_same_line"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 2,
+        "eval_after_cp_mover": -497,
+        "win_pct_drop": 36.4,
+        "best_move": "Re1",
+        "opponent_best_reply": "Ra6+"
+      },
       "mechanism": "King steps onto the 6th rank with its own rook on e6: Ra6+ skewers and wins the rook in a drawn R vs R ending.",
       "expected_lesson": "In endgames, keep king and pieces off the same line the enemy rook can reach.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -339,11 +490,21 @@
       "fen_before": "2r2rk1/2qnbppp/p3p3/1p1pPn2/3P4/P1N2N1P/1P2QPP1/R1BR2K1 b - - 0 18",
       "kind": "mistake",
       "primary_label": "removed_defender",
-      "secondary_labels": ["pawn_defender"],
-      "engine": { "eval_before_cp_mover": 6, "eval_after_cp_mover": -155, "win_pct_drop": 14.4, "best_move": "h6", "opponent_best_reply": "Nxb5" },
+      "secondary_labels": [
+        "pawn_defender"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 6,
+        "eval_after_cp_mover": -155,
+        "win_pct_drop": 14.4,
+        "best_move": "h6",
+        "opponent_best_reply": "Nxb5"
+      },
       "mechanism": "The a6 pawn was the only defender of b5; after a5, Nxb5.",
       "expected_lesson": "Pawns are defenders too: ask what a pawn was guarding before pushing it.",
-      "must_not_label": ["development"],
+      "must_not_label": [
+        "development"
+      ],
       "confidence": "high",
       "split": "holdout"
     },
@@ -358,10 +519,18 @@
       "kind": "mistake",
       "primary_label": "incomplete_exchange",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 419, "eval_after_cp_mover": -403, "win_pct_drop": 63.9, "best_move": "Nxg5", "opponent_best_reply": "Be7" },
+      "engine": {
+        "eval_before_cp_mover": 419,
+        "eval_after_cp_mover": -403,
+        "win_pct_drop": 63.9,
+        "best_move": "Nxg5",
+        "opponent_best_reply": "Be7"
+      },
       "mechanism": "After 13...Bxg5 14.Nd6+ Kf8, White must recapture with 15.Nxg5; Qb4 lets ...Be7 save the bishop: White is a piece down.",
       "expected_lesson": "Finish a trade before starting a new idea; recount material after captures and checks.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -375,11 +544,21 @@
       "fen_before": "rnbq1rk1/pp3ppp/2p5/2b1p3/2P1B3/1Q1P2P1/PP3P1P/R1B1K1NR w KQ - 1 10",
       "kind": "mistake",
       "primary_label": "trapped_piece",
-      "secondary_labels": ["no_retreat"],
-      "engine": { "eval_before_cp_mover": -201, "eval_after_cp_mover": -518, "win_pct_drop": 19.4, "best_move": "Ne2", "opponent_best_reply": "f5" },
+      "secondary_labels": [
+        "no_retreat"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -201,
+        "eval_after_cp_mover": -518,
+        "win_pct_drop": 19.4,
+        "best_move": "Ne2",
+        "opponent_best_reply": "f5"
+      },
       "mechanism": "Bishop on e4 has no retreat (d3 pawn, f3 knight block it); 10...f5 traps it (Bd5+ cxd5).",
       "expected_lesson": "Before placing a piece forward, check it has a way back.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -393,8 +572,16 @@
       "fen_before": "rnb1kbnr/ppp2ppp/8/3qp3/8/6P1/PP1PPP1P/RNBQKBNR w KQkq - 0 4",
       "kind": "mistake",
       "primary_label": "hanging_piece",
-      "secondary_labels": ["long_diagonal_before_fianchetto"],
-      "engine": { "eval_before_cp_mover": 19, "eval_after_cp_mover": -564, "win_pct_drop": 40.6, "best_move": "Nf3", "opponent_best_reply": "Qxh1" },
+      "secondary_labels": [
+        "long_diagonal_before_fianchetto"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 19,
+        "eval_after_cp_mover": -564,
+        "win_pct_drop": 40.6,
+        "best_move": "Nf3",
+        "opponent_best_reply": "Qxh1"
+      },
       "mechanism": "After g3 but before Bg2, the h1 rook is exposed to the queen on d5: 4...Qxh1.",
       "expected_lesson": "Between g3 and Bg2, block or occupy the long diagonal.",
       "must_not_label": [],
@@ -412,10 +599,18 @@
       "kind": "mistake",
       "primary_label": "unsound_sacrifice",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": -42, "eval_after_cp_mover": -324, "win_pct_drop": 22.9, "best_move": "d4", "opponent_best_reply": "gxh6" },
+      "engine": {
+        "eval_before_cp_mover": -42,
+        "eval_after_cp_mover": -324,
+        "win_pct_drop": 22.9,
+        "best_move": "d4",
+        "opponent_best_reply": "gxh6"
+      },
       "mechanism": "Bishop sacrifice on h6 with too few attackers ready to follow up (queen on d1, knight inactive).",
       "expected_lesson": "Count attackers vs defenders; sacrifice only when 2-3 pieces can join immediately.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "medium",
       "split": "tune"
     },
@@ -430,10 +625,18 @@
       "kind": "missed_opportunity",
       "primary_label": "pin_exploit_missed",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": -3, "eval_after_cp_mover": -496, "win_pct_drop": 35.9, "best_move": "h4", "opponent_best_reply": "Rf8" },
+      "engine": {
+        "eval_before_cp_mover": -3,
+        "eval_after_cp_mover": -496,
+        "win_pct_drop": 35.9,
+        "best_move": "h4",
+        "opponent_best_reply": "Rf8"
+      },
       "mechanism": "The g5 knight was pinned on the g-file (Rg4 vs Rg6/Kg7). 28.h4! attacks the pinned piece (about equal); Qf5 lets Black consolidate.",
       "expected_lesson": "Attack pinned pieces, especially with pawns.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "holdout"
     },
@@ -447,8 +650,16 @@
       "fen_before": "5rk1/2q3pp/p6r/n1p4B/3p4/1P1P4/1B3PPb/2RQ1R1K b - - 4 26",
       "kind": "mistake",
       "primary_label": "defended_target_grab",
-      "secondary_labels": ["capture_into_check"],
-      "engine": { "eval_before_cp_mover": 482, "eval_after_cp_mover": 2, "win_pct_drop": 35.3, "best_move": "g6", "opponent_best_reply": "Qxb3+" },
+      "secondary_labels": [
+        "capture_into_check"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 482,
+        "eval_after_cp_mover": 2,
+        "win_pct_drop": 35.3,
+        "best_move": "g6",
+        "opponent_best_reply": "Qxb3+"
+      },
       "mechanism": "The b3 pawn was defended; Qxb3+ recaptures with check on the a2-g8 diagonal.",
       "expected_lesson": "Count defenders before capturing; watch recaptures that come with check.",
       "must_not_label": [],
@@ -466,10 +677,18 @@
       "kind": "missed_opportunity",
       "primary_label": "mate_missed",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 9990, "eval_after_cp_mover": 9960, "win_pct_drop": 0, "best_move": "Qxg3#", "opponent_best_reply": "Rcxf2" },
+      "engine": {
+        "eval_before_cp_mover": 9990,
+        "eval_after_cp_mover": 9960,
+        "win_pct_drop": 0,
+        "best_move": "Qxg3#",
+        "opponent_best_reply": "Rcxf2"
+      },
       "mechanism": "31...Qxg3# was mate in one.",
       "expected_lesson": "Before any check, ask: is there a check that is mate?",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -484,10 +703,18 @@
       "kind": "missed_opportunity",
       "primary_label": "mate_missed",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 9990, "eval_after_cp_mover": 9970, "win_pct_drop": 0, "best_move": "Qe5#", "opponent_best_reply": "Rf4" },
+      "engine": {
+        "eval_before_cp_mover": 9990,
+        "eval_after_cp_mover": 9970,
+        "win_pct_drop": 0,
+        "best_move": "Qe5#",
+        "opponent_best_reply": "Rf4"
+      },
       "mechanism": "35...Qe5# was mate in one.",
       "expected_lesson": "Before any check, ask: is there a check that is mate?",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "holdout"
     },
@@ -502,7 +729,13 @@
       "kind": "mistake",
       "primary_label": "promotion_square_covered",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": 494, "eval_after_cp_mover": 476, "win_pct_drop": 0.8, "best_move": "Rg4", "opponent_best_reply": "Rxg1" },
+      "engine": {
+        "eval_before_cp_mover": 494,
+        "eval_after_cp_mover": 476,
+        "win_pct_drop": 0.8,
+        "best_move": "Rg4",
+        "opponent_best_reply": "Rxg1"
+      },
       "mechanism": "Promoting on g1 where the a1 rook covers the square (63.Rxg1 possible). Position stayed winning, so the eval drop is small.",
       "expected_lesson": "Before promoting, check what covers the queening square.",
       "must_not_label": [],
@@ -520,10 +753,18 @@
       "kind": "mistake",
       "primary_label": "opening_structure_error",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": -22, "eval_after_cp_mover": -272, "win_pct_drop": 21.1, "best_move": "dxe4", "opponent_best_reply": "exd5" },
+      "engine": {
+        "eval_before_cp_mover": -22,
+        "eval_after_cp_mover": -272,
+        "win_pct_drop": 21.1,
+        "best_move": "dxe4",
+        "opponent_best_reply": "exd5"
+      },
       "mechanism": "Caro-Kann vs 3.Nc3: ...c5 (c-pawn moved twice) when the centre is not locked; 3...dxe4 is the main line.",
       "expected_lesson": "Identify the structure after move 3 (Advance vs Classical) before choosing ...c5.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -537,8 +778,16 @@
       "fen_before": "r2q1rk1/ppp2pp1/7p/2p5/2PnP1b1/3Q2P1/PP1P1PBP/R1B2RK1 w - - 1 14",
       "kind": "mistake",
       "primary_label": "fork_allowed",
-      "secondary_labels": ["knight_fork"],
-      "engine": { "eval_before_cp_mover": 34, "eval_after_cp_mover": -425, "win_pct_drop": 35.8, "best_move": "f3", "opponent_best_reply": "Nc2" },
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 34,
+        "eval_after_cp_mover": -425,
+        "win_pct_drop": 35.8,
+        "best_move": "f3",
+        "opponent_best_reply": "Nc2"
+      },
       "mechanism": "14...Nc2 forks the a3 queen and a1 rook.",
       "expected_lesson": "Check every square an enemy knight can reach next move.",
       "must_not_label": [],
@@ -555,11 +804,21 @@
       "fen_before": "r4rk1/p4pp1/1p1bp2p/3p3b/N2Q1P2/P6P/1PP1P1q1/1K1R3R b - - 1 18",
       "kind": "mistake",
       "primary_label": "trapped_piece_risk",
-      "secondary_labels": ["queen_escape_squares"],
-      "engine": { "eval_before_cp_mover": 625, "eval_after_cp_mover": 63, "win_pct_drop": 35.1, "best_move": "Qg6", "opponent_best_reply": "Rhg1" },
+      "secondary_labels": [
+        "queen_escape_squares"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 625,
+        "eval_after_cp_mover": 63,
+        "win_pct_drop": 35.1,
+        "best_move": "Qg6",
+        "opponent_best_reply": "Rhg1"
+      },
       "mechanism": "Queen on g2 is deep in enemy camp with few exits; Rhg1 (also after 17...b6) would nearly trap it. 17/18...Qg6 brings it back.",
       "expected_lesson": "When your queen raids, count its escape squares every move.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -573,8 +832,16 @@
       "fen_before": "r4rk1/p4pp1/1p5Q/3pb3/N3q3/P6P/1PP1b3/1K4RR b - - 0 22",
       "kind": "missed_opportunity",
       "primary_label": "free_capture_missed",
-      "secondary_labels": ["queen_line_diagonal"],
-      "engine": { "eval_before_cp_mover": 760, "eval_after_cp_mover": 557, "win_pct_drop": 5.7, "best_move": "Qxh1", "opponent_best_reply": "Nc3" },
+      "secondary_labels": [
+        "queen_line_diagonal"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 760,
+        "eval_after_cp_mover": 557,
+        "win_pct_drop": 5.7,
+        "best_move": "Qxh1",
+        "opponent_best_reply": "Nc3"
+      },
       "mechanism": "Queen on e4 saw the undefended h1 rook down the diagonal: 22...Qxh1.",
       "expected_lesson": "After every move, trace your queen's lines to the end.",
       "must_not_label": [],
@@ -591,11 +858,21 @@
       "fen_before": "r1b1r1k1/pp3ppp/1q3n2/2pp4/1P6/3P2bP/P1PNP1B1/1R1Q1RBK b - - 0 17",
       "kind": "mistake",
       "primary_label": "opened_line_to_own_queen",
-      "secondary_labels": ["blocker_moved"],
-      "engine": { "eval_before_cp_mover": 202, "eval_after_cp_mover": -533, "win_pct_drop": 55.5, "best_move": "Nh5", "opponent_best_reply": "Bxb6" },
+      "secondary_labels": [
+        "blocker_moved"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 202,
+        "eval_after_cp_mover": -533,
+        "win_pct_drop": 55.5,
+        "best_move": "Nh5",
+        "opponent_best_reply": "Bxb6"
+      },
       "mechanism": "The c5 pawn blocked the g1-a7 diagonal between White's bishop and the b6 queen; capturing with it lets Bxb6.",
       "expected_lesson": "If your queen sits on a line with an enemy piece, check what blocks it before moving that blocker.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -609,11 +886,21 @@
       "fen_before": "rn2kb1r/pp3ppp/1q2bn2/1N2p3/2Qp4/6P1/PP1PPPBP/R1B1K1NR w KQkq - 4 9",
       "kind": "missed_opportunity",
       "primary_label": "fork_missed",
-      "secondary_labels": ["knight_fork"],
-      "engine": { "eval_before_cp_mover": 306, "eval_after_cp_mover": -441, "win_pct_drop": 59.1, "best_move": "Nc7+", "opponent_best_reply": "Bd7" },
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 306,
+        "eval_after_cp_mover": -441,
+        "win_pct_drop": 59.1,
+        "best_move": "Nc7+",
+        "opponent_best_reply": "Bd7"
+      },
       "mechanism": "9.Nc7+ forks king and a8 rook (Nc7+ Kd7 Nxa8).",
       "expected_lesson": "Look for knight checks that also attack a rook or queen.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "holdout"
     },
@@ -627,8 +914,16 @@
       "fen_before": "r6r/4kppp/p3pn2/3p4/1pPN4/4P2P/PP3PP1/2R2RK1 b - - 1 20",
       "kind": "mistake",
       "primary_label": "fork_allowed",
-      "secondary_labels": ["knight_fork"],
-      "engine": { "eval_before_cp_mover": -20, "eval_after_cp_mover": -469, "win_pct_drop": 33.1, "best_move": "Rhc8", "opponent_best_reply": "Nc6+" },
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -20,
+        "eval_after_cp_mover": -469,
+        "win_pct_drop": 33.1,
+        "best_move": "Rhc8",
+        "opponent_best_reply": "Nc6+"
+      },
       "mechanism": "21.Nc6+ forks the king and the d8 rook.",
       "expected_lesson": "Check every square an enemy knight can reach next move.",
       "must_not_label": [],
@@ -645,11 +940,21 @@
       "fen_before": "r1bq1rk1/pp2npbp/5n2/3p2p1/3PpN2/1QN1PPP1/PP4BP/R1B2RK1 w - - 0 13",
       "kind": "mistake",
       "primary_label": "pawn_fork_allowed",
-      "secondary_labels": ["piece_to_rim"],
-      "engine": { "eval_before_cp_mover": -91, "eval_after_cp_mover": -570, "win_pct_drop": 30.8, "best_move": "Nfe2", "opponent_best_reply": "exf3" },
+      "secondary_labels": [
+        "piece_to_rim"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -91,
+        "eval_after_cp_mover": -570,
+        "win_pct_drop": 30.8,
+        "best_move": "Nfe2",
+        "opponent_best_reply": "exf3"
+      },
       "mechanism": "Knight retreats to the rim; 13...exf3 14.Rxf3 g4 forks the f3 rook and h3 knight.",
       "expected_lesson": "Before retreating to the rim, check pawn forks (pawns attacking two pieces).",
-      "must_not_label": ["kingside_weakening"],
+      "must_not_label": [
+        "kingside_weakening"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -664,7 +969,13 @@
       "kind": "mistake",
       "primary_label": "defended_target_grab",
       "secondary_labels": [],
-      "engine": { "eval_before_cp_mover": -2, "eval_after_cp_mover": -489, "win_pct_drop": 35.6, "best_move": "Rxf6", "opponent_best_reply": "Nxg4" },
+      "engine": {
+        "eval_before_cp_mover": -2,
+        "eval_after_cp_mover": -489,
+        "win_pct_drop": 35.6,
+        "best_move": "Rxf6",
+        "opponent_best_reply": "Nxg4"
+      },
       "mechanism": "The g4 pawn was defended by the f6 knight; Nxg4 wins the bishop.",
       "expected_lesson": "Count a target's defenders before capturing it.",
       "must_not_label": [],
@@ -681,11 +992,21 @@
       "fen_before": "2r2rk1/pp4p1/1q2p1Qp/3p1p2/4n3/P6P/1P3PP1/1B2RR1K b - - 1 27",
       "kind": "mistake",
       "primary_label": "greedy_queen_raid",
-      "secondary_labels": ["king_safety"],
-      "engine": { "eval_before_cp_mover": 605, "eval_after_cp_mover": 59, "win_pct_drop": 34.9, "best_move": "Rf6", "opponent_best_reply": "Qxe6+" },
+      "secondary_labels": [
+        "king_safety"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 605,
+        "eval_after_cp_mover": 59,
+        "win_pct_drop": 34.9,
+        "best_move": "Rf6",
+        "opponent_best_reply": "Qxe6+"
+      },
       "mechanism": "Queen leaves the defense to take b2; 28.Qxe6+ and Qxd5 hit the exposed king.",
       "expected_lesson": "Before grabbing material with the queen, check your king without it.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -699,11 +1020,21 @@
       "fen_before": "r2q1rk1/pp1n1pp1/3p1n1p/b2P4/4N3/P4QPP/1P3PB1/R1B2RK1 w - - 1 16",
       "kind": "mistake",
       "primary_label": "discovered_attack_allowed",
-      "secondary_labels": ["in_between_move"],
-      "engine": { "eval_before_cp_mover": 24, "eval_after_cp_mover": -434, "win_pct_drop": 35.4, "best_move": "Nxf6+", "opponent_best_reply": "Ne5" },
+      "secondary_labels": [
+        "in_between_move"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 24,
+        "eval_after_cp_mover": -434,
+        "win_pct_drop": 35.4,
+        "best_move": "Nxf6+",
+        "opponent_best_reply": "Ne5"
+      },
       "mechanism": "d6 looked free, but 16...Ne5! attacks the f3 queen AND uncovers Qd8 onto the d6 knight (the d7 knight was the blocker); after the queen moves, Qxd6.",
       "expected_lesson": "Before capturing, look for enemy pieces lined up behind a blocker that can move with a threat.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "high",
       "split": "tune"
     },
@@ -717,11 +1048,22 @@
       "fen_before": "r2qk2r/pp2bppp/2n1pn2/3p2Bb/B6P/2NP1P2/PPP3P1/R2QK1NR b KQkq - 0 10",
       "kind": "mistake",
       "primary_label": "castled_into_attack",
-      "secondary_labels": ["pin", "pawn_storm"],
-      "engine": { "eval_before_cp_mover": 218, "eval_after_cp_mover": -23, "win_pct_drop": 21.2, "best_move": "h6", "opponent_best_reply": "Bxc6" },
+      "secondary_labels": [
+        "pin",
+        "pawn_storm"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 218,
+        "eval_after_cp_mover": -23,
+        "win_pct_drop": 21.2,
+        "best_move": "h6",
+        "opponent_best_reply": "Bxc6"
+      },
       "mechanism": "Castling short with White's bishop pinning on g5 and the h-pawn on h4; 10...h6 first was best. Bxc6 bxc6 g4 follows.",
       "expected_lesson": "Against a g5 pin plus an advancing h-pawn, ask the bishop with ...h6 before castling.",
-      "must_not_label": ["hanging_piece"],
+      "must_not_label": [
+        "hanging_piece"
+      ],
       "confidence": "medium",
       "split": "holdout"
     }
@@ -731,31 +1073,43 @@
       "game": "chunkmonkey420 vs RajinderSinghAP",
       "my_color": "white",
       "note": "Clean win (no mistakes per engine). Key positive: 13.Qxb7 after 12...Be6 removed b7's only defender. Inaccuracy 20.Bxa3 was a deliberate simplification.",
-      "must_not_lesson": ["hanging_piece", "development"]
+      "must_not_lesson": [
+        "hanging_piece",
+        "development"
+      ]
     },
     {
       "game": "king2008abhi vs chunkmonkey420",
       "my_color": "black",
       "note": "Clean 12-move win. Key positive: 9...Qxg5! works because 10.Qxg5 Nf3+ forks king and queen.",
-      "must_not_lesson": ["development", "hanging_piece"]
+      "must_not_lesson": [
+        "development",
+        "hanging_piece"
+      ]
     },
     {
       "game": "B4rdock vs chunkmonkey420",
       "my_color": "black",
       "note": "Very clean win (punished 7.Bg3 with 7...e4 vs the pinned f3 knight).",
-      "must_not_lesson": ["hanging_piece"]
+      "must_not_lesson": [
+        "hanging_piece"
+      ]
     },
     {
       "game": "chunkmonkey420 vs khk313",
       "my_color": "white",
       "note": "Clean win: refuted the unsound 4...Nxf2 sacrifice, artificial castling Kg1.",
-      "must_not_lesson": ["hanging_piece"]
+      "must_not_lesson": [
+        "hanging_piece"
+      ]
     },
     {
       "game": "chunkmonkey420 vs 20Jjpb23",
       "my_color": "white",
       "note": "Clean win: 9.Qa4+ forked king and the a6 knight.",
-      "must_not_lesson": ["hanging_piece"]
+      "must_not_lesson": [
+        "hanging_piece"
+      ]
     }
   ],
   "games": [
@@ -951,8 +1305,12 @@
       "link": null,
       "movetext": "1. c4 e5 2. g3 Nf6 3. Bg2 Bc5 4. Nc3 c6 5. Nf3 d6 6. O-O O-O 7. e3 Be6 8. d4 exd4 9. exd4 Bb4 10. d5 cxd5 11. cxd5 Bg4 12. h3 Bxf3 13. Qxf3 h6 14. Ne4 Nbd7 15. a3 Ba5 16. Nxd6 Ne5 17. Qb3 Qxd6 18. Bf4 Bc7 19. Rfe1 Nfd7 20. Qxb7 Rfb8 21. Qc6 f6 22. Qc3 Re8 23. h4 g5 24. hxg5 hxg5 25. Bd2 Bb6 26. a4 Rac8 27. Qb3 Nc5 28. Qb5 Ncd3 29. Re3 Bxe3 30. fxe3 a6 31. Qb7 Nc5 32. Qb4 Rb8 33. Qd4 Ncd3 34. b3 Qc5 35. Qxc5 Nxc5 36. Rc1 Nxb3 37. Rc7 Nxd2 38. d6 Red8 39. Re7 Rxd6 0-1",
       "expected_summary": {
-        "story": ["16.Nxd6 lost to the discovered attack 16...Ne5"],
-        "must_not_flag": ["generic hanging-piece lesson"]
+        "story": [
+          "16.Nxd6 lost to the discovered attack 16...Ne5"
+        ],
+        "must_not_flag": [
+          "generic hanging-piece lesson"
+        ]
       }
     },
     {
