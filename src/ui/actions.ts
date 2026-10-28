@@ -80,6 +80,8 @@ async function syncFocus() {
 }
 
 const running = new Map<string, Promise<StoredGame>>();
+/** Whether a game's analysis is running right now (not just marked 'analyzing' by an interrupted run). */
+export const isAnalysisRunning = (id: string) => running.has(id);
 
 export function runAnalysis(gameId: string, onProgress: (done: number, total: number) => void): Promise<StoredGame> {
   const existing = running.get(gameId);
@@ -303,10 +305,14 @@ export const analysisQueue = {
   stop: () => queue.running && setQueue({ stopping: true }),
 };
 
-/** Analyse up to `limit` waiting games (all when omitted). `onGame` runs after each one. */
-export async function runAnalysisQueue(limit: number | undefined, onGame?: () => void): Promise<void> {
+/**
+ * Analyse up to `limit` waiting games (all when omitted). `onGame` runs after each one.
+ * `newest`: take the most recent waiting games (still analysed oldest first among them).
+ */
+export async function runAnalysisQueue(limit: number | undefined, onGame?: () => void, opts: { newest?: boolean } = {}): Promise<void> {
   if (queue.running) return;
-  const todo = pendingAnalysis(await repo.listGames()).slice(0, limit);
+  const pending = pendingAnalysis(await repo.listGames());
+  const todo = limit === undefined ? pending : opts.newest ? pending.slice(-limit) : pending.slice(0, limit);
   if (!todo.length) return;
   setQueue({ running: true, stopping: false, done: 0, total: todo.length, failed: 0, current: undefined });
   try {
