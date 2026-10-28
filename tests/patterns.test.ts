@@ -177,3 +177,16 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     for (const n of ['josedang-game', 'harrison-game', 'aditya-game', 'halfmast-game', 'blundering-game', 'jnhbleachie-game'] as const) expect(game(n).report?.headline).not.toMatch(/clean game/i);
   });
 });
+
+describe('regression: a quick win vs king2008abhi (flagged: "lessons about developing, but it was a quick win")', () => {
+  const g = game('abhi-game');
+  it("doesn't make development the lesson when you were well ahead and won", () => {
+    expect(g.findings.find((f) => f.category === 'development')?.severity).toBe(1);
+    expect(g.report?.headline).toMatch(/^A strong win/);
+    expect(g.report?.focus.generic).toBe(true); // nothing to work on: Home keeps the previous focus
+  });
+  it('says how it ended, and never calls a capture with material at stake "routine"', () => {
+    expect(g.report?.story).toBe('White abandoned the game after 12...Nd7, with you up 2 pawns — a deserved win.');
+    expect(g.findings.some((f) => f.category === 'time_management' && /Qxg5/.test(f.evidence))).toBe(false);
+  });
+});

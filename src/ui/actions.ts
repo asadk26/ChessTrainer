@@ -74,7 +74,9 @@ export async function importGame(
 async function syncFocus() {
   const games = (await repo.listGames()).filter((g) => g.status === 'analyzed' && g.report && !g.adaptive);
   if (!games.length) return;
-  const latest = games.sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a))[0];
+  // A clean game has no focus of its own: keep the one from the latest game that pointed to something.
+  const sorted = games.sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
+  const latest = sorted.find((g) => !g.report!.focus.generic) ?? sorted[0];
   const settings = await repo.getSettings();
   await repo.saveSettings({ ...settings, focus: { ...latest.report!.focus, setAt: Date.now(), gameId: latest.id } });
 }

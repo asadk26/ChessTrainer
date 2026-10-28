@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '../components/AppShell';
+import { GameHeader } from '../components/GameHeader';
 import type { ReportItem, StoredGame } from '../../domain/types';
-import { enrichWithLlm, explainLessons, recoach, runAnalysis, setOutcome } from '../actions';
+import { enrichWithLlm, explainLessons, recoach, runAnalysis } from '../actions';
 import { navigate, useApp } from '../store';
 import { GuidedReview } from './GuidedReview';
 import { DrillList } from './DrillsScreen';
@@ -11,10 +11,8 @@ import { REPORT_VERSION } from '../../coach/report';
 import { engineNotes, gameStats } from '../../analysis/engineReview';
 import { repo } from '../../storage/repo';
 import { FlagButton } from '../components/FlagButton';
-import { copyText } from '../clipboard';
 import { AiExplain } from '../components/AiExplain';
 import { BetaCoach, useBetaCoachOn } from '../components/BetaCoach';
-import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
 import type { FeedbackWhere } from '../../domain/types';
 
 function useAnalysis(game: StoredGame | undefined) {
@@ -228,45 +226,6 @@ function Summary({ game }: { game: StoredGame }) {
 }
 
 /** Copy this game's PGN in one tap. */
-function CopyPgn({ pgn }: { pgn: string }) {
-  const [done, setDone] = useState<'' | 'ok' | 'fail'>('');
-  return (
-    <button
-      className="link small"
-      onClick={async () => {
-        setDone((await copyText(pgn.trim() + '\n')) ? 'ok' : 'fail');
-        window.setTimeout(() => setDone(''), 2000);
-      }}
-    >
-      {done === 'ok' ? 'Copied ✓' : done === 'fail' ? 'Copy failed' : 'Copy PGN'}
-    </button>
-  );
-}
-
-/** "You lost ▾" — the player can correct a missing or wrong PGN result. */
-function OutcomeSelect({ game }: { game: StoredGame }) {
-  const { refresh } = useApp();
-  const current = userOutcome(game);
-  return (
-    <select
-      className="outcome-select"
-      aria-label="How the game ended for you"
-      value={current ?? ''}
-      onChange={async (e) => {
-        await setOutcome(game.id, e.target.value as Outcome);
-        await refresh();
-      }}
-    >
-      {!current && <option value="">Result unknown</option>}
-      {(['win', 'loss', 'draw'] as Outcome[]).map((o) => (
-        <option key={o} value={o}>
-          {OUTCOME_LABEL[o]}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab: 'summary' | 'review' | 'drills' | 'ai'; ply?: number; explore?: boolean; already?: boolean }) {
   const { games, refresh, llm } = useApp();
   const game = games.find((g) => g.id === id);
@@ -285,40 +244,7 @@ export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab
 
   if (!game) return <div className="narrow"><p className="muted">Game not found.</p></div>;
 
-  const header = (
-    <div className={`game-header ${tab === 'review' ? 'compact' : ''}`}>
-      <div>
-        <div className="title-row">
-          <button className="icon-btn" aria-label="Back to games" onClick={() => navigate('/games')}>
-            <Icon name="back" />
-          </button>
-          <h1>
-            {game.headers.white} <span className="muted">vs</span> {game.headers.black}
-          </h1>
-        </div>
-        <p className="muted small">
-          <OutcomeSelect game={game} /> · <CopyPgn pgn={game.pgn} /> · you played {game.userColor === 'w' ? 'White' : 'Black'}
-          {game.headers.date ? ` · ${game.headers.date}` : ''}
-          {game.report ? ` · coach voice: ${game.report.voice === 'llm' ? 'AI' : 'built-in'}` : ''}
-          {llmState === 'working' && ' · AI coach is writing…'}
-          {llmState === 'error' && ' · AI coach unavailable, using built-in coaching'}
-        </p>
-      </div>
-      {game.status === 'analyzed' && (
-        <nav className="tabs">
-          {(['summary', 'review', 'drills', ...(betaOn ? (['ai'] as const) : [])] as const).map((t) => (
-            <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => navigate(t === 'summary' ? `/game/${id}` : `/game/${id}/${t}`)}>
-              {t === 'summary' ? 'Summary' : t === 'review' ? 'Guided review' : t === 'drills' ? 'Drills' : (
-                <>
-                  AI Coach <span className="beta-badge">Beta</span>
-                </>
-              )}
-            </button>
-          ))}
-        </nav>
-      )}
-    </div>
-  );
+  const header = <GameHeader game={game} tab={tab} showTabs={game.status === 'analyzed'} betaOn={betaOn} llmState={llmState} />;
 
   if (game.status !== 'analyzed') {
     const pct = progress ? Math.round((progress.done / progress.total) * 100) : 0;

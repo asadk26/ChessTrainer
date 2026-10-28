@@ -221,7 +221,6 @@ p { margin: 0 0 0.75rem; }
 .mark.bad { background: var(--warn); }
 .mark.good { background: var(--accent); }
 
-.game-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .tabs { display: flex; gap: 0.25rem; background: var(--track); padding: 0.25rem; border-radius: 10px; }
 .tab { font: inherit; border: 0; background: transparent; padding: 0.4rem 0.85rem; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 550; }
 .tab.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
@@ -266,7 +265,6 @@ p { margin: 0 0 0.75rem; }
   .topbar nav a { padding: 0.35rem 0.5rem; }
   .brand-text { display: none; }
   .topbar { padding: calc(0.6rem + env(safe-area-inset-top)) 0.9rem 0.6rem; }
-  .game-header { align-items: flex-start; }
   .movelist { max-height: 240px; }
 }
 
@@ -362,11 +360,6 @@ p { margin: 0 0 0.75rem; }
   .rv.in-moment .move-strip { display: none; }
   .rv.in-moment .rv-prompt .moment-head .tag { display: none; }
   .rv.in-moment .rv-prompt .moment-head { justify-content: flex-start; }
-  .game-header.compact { margin-bottom: 0.5rem; }
-  .game-header.compact h1 { font-size: 1.05rem; margin: 0; }
-  .game-header.compact > div > p { display: none; }
-  .game-header.compact .tabs { width: 100%; }
-  .game-header.compact .tab { flex: 1; padding: 0.35rem 0.4rem; }
   .board-controls .next-btn { flex: 1; }
 }
 
@@ -662,7 +655,6 @@ p { margin: 0 0 0.75rem; }
 .icon-btn:hover { background: var(--surface-2); }
 .title-row { display: flex; align-items: center; gap: 0.5rem; }
 .title-row h1 { margin: 0; }
-.title-row .icon-btn { width: 2.1rem; height: 2.1rem; }
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center;
   background: var(--card); border-top: 1px solid var(--line);
@@ -680,7 +672,6 @@ a { color: var(--accent); }
 .export-row select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); max-width: 100%; }
 .games li:first-child { border-top: 0; }
 .card > p.chesscom-sync { margin: 0; }
-@media (max-width: 860px) { .title-row h1 { font-size: 1.2rem; } }
 
 /* ---------------------------------------------------------------- games list */
 .analyze-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
@@ -764,3 +755,21 @@ a { color: var(--accent); }
 .mb-track { width: 13px; height: 30px; background: var(--track); border-radius: 3px; display: flex; align-items: flex-end; overflow: hidden; }
 .mb-track i { display: block; width: 100%; background: var(--accent); }
 .month-bars em { font-size: 0.62rem; font-style: normal; color: var(--muted); line-height: 1; }
+
+/* ---------------------------------------------------------------- shared game header */
+.game-header { display: grid; gap: 0.3rem; margin: calc(0.1rem + env(safe-area-inset-top)) 0 0.7rem; }
+.game-header .title-row { gap: 0.15rem; margin-left: -0.6rem; }
+.game-header h1 { font-size: 1.2rem; line-height: 1.25; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-meta { display: flex; align-items: center; gap: 0.3rem 0.55rem; margin: 0; white-space: nowrap; overflow-x: auto; scrollbar-width: none; min-height: 1.6rem; }
+.game-meta::-webkit-scrollbar { display: none; }
+.game-meta > * + *::before { content: '·'; margin-right: 0.55rem; color: var(--muted); }
+.game-meta .link { padding: 0; }
+.game-header .tabs { width: 100%; margin-top: 0.2rem; }
+.game-header .tab { flex: 1; padding: 0.4rem 0.3rem; font-size: 0.88rem; white-space: nowrap; }
+.game-header .tab .beta-badge { margin-left: 0.25rem; }
+
+/* Icon buttons: at least 44×44. "plain" ones look like the tab bar icons (outline, muted, no chrome). */
+.icon-btn { width: 44px; height: 44px; }
+.icon-btn.plain { border: 0; background: transparent; color: var(--muted); border-radius: 12px; }
+.icon-btn.plain:hover, .icon-btn.plain:active { background: var(--surface-2); color: var(--ink); }
+.screen-head .screen-actions { margin-right: -0.5rem; }

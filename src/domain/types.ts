@@ -318,7 +318,8 @@ export interface GameReport {
   didWell: ReportItem[];
   hurt: ReportItem[];
   recurring: string;
-  focus: { title: string; detail: string; theme: ThemeId };
+  /** `generic`: nothing in this game pointed to a focus, so this is the default advice. */
+  focus: { title: string; detail: string; theme: ThemeId; generic?: boolean };
   minorNotes: ReportItem[];
   /** One or two sentences on the shape of the game (ahead from move X, endgame, race...). */
   story?: string;

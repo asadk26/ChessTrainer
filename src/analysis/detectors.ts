@@ -38,6 +38,7 @@ import { moveLabel } from '../chess/pgn';
 import { pd, scoreToCp, winPercent } from './evaluation';
 import { buildContexts, underKingPressure } from './context';
 import { describeMove } from './movePurpose';
+import { detectPattern } from './patterns';
 
 export interface DetectorContext {
   plies: PlyRecord[];
@@ -997,11 +998,24 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
     const pos = ctx.positions[i];
     const line = pos.lines.find((l) => l.pv[0] === p.uci);
     const d = describeMove({ fen: p.fenBefore, uci: p.uci, pv: line?.pv ?? [p.uci, ...e.replyLineUci], context: cx(ctx, p) });
-    const hit = d?.purposes.find((x) => (x.id === 'double_attack' || x.id === 'win_material') && x.confidence === 'high');
-    // Only quiet set-ups or forks — a plain recapture isn't a "found tactic".
-    if (!hit || (p.captured && hit.id === 'win_material' && (hit.plies ?? 1) <= 1)) continue;
+    let hit: { id: string; text: string; plies?: number } | undefined = d?.purposes.find((x) => (x.id === 'double_attack' || x.id === 'win_material') && x.confidence === 'high');
+    // Only quiet set-ups or forks — a plain capture isn't a "found tactic"…
+    const prev = ctx.plies[i - 1];
+    const plainCapture = !!p.captured && hit?.id === 'win_material' && (hit.plies ?? 1) <= 1;
     const gain = e.materialAfterReply - e.materialBefore;
-    if (gain < 2) continue;
+    // …unless the piece looked defended and taking back loses to a tactic the board shows
+    // (…Qxg5, and if Qxg5, Nf3+ forks king and queen).
+    let defendedTake = false;
+    if (p.captured && gain >= 2 && !(prev?.captured && prev.to === p.to) && attackersOf(p.fenBefore, p.to, other(ctx.userColor)).length > 0) {
+      const pv = line?.pv ?? [];
+      const why = detectPattern(p.fenBefore, p.uci, [], pv);
+      const takeBack = why && why.side === 'better' && why.tag !== 'hanging_piece' && why.at >= 2 ? playLine(p.fenBefore, pv, 2)[1] : undefined;
+      if (why && takeBack && takeBack.san.includes('x') && pv[1]?.slice(2, 4) === p.to) {
+        defendedTake = true;
+        hit = { id: 'win_material', plies: 2, text: `took the ${PIECE_NAME[p.captured]} on ${p.to}: it looked defended, but if ${takeBack.san}, ${why.evidence}` };
+      }
+    }
+    if (!hit || (plainCapture && !defendedTake) || gain < 2) continue;
     found.push({
         gain,
         f: {
@@ -1159,7 +1173,9 @@ function detectClock(ctx: DetectorContext, timeControl?: string): Finding[] {
     const spent = prev + inc - p.clockSeconds!;
     prev = p.clockSeconds!;
     const e = ctx.evals[p.ply - 1];
-    if (p.moveNumber <= 10 && spent >= Math.max(60, base * 0.12) && pd(e) < 4 && (!longThink || spent > longThink.spent)) {
+    // Only a quiet move counts as routine: a capture, a check, or a position with material at stake deserves the time.
+    const routine = !p.captured && !isCheckMove(p.san) && Math.abs(e.materialAfterBest - e.materialBefore) < 2 && Math.abs(e.materialAfterReply - e.materialBefore) < 2;
+    if (routine && p.moveNumber <= 10 && spent >= Math.max(60, base * 0.12) && pd(e) < 4 && (!longThink || spent > longThink.spent)) {
       longThink = { ply: p, spent };
     }
   }
@@ -1233,7 +1249,9 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
     } else if (left.length >= 2) {
       const ahead = aheadAt(at10);
       // Pieces at home only matter if it showed: a real drop somewhere in the opening.
-      const costly = ctx.plies.some((p, k) => p.color === user && p.moveNumber <= 12 && pd(ctx.evals[k]) >= 8);
+      // Already well ahead and the game was won: the pieces at home cost nothing.
+      const won = (ctx.result === '1-0' && user === 'w') || (ctx.result === '0-1' && user === 'b');
+      const costly = !(ahead && won) && ctx.plies.some((p, k) => p.color === user && p.moveNumber <= 12 && pd(ctx.evals[k]) >= 8);
       out.push({
         kind: 'weakness',
         category: 'development',

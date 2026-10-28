@@ -1,0 +1,14 @@
+[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2026.10.27"]
+[White "king2008abhi"]
+[Black "chunkmonkey420"]
+[Result "0-1"]
+[WhiteElo "1019"]
+[BlackElo "1076"]
+[TimeControl "900+10"]
+[Termination "chunkmonkey420 won - game abandoned"]
+[UTCDate "2026.10.27"]
+[UTCTime "04:12:57"]
+
+1. e4 {[%clk 0:15:08.5]} 1... c6 {[%clk 0:15:05.4]} 2. e5 {[%clk 0:15:16.7]} 2... d5 {[%clk 0:14:44.4]} 3. d4 {[%clk 0:15:21.2]} 3... Bf5 {[%clk 0:14:02.4]} 4. Qf3 {[%clk 0:15:04]} 4... e6 {[%clk 0:13:55.7]} 5. Nh3 {[%clk 0:14:57.1]} 5... Ne7 {[%clk 0:13:16.6]} 6. Ng5 {[%clk 0:15:00.2]} 6... Bg6 {[%clk 0:12:49.8]} 7. Bd3 {[%clk 0:14:23.7]} 7... Nf5 {[%clk 0:12:27.1]} 8. g4 {[%clk 0:12:45.8]} 8... Nxd4 {[%clk 0:12:19.1]} 9. Qf4 {[%clk 0:12:26]} 9... Qxg5 {[%clk 0:09:48.5]} 10. Bxg6 {[%clk 0:12:15.6]} 10... Qxg6 {[%clk 0:09:14]} 11. Qxd4 {[%clk 0:12:17.6]} 11... Qxc2 {[%clk 0:08:54.4]} 12. O-O {[%clk 0:08:28.9]} 12... Nd7 {[%clk 0:07:58.4]} 0-1

@@ -2,7 +2,7 @@
 // worse position, or resigning a position that was still playable at this level.
 import { Chess } from 'chess.js';
 import type { PositionEval, StoredGame } from '../domain/types';
-import { COLOR_NAME, materialBalance, other, playLine } from '../chess/board';
+import { COLOR_NAME, materialBalance, materialPhrase, other, playLine } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { userOutcome } from '../chess/outcome';
 import { MATE_CP, positionCp } from '../analysis/evaluation';
@@ -30,6 +30,12 @@ export function endingNote(game: StoredGame, positions: PositionEval[]): string 
 
   if (won && last.color === me && cp <= -150) {
     return `You won because ${howItEnded(game.headers.termination, opp)} right after ${moveLabel(last)} — but that move actually left ${opp} better. Enjoy the point, but don't count on that next time.`;
+  }
+  // A win the opponent gave up on while you were clearly winning: say so, it was deserved.
+  if (won && cp >= 150 && !/checkmate|time vs|insufficient/i.test(game.headers.termination ?? '')) {
+    const up = materialBalance(last.fenAfter, me);
+    const how = howItEnded(game.headers.termination, opp);
+    return `${how.charAt(0).toUpperCase()}${how.slice(1)} after ${moveLabel(last)}, with you ${up >= 1 ? `up ${materialPhrase(up)}` : 'clearly better'} — a deserved win.`;
   }
   if (lost) {
     const t = (game.headers.termination ?? '').toLowerCase();

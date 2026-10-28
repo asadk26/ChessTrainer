@@ -16,7 +16,7 @@ import { Icon, ScreenHeader } from '../components/AppShell';
 export function Dashboard() {
   const { games, refresh } = useApp();
   const gear = (
-    <button className="icon-btn" aria-label="Settings" title="Settings" onClick={() => navigate('/settings')}>
+    <button className="icon-btn plain" aria-label="Settings" title="Settings" onClick={() => navigate('/settings')}>
       <Icon name="gear" />
     </button>
   );

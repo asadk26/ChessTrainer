@@ -30,7 +30,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 15;
+export const REPORT_VERSION = 16;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -461,7 +461,8 @@ export function buildReport(input: ReportInput): GameReport {
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
   // With no strong theme, a credible weaker one (the one we'll mention) still beats a generic default.
-  const focusTheme = chooseFocus(groups, prior) ?? groups.find((g) => !g.findings.every(isSoft))?.theme ?? 'opponent_threats';
+  const chosen = chooseFocus(groups, prior) ?? groups.find((g) => !g.findings.every(isSoft))?.theme;
+  const focusTheme = chosen ?? 'opponent_threats';
   const focusMeta = focusFor(focusTheme, findings);
 
   let headline: string;
@@ -499,7 +500,7 @@ export function buildReport(input: ReportInput): GameReport {
     didWell,
     hurt,
     recurring: recurringText(groups, plies, prior),
-    focus: { title: focusMeta.focusTitle, detail: focusMeta.focusDetail, theme: focusTheme },
+    focus: { title: focusMeta.focusTitle, detail: focusMeta.focusDetail, theme: focusTheme, ...(chosen ? {} : { generic: true }) },
     minorNotes,
     story: [input.ending, gameStory(plies, contexts)].filter(Boolean).join(' ') || undefined,
     voice: 'template',
