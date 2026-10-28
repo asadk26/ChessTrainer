@@ -33,7 +33,7 @@ export function storedFromPgn(pgn: string, userColor: 'w' | 'b', id = 'g1', impo
 
 export const sampleStored = (id = 'g1', importedAt?: number) => storedFromPgn(SAMPLE_PGN, 'w', id, importedAt);
 
-export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game' | 'chaotic-game' | 'black-win-game' | 'queen-blunder-game' | 'queen-hunt-game' | 'resign-win-game' | 'draw-game' | 'sicilian-win-game' | 'atayan-game' | 'josedang-game' | 'harrison-game' | 'aditya-game' | 'halfmast-game' | 'blundering-game' | 'jnhbleachie-game' | 'abhi-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
+export function fixtureGame(name: 'winning-game' | 'knight-trip-game' | 'kingside-storm-game' | 'chaotic-game' | 'black-win-game' | 'queen-blunder-game' | 'queen-hunt-game' | 'resign-win-game' | 'draw-game' | 'sicilian-win-game' | 'atayan-game' | 'josedang-game' | 'harrison-game' | 'aditya-game' | 'halfmast-game' | 'blundering-game' | 'jnhbleachie-game' | 'abhi-game' | 'drearydoc-game', id: string = name, importedAt = Date.UTC(2026, 9, 20)) {
   const color = ['knight-trip-game', 'black-win-game', 'queen-blunder-game', 'queen-hunt-game', 'resign-win-game', 'draw-game', 'harrison-game', 'halfmast-game', 'blundering-game', 'jnhbleachie-game', 'abhi-game'].includes(name) ? 'b' : 'w';
   return {
     game: storedFromPgn(readFileSync(join(here, 'fixtures', `${name}.pgn`), 'utf8'), color, id, importedAt),

@@ -1,6 +1,7 @@
 // Builds the concise post-game coaching report from findings + history.
 import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, type PatternTag } from '../analysis/patterns';
-import type { CategoryId, Color, Finding, GameReport, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
+import type { CategoryId, Color, Finding, GameReport, MoveEval, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
+import { rootCause } from '../analysis/rootCause';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
 import { COLOR_NAME, materialPhrase, other } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
@@ -18,6 +19,9 @@ export interface ReportInput {
   lost?: boolean;
   /** How the game ended, when it matters (won by resignation from a worse position, an early resignation). */
   ending?: string;
+  /** Per-move engine evals, for the root-cause story (decisive drop + its setup). */
+  evals?: MoveEval[];
+  termination?: string;
 }
 
 export interface ThemeGroup {
@@ -30,7 +34,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 16;
+export const REPORT_VERSION = 17;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -51,7 +55,9 @@ const confWeight = (f: Finding) => (f.confidence === 'high' ? 1 : f.confidence =
 
 /** Findings about the state of the game (slow development, the clock…), not about one move. */
 export function isStateFinding(f: Finding): boolean {
-  return ['development', 'passive_piece', 'time_management'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
+  // King-pawn and pawn-storm findings are judged by what followed, often on a move Stockfish was fine
+  // with: they belong in the story, never in a "find a better move" lesson.
+  return ['development', 'passive_piece', 'time_management', 'king_pawns', 'pawn_storm'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
 }
 
 /** A finding that can count toward a pattern (in this game or as history). */
@@ -462,8 +468,15 @@ export function buildReport(input: ReportInput): GameReport {
 
   // With no strong theme, a credible weaker one (the one we'll mention) still beats a generic default.
   const chosen = chooseFocus(groups, prior) ?? groups.find((g) => !g.findings.every(isSoft))?.theme;
-  const focusTheme = chosen ?? 'opponent_threats';
-  const focusMeta = focusFor(focusTheme, findings);
+  // A loss with a decisive drop: the lesson comes from what explains that move (or its setup),
+  // and the story tells it in order — setup, decisive mistake, result.
+  const rc = input.evals && input.lost ? rootCause({ plies, evals: input.evals, userColor, findings, termination: input.termination, lost: true }) : undefined;
+  // Only a specific explanation (a named tactic, a defended pawn, mate, a truly loose piece) takes
+  // over the headline and the focus; otherwise the story is still told, under the usual headline.
+  const specific = (f: Finding) => (!!f.facts.pattern && f.facts.patternSide !== 'better') || f.category === 'defended_grab' || !!f.facts.mate || f.facts.hanging === 'moved' || f.facts.hanging === 'left';
+  const decisiveLesson = rc && specific(rc.decisive) ? lessonFor(rc.decisive, findings) : undefined;
+  const focusTheme = decisiveLesson?.theme ?? chosen ?? 'opponent_threats';
+  const focusMeta = decisiveLesson ?? focusFor(focusTheme, findings);
 
   let headline: string;
   const openingStrengths = findings.filter((f) => f.kind === 'strength' && ['center_control', 'developed_pieces', 'castled_early'].includes(f.category));
@@ -472,7 +485,14 @@ export function buildReport(input: ReportInput): GameReport {
   const lead = strongGroups[0];
   // Real mistakes that didn't add up to a strong theme still aren't a "clean game".
   const slips = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && !isStateFinding(f));
-  if (!lead && slips.length) {
+  if (rc && decisiveLesson) {
+    const centre = rc.setup.some((f) => f.category === 'king_safety' && f.facts.notCastled);
+    const setup = rc.setup
+      .filter((f) => SETUP_CATEGORIES.includes(f.category) && !(f.category === 'king_safety' && f.facts.notCastled))
+      .map((f) => setupClause(f, userColor))
+      .filter(Boolean);
+    headline = `${capitalise(decisiveLesson.clause)}${setup.length ? `, after ${setup.join(' and ')}` : ''}${centre ? ', with your king still in the centre' : ''}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+  } else if (!lead && slips.length) {
     headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${slips.length === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead && input.lost) {
     headline = `No single mistake decided this game — it slipped away a little at a time. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
@@ -500,13 +520,61 @@ export function buildReport(input: ReportInput): GameReport {
     didWell,
     hurt,
     recurring: recurringText(groups, plies, prior),
-    focus: { title: focusMeta.focusTitle, detail: focusMeta.focusDetail, theme: focusTheme, ...(chosen ? {} : { generic: true }) },
+    focus: {
+      title: focusMeta.focusTitle,
+      detail: [focusMeta.focusDetail, decisiveLesson && rc?.setup[0] && SETUP_LESSON[rc.setup[0].category] ? `Also from this game: ${SETUP_LESSON[rc.setup[0].category]}` : ''].filter(Boolean).join(' '),
+      theme: focusTheme,
+      ...(chosen || decisiveLesson ? {} : { generic: true }),
+    },
     minorNotes,
-    story: [input.ending, gameStory(plies, contexts)].filter(Boolean).join(' ') || undefined,
+    story: (rc ? [rc.story, input.ending] : [input.ending, gameStory(plies, contexts)]).filter(Boolean).join(' ') || undefined,
     voice: 'template',
     version: REPORT_VERSION,
   };
 }
+
+/** The lesson of the move that decided a game: its named tactic or specific detector first. */
+function lessonFor(f: Finding, findings: Finding[]): { focusTitle: string; focusDetail: string; clause: string; label: string; theme: ThemeId } | undefined {
+  const theme = themeOf(f.category);
+  if (f.facts.pattern && f.facts.patternSide !== 'better') {
+    const tag = f.facts.pattern as PatternTag;
+    return { focusTitle: PATTERN_FOCUS[tag].title, focusDetail: PATTERN_FOCUS[tag].detail, clause: `you ${PATTERN_PHRASE[tag].refutation}`, label: PATTERN_LABEL[tag], theme: theme ?? 'tactics' };
+  }
+  if (f.category === 'defended_grab') return { ...THEMES.counting, clause: `${THEMES.counting.clause} (${moveOf(f)})`, theme: 'counting' };
+  if (!theme) return undefined;
+  // Everything else: the theme's own focus, sharpened by what the board showed (mate, a truly loose piece…).
+  return { ...focusFor(theme, findings.filter((x) => x.ply === f.ply)), theme };
+}
+
+const moveOf = (f: Finding) => (f.facts.move as string | undefined) ?? /^(\d+\.(?:\.\.)?\S+)/.exec(f.evidence)?.[1] ?? `move ${Math.ceil(f.ply / 2)}`;
+
+const SETUP_CATEGORIES = ['king_pawns', 'pawn_storm', 'piece_to_rim', 'king_safety', 'pawn_structure'];
+
+/** How a set-up move reads inside the headline ("after 12.f3 loosened the pawns in front of your king"). */
+function setupClause(f: Finding, userColor: Color): string | undefined {
+  const mv = moveOf(f);
+  switch (f.category) {
+    case 'king_pawns':
+      return `${mv} loosened the pawns in front of your king`;
+    case 'pawn_storm':
+      return `${COLOR_NAME[other(userColor)]}'s pawns stormed your king's side`;
+    case 'piece_to_rim':
+      return `your ${String(f.facts.piece ?? 'piece')} was driven to the rim (${mv})`;
+    case 'king_safety':
+      return `${mv} weakened your king`;
+    case 'pawn_structure':
+      return `${mv} weakened your pawns`;
+  }
+  return undefined;
+}
+
+/** A second, set-up lesson, added to the focus detail. */
+const SETUP_LESSON: Partial<Record<string, string>> = {
+  king_pawns: "leave the pawns in front of your castled king alone — moving them gives the opponent's pawns targets to chase.",
+  pawn_storm: "when the opponent's pawns march at your king, hit back in the centre and keep your pieces off the squares they attack.",
+  piece_to_rim: 'when a pawn chases a knight or bishop, bring it back toward the centre, not to the edge.',
+  king_safety: 'keep the pawns in front of your castled king where they are unless you gain something concrete.',
+};
 
 function lowerFirst(s: string) {
   if (/^(White|Black)\b/.test(s)) return s;

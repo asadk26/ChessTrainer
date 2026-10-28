@@ -70,6 +70,10 @@ export interface PositionEval {
 
 export type CategoryId =
   | 'blunder'
+  | 'defended_grab'
+  | 'king_pawns'
+  | 'pawn_storm'
+  | 'piece_to_rim'
   | 'missed_threat'
   | 'tactical_blindness'
   | 'inefficient_moves'
@@ -330,6 +334,7 @@ export interface GameReport {
 
 export type ThemeId =
   | 'active_without_followup'
+  | 'counting'
   | 'loose_pieces'
   | 'opponent_threats'
   | 'tactics'

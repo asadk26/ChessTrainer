@@ -39,6 +39,7 @@ import { pd, scoreToCp, winPercent } from './evaluation';
 import { buildContexts, underKingPressure } from './context';
 import { describeMove } from './movePurpose';
 import { detectPattern } from './patterns';
+import { detectDefendedGrab, detectKingPawns, detectPawnStorm, detectPieceToRim } from './rootCause';
 
 export interface DetectorContext {
   plies: PlyRecord[];
@@ -1005,8 +1006,10 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
     const gain = e.materialAfterReply - e.materialBefore;
     // …unless the piece looked defended and taking back loses to a tactic the board shows
     // (…Qxg5, and if Qxg5, Nf3+ forks king and queen).
+    // The trick is the lesson even when the opponent later wins material back elsewhere, so this
+    // only needs a whole piece taken (and the board showing why taking back fails).
     let defendedTake = false;
-    if (p.captured && gain >= 2 && !(prev?.captured && prev.to === p.to) && attackersOf(p.fenBefore, p.to, other(ctx.userColor)).length > 0) {
+    if (p.captured && PIECE_VALUE[p.captured] >= 3 && !(prev?.captured && prev.to === p.to) && attackersOf(p.fenBefore, p.to, other(ctx.userColor)).length > 0) {
       const pv = line?.pv ?? [];
       const why = detectPattern(p.fenBefore, p.uci, [], pv);
       const takeBack = why && why.side === 'better' && why.tag !== 'hanging_piece' && why.at >= 2 ? playLine(p.fenBefore, pv, 2)[1] : undefined;
@@ -1015,9 +1018,9 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
         hit = { id: 'win_material', plies: 2, text: `took the ${PIECE_NAME[p.captured]} on ${p.to}: it looked defended, but if ${takeBack.san}, ${why.evidence}` };
       }
     }
-    if (!hit || (plainCapture && !defendedTake) || gain < 2) continue;
+    if (!hit || (plainCapture && !defendedTake) || (gain < 2 && !defendedTake)) continue;
     found.push({
-        gain,
+        gain: defendedTake ? Math.max(gain, PIECE_VALUE[p.captured!]) : gain,
         f: {
           kind: 'strength',
           category: 'found_tactic',
@@ -1246,7 +1249,8 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
     const left = undevelopedMinors(at10.fenAfter, user);
     if (left.length === 0) {
       out.push({ kind: 'strength', category: 'developed_pieces', ply: at10.ply, severity: 2, confidence: 'high', evidence: 'All minor pieces developed by move 10.', facts: {} });
-    } else if (left.length >= 2) {
+    } else if (left.length >= 2 && !(aheadAt(at10) && ((ctx.result === '1-0' && user === 'w') || (ctx.result === '0-1' && user === 'b')))) {
+      // (Already well ahead and the game was won: the pieces at home cost nothing — no lesson.)
       const ahead = aheadAt(at10);
       // Pieces at home only matter if it showed: a real drop somewhere in the opening.
       // Already well ahead and the game was won: the pieces at home cost nothing.
@@ -1429,6 +1433,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     const seen = () => [...inherited, ...here];
     here.push(...detectPerpetual(ctx, i));
     if (!here.length) here.push(...detectMaterialLoss(ctx, i));
+    if (!here.length) here.push(...detectDefendedGrab(ctx, i));
     if (!here.length) here.push(...detectMissedFork(ctx, i));
     here.push(...detectMissedTactic(ctx, i));
     here.push(...detectAllowedCounterplay(ctx, i, here));
@@ -1444,11 +1449,15 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     here.push(...brk);
     here.push(...detectMissedKingAttack(ctx, i, seen()));
     here.push(...detectKingShelter(ctx, i, seen()));
+    // Set-up moves: judged by what followed, so they can fire on a move the engine didn't mind.
+    if (!here.some((f) => f.category === 'king_safety')) here.push(...detectKingPawns(ctx, i));
+    here.push(...detectPieceToRim(ctx, i));
     here.push(...detectCaptureDecisions(ctx, i, seen()));
     here.push(...detectPawnStructure(ctx, i, seen()));
     here.push(...detectCatchAll(ctx, i, here));
     findings.push(...here);
   }
+  findings.push(...detectPawnStorm(ctx, findings));
   findings.push(...detectClock(ctx, timeControl));
   findings.push(...detectPassivePieces(ctx));
   findings.push(...detectChasedPiece(ctx));

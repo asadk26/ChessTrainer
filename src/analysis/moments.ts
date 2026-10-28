@@ -30,6 +30,7 @@ export interface PriorGameFindings {
 
 /** Categories with a natural "what will they reply?" question. */
 const PREDICT_FIRST: CategoryId[] = [
+  'defended_grab',
   'premature_attack',
   'pointless_check',
   'inefficient_moves',
@@ -42,7 +43,7 @@ const PREDICT_FIRST: CategoryId[] = [
 ];
 
 /** Categories where the instructive reply is the engine's punishing one, not what the opponent actually played. */
-export const ENGINE_REPLY_CATEGORIES: string[] = ['blunder', 'missed_threat', 'calculation', 'gave_back_material', 'allowed_counterplay', 'unnecessary_complications'];
+export const ENGINE_REPLY_CATEGORIES: string[] = ['blunder', 'defended_grab', 'missed_threat', 'calculation', 'gave_back_material', 'allowed_counterplay', 'unnecessary_complications'];
 
 /** Whether a moment teaches the engine's punishing reply rather than what the opponent actually played. */
 export const usesEngineReply = (m: Pick<TeachingMoment, 'category' | 'tactic'>) => ENGINE_REPLY_CATEGORIES.includes(m.category) || m.tactic?.side === 'refutation';
@@ -50,12 +51,14 @@ export const usesEngineReply = (m: Pick<TeachingMoment, 'category' | 'tactic'>) 
 /** Priority when several findings share a move. */
 const PRIMARY_ORDER: CategoryId[] = [
   'blunder',
+  'defended_grab',
   'allowed_counterplay',
   'gave_back_material',
   'missed_threat',
   'tactical_blindness',
   'stranded_piece',
   'calculation',
+  'piece_to_rim',
   'premature_attack',
   'pointless_check',
   'inefficient_moves',

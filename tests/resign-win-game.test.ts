@@ -12,7 +12,8 @@ describe('a clean win', () => {
     expect(r.headline).toMatch(/^A strong win/);
     expect(r.hurt).toHaveLength(0);
     expect(r.focus.title).not.toMatch(/Develop a new piece/);
-    expect(r.minorNotes.some((n) => /Nb8 and Bc8 were still at home.*didn't cost anything/.test(n.text))).toBe(true);
+    // Pieces still at home while already well ahead in a won game cost nothing: no lesson at all.
+    expect(game.findings.some((f) => f.category === 'development')).toBe(false);
   });
 
   it('credits both tactics, including the pin that won the queen for a rook', () => {

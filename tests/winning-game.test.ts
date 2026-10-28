@@ -19,8 +19,8 @@ describe('coaching a game where you are far ahead', () => {
     expect(find(81, 'endgame')?.facts.passedPawn).toBe('a4'); // 41.Be1 ignores the a-pawn
   });
 
-  it('frames development and king safety in the context of the lead', () => {
-    expect(find(19, 'development')?.evidence).toMatch(/already up a rook/);
+  it("doesn't coach development when you were already a rook up and won", () => {
+    expect(find(19, 'development')).toBeUndefined();
   });
 
   it('credits strong practical decisions', () => {

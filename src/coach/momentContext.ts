@@ -22,7 +22,7 @@ import type { PriorGameFindings } from '../analysis/moments';
 const band = (cp: number) => BAND_LABEL[bandOf(cp)].toLowerCase();
 
 /** Bumped when the explanation's input or rules change, so older cached explanations are redone on request. */
-export const EXPLAIN_VERSION = 'why4';
+export const EXPLAIN_VERSION = 'why5';
 
 /** Below this win% gap the two moves are close: say so in one line instead of inventing reasons. */
 export const SMALL_DIFFERENCE = 6;
@@ -192,7 +192,11 @@ export function buildMomentContext(game: StoredGame, ply: number, opts: { rating
   // A free capture is an opportunity, said as one; otherwise the strongest board fact.
   // Reasons start with a move in SAN ("f4 opens…", "Nf3 develops…"): never change their case.
   const opportunity = quality !== 'best' ? captureOpportunity(played.fenBefore, bestUci, played.uci, after?.lines[0]?.pv[0]) : undefined;
-  const fallbackReason = opportunity ? `${opportunity}.` : reasons.length ? `${reasons[0]}.` : undefined;
+  // First choice: what a detector found on this very move (the tactic, the defended pawn, the
+  // piece on the rim…) — the concrete board fact behind the mistake.
+  const explaining = here.filter((f) => f.ply === ply && f.kind === 'weakness' && CONCRETE.includes(f.category)).sort((a, b) => b.severity - a.severity)[0];
+  const detectorFact = pattern && pattern.side === 'refutation' && pattern.tag !== 'hanging_piece' ? `${pattern.evidence.charAt(0).toUpperCase()}${pattern.evidence.slice(1)}.` : explaining?.evidence;
+  const fallbackReason = detectorFact ?? (opportunity ? `${opportunity}.` : reasons.length ? `${reasons[0]}.` : undefined);
   if (opportunity) ((facts as Record<string, unknown>).boardFacts as { bestMove: string[] }).bestMove.unshift(opportunity);
   const patternTag = pattern?.tag;
   const summary = { playedSan: played.san, bestSan: quality !== 'best' ? bestLine4[0] : undefined, evalPlayed: evalText(playedCp), evalBest: evalText(bestCp) };
@@ -247,7 +251,17 @@ export function parseMomentExplanation(text: string, ctx: MomentContext, ply: nu
   return out;
 }
 
-/** Mentions a square (e5) or a move (Nf3, O-O): something checkable on the board. */
+/** Detector findings whose evidence names a concrete board fact (what attacks, defends or takes what). */
+const CONCRETE = ['defended_grab', 'piece_to_rim', 'blunder', 'missed_threat', 'gave_back_material', 'stranded_piece', 'tactical_blindness'];
+
+const VAGUE = /\b(?:(?:a |an )?(?:clear|big|huge|decisive|winning|large|significant|slight|small) (?:advantage|edge|plus)|better position|more active position|is (?:better|stronger|more accurate|more precise)|improves (?:the|your) position|gains? (?:the )?(?:upper hand|initiative|advantage))\b/i;
+const RELATION = /\b(?:attack|defend|protect|guard|take|takes|took|captur|wins? the|won the|fork|pin|skewer|open|block|check|hang|undefended|trap|threat|uncover|discover|recaptur|escape|cover|loose)/i;
+
+/**
+ * Something checkable on the board: a square (e5) or a move (Nf3, O-O) — and, when the sentence
+ * is about an "advantage", also what attacks, defends, takes or opens what.
+ */
 export function namesConcreteReason(text: string): boolean {
-  return /\b[a-h][1-8]\b/.test(text) || /\b(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|O-O(?:-O)?)\b/.test(text);
+  const named = /\b[a-h][1-8]\b/.test(text) || /\b(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|O-O(?:-O)?)\b/.test(text);
+  return named && (!VAGUE.test(text) || RELATION.test(text));
 }

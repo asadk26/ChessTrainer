@@ -62,6 +62,14 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
       return f.facts.victimPiece === 'pawn' ? `${mv} — a pawn that could just be taken` : `${mv} — a piece left unprotected`;
     case 'missed_threat':
       return `${mv} — what was your opponent threatening?`;
+    case 'defended_grab':
+      return `${mv} — that pawn was defended`;
+    case 'piece_to_rim':
+      return `${mv} — a ${s(f.facts.piece) || 'piece'} on the rim`;
+    case 'king_pawns':
+      return `${mv} — loosening your king's pawns`;
+    case 'pawn_storm':
+      return `${mv} — a pawn storm at your king`;
     case 'calculation':
       return `${mv} — check the opponent's reply`;
     case 'early_queen':
@@ -293,6 +301,30 @@ function buildCategoryText(input: MomentTextInput): MomentText {
         lesson: "Before you commit, look at your opponent's checks, captures and attacks after your move.",
       };
     }
+    case 'defended_grab': {
+      const defenders = Array.isArray(facts.defenders) ? (facts.defenders as string[]) : [];
+      return {
+        ...base,
+        intent: `You took the ${s(facts.captured)} on ${s(facts.square)} with your ${s(facts.piece)}.`,
+        question: `Before ${played.san}: who defends the ${s(facts.captured)} on ${s(facts.square)}? Play ${opp}'s reply to ${played.san}.`,
+        predictCorrect: `Exactly — ${s(facts.takenBy)} takes your ${s(facts.piece)} back.`,
+        predictOther: `Count the defenders: ${s(facts.takenBy)} takes your ${s(facts.piece)} back.`,
+        reveal: `The ${s(facts.captured)} on ${s(facts.square)} was defended by the ${defenders.join(' and the ')}, so ${s(facts.takenBy)} won your ${s(facts.piece)} for a ${s(facts.captured)}.`,
+        betterPrompt: `What would you play instead of ${played.san}?`,
+        betterCorrect: 'Good — no piece goes for a pawn.',
+        lesson: 'Before you capture, count the defenders: if the pawn is defended and your piece is worth more, the recapture wins your piece.',
+      };
+    }
+    case 'piece_to_rim':
+      return {
+        ...base,
+        intent: `Your ${s(facts.piece)} was attacked${facts.chasedBy ? ` by ${s(facts.chasedBy)}` : ''}, and you moved it to ${s(facts.square)}.`,
+        question: `Your ${s(facts.piece)} is attacked. Where should it go? Find a better square than ${played.san}.`,
+        betterPrompt: `Your ${s(facts.piece)} is attacked. Where should it go instead of ${played.san}?`,
+        betterCorrect: 'Yes — toward the centre, where it keeps its squares.',
+        reveal: `On ${s(facts.square)} the ${s(facts.piece)} had ${Number(facts.safe) === 0 ? 'no safe squares' : Number(facts.safe) === 1 ? 'only one safe square' : 'only two safe squares'}${bestSan ? `; ${bestSan} kept it in the game` : ''}.`,
+        lesson: 'When a pawn chases a knight or bishop, bring it back toward the centre, not to the edge — on the rim it has few squares and gets trapped or exchanged.',
+      };
     case 'missed_threat':
       return {
         ...base,

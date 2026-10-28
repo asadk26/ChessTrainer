@@ -9,6 +9,10 @@ export interface CategoryMeta {
 
 export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   blunder: { label: 'Outright blunders (hanging pieces)', weight: 1, theme: 'loose_pieces' },
+  defended_grab: { label: 'Taking a defended pawn and losing the piece', weight: 0.95, theme: 'counting' },
+  king_pawns: { label: 'Loosening the pawns in front of your king', weight: 0.7, theme: 'king_safety' },
+  pawn_storm: { label: "Letting the opponent's pawns storm your king", weight: 0.7, theme: 'king_safety' },
+  piece_to_rim: { label: 'Pieces driven to the edge', weight: 0.55, theme: 'activity' },
   missed_threat: { label: 'Missed opponent threats', weight: 0.95, theme: 'opponent_threats' },
   tactical_blindness: { label: 'Missed simple tactics', weight: 0.8, theme: 'tactics' },
   calculation: { label: "Not checking the opponent's best reply", weight: 0.8, theme: 'opponent_threats' },
@@ -86,6 +90,13 @@ export const THEMES: Record<ThemeId, ThemeMeta> = {
     focusDetail:
       'Checks, attacks on pieces and knight jumps feel productive. Before you play one, say the opponent\'s simplest answer out loud. If that answer leaves your piece with nothing to do — or makes it retreat — play a developing or improving move instead.',
     clause: 'you spent several tempi on moves that looked active without producing a lasting benefit',
+  },
+  counting: {
+    label: 'Counting attackers and defenders',
+    focusTitle: 'Before you capture, count the defenders.',
+    focusDetail:
+      "A pawn that looks free often isn't: before taking it, count who defends it and who attacks it. If it's defended and your piece is worth more than the pawn, the recapture wins your piece.",
+    clause: 'you took a defended pawn and lost the piece that took it',
   },
   loose_pieces: {
     label: 'Leaving pieces unprotected',

@@ -168,7 +168,8 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     expect(moment(g, 30).text.lesson).toBe(PATTERN_RULE.discovered_attack); // 15...Nd2
     const mate = g.findings.find((f) => f.ply === 34 && f.facts.mate)!; // 17...Qh4?? Qxf7+ Kd8 Qd7#
     expect(mate.severity).toBe(2); // the game was already lost: shown, but not the lesson of the game
-    expect(g.report?.headline).toMatch(/^You walked into a discovered attack\./);
+    expect(g.report?.headline).toMatch(/^You walked into a discovered attack, with your king still in the centre\./);
+    expect(g.report?.story).toMatch(/14\.\.\.Qg5.*Then the decisive mistake: 15\.\.\.Nd2 walked into a discovered attack/);
   });
   it('allowing mate in one is "allowed checkmate" with a checks lesson (vs Blundering32, 7...f5 Qf7#)', () => {
     const g = game('blundering-game');
@@ -189,7 +190,7 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
 describe('regression: a quick win vs king2008abhi (flagged: "lessons about developing, but it was a quick win")', () => {
   const g = game('abhi-game');
   it("doesn't make development the lesson when you were well ahead and won", () => {
-    expect(g.findings.find((f) => f.category === 'development')?.severity).toBe(1);
+    expect(g.findings.some((f) => f.category === 'development')).toBe(false);
     expect(g.report?.headline).toMatch(/^A strong win/);
     expect(g.report?.focus.generic).toBe(true); // nothing to work on: Home keeps the previous focus
   });
