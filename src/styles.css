@@ -294,12 +294,11 @@ p { margin: 0 0 0.75rem; }
 /* Desktop: board on the left; question, verdict and details on the right. */
 .rv-grid {
   display: grid; grid-template-columns: minmax(0, 560px) minmax(0, 1fr); column-gap: 1.25rem; row-gap: 0.7rem;
-  grid-template-areas: 'board prompt' 'board banner' 'board side'; grid-template-rows: auto auto 1fr; align-items: start;
+  grid-template-areas: 'board bottom'; align-items: start;
 }
-.rv-prompt { grid-area: prompt; }
+.rv-top { display: grid; gap: 0.6rem; }
+.rv-bottom { grid-area: bottom; display: grid; gap: 0.7rem; align-content: start; min-width: 0; }
 .rv-board { grid-area: board; }
-.rv-banner { grid-area: banner; }
-.rv-side { grid-area: side; }
 .rv-prompt { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.9rem; }
 .rv-prompt p { margin: 0 0 0.35rem; }
 .rv-prompt p:last-child { margin-bottom: 0; }
@@ -349,9 +348,6 @@ p { margin: 0 0 0.75rem; }
 
 @media (max-width: 860px) {
   /* Phones: the board stays pinned at the top; the text and buttons scroll underneath it. */
-  .rv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'board' 'prompt' 'banner' 'side'; grid-template-rows: none; row-gap: 0.45rem; }
-  .rv-board { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 0.3rem 0 0.35rem; box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.35); }
-  .rv-board .board-frame { max-width: min(100%, 48vh); }
   .topbar { position: static; }
   .rv { gap: 0.45rem; }
   .rv-prompt { padding: 0.55rem 0.75rem; font-size: 0.95rem; }
@@ -621,7 +617,6 @@ p { margin: 0 0 0.75rem; }
 .why-btn { font-weight: 650; }
 
 @media (max-width: 860px) {
-  .bwe-board { flex-basis: min(calc(100% - 26px), 48vh); }
   .eval-col { width: 18px; }
   .eval-col-num { font-size: 0.52rem; }
   .eval-graph { height: 38px; }
@@ -773,3 +768,35 @@ a { color: var(--accent); }
 .icon-btn.plain { border: 0; background: transparent; color: var(--muted); border-radius: 12px; }
 .icon-btn.plain:hover, .icon-btn.plain:active { background: var(--surface-2); color: var(--ink); }
 .screen-head .screen-actions { margin-right: -0.5rem; }
+
+/* ---------------------------------------------------------------- Guided Review on phones
+   The review is one screen between the game header and the tab bar: the board sits in the
+   middle, the graph and moves just above it, the question and buttons below. Nothing but the
+   text under the board scrolls, and the playback controls stay in view. */
+:root { --tabbar-h: 62px; }
+.tabbar { box-sizing: border-box; min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+@media (max-width: 860px) {
+  .rv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'board' 'bottom'; row-gap: 0.45rem; }
+  .container:has(> .game-page.tab-review) { padding-bottom: 0; }
+  .game-page.tab-review {
+    /* The space between the game header and the tab bar; the board takes at most half of it. */
+    --review-h: calc(100dvh - 0.9rem - var(--tabbar-h) - env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; height: var(--review-h); overflow: hidden;
+  }
+  .game-page.tab-review > .game-header { margin-bottom: 0.45rem; flex: none; }
+  .game-page.tab-review > .feedback { flex: none; }
+  .game-page.tab-review .rv { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.45rem; }
+  .game-page.tab-review .rv-grid { display: contents; }
+  .game-page.tab-review .rv-board, .game-page.tab-review .rv-bottom { grid-area: auto; }
+  /* Above the board: graph, moves and the question, pushed down against the board; scrolls if long. */
+  .game-page.tab-review .rv-top { display: flex; flex-direction: column; gap: 0.4rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .game-page.tab-review .rv-top > * { flex: none; }
+  .game-page.tab-review .rv-top > :first-child { margin-top: auto; }
+  .game-page.tab-review .rv-board { position: static; padding: 0; box-shadow: none; }
+  .game-page.tab-review .bwe-board { flex: 0 1 min(calc(100% - 26px), calc((var(--review-h) - 150px) * 0.5)); }
+  .game-page.tab-review .rv-bottom { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 0.5rem; padding-bottom: 0.4rem; }
+  .game-page.tab-review .rv-bottom > * { flex: none; }
+  .game-page.tab-review .rv-side .legend { display: none; }
+  .game-page.tab-review .rv.prompt-above .eval-graph, .game-page.tab-review .rv.prompt-above .move-strip { display: none; }
+}
+}

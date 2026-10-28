@@ -280,7 +280,7 @@ export function GameScreen({ id, tab, ply, explore, already }: { id: string; tab
   }
 
   return (
-    <div>
+    <div className={`game-page tab-${tab}`}>
       {header}
       {already && <div className="feedback neutral">You'd already imported this game, so here's the existing one (no duplicate added).</div>}
       {tab === 'summary' && <Summary game={game} />}

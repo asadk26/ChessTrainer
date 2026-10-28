@@ -494,6 +494,19 @@ function useSeenBefore(game: StoredGame, m: TeachingMoment | undefined) {
   }, [games, game, m]);
 }
 
+/** True on phone-width screens (the stacked, centred-board layout). */
+function usePhone() {
+  const query = '(max-width: 860px)';
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setPhone(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 export function GuidedReview({ game, initialPly, explore = false }: { game: StoredGame; initialPly?: number; explore?: boolean }) {
   const moments = game.moments;
   const momentAt = useMemo(() => new Map(moments.map((m) => [m.ply, m])), [moments]);
@@ -507,6 +520,8 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const [practicePly, setPracticePly] = useState<number | null>(exploring ? initialPly! : null);
   const practice = usePracticeBoard(game, practicePly, () => setPracticePly(null));
   const topRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const phone = usePhone();
 
   const finish = (m: TeachingMoment, completed: boolean) => {
     if (completed) setDoneIds((s) => new Set(s).add(m.id));
@@ -571,12 +586,13 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     }
     const initial = firstRender.current;
     firstRender.current = false;
-    // Wait a frame so the board has its final size (matters when arriving from the summary).
+    // Phones: the screen doesn't scroll — the board stays centred and only the text under it
+    // scrolls, so each new step starts from the top of that text.
     const id = window.setTimeout(() => {
-      const el = topRef.current;
-      if (!el || window.innerWidth > 860) return;
-      const top = el.getBoundingClientRect().top + window.scrollY - 6;
-      if (Math.abs(window.scrollY - top) > 3) window.scrollTo({ top, behavior: initial ? 'auto' : 'smooth' });
+      if (window.innerWidth > 860) return;
+      bottomRef.current?.scrollTo({ top: 0, behavior: initial ? 'auto' : 'smooth' });
+      const top = topRef.current?.querySelector('.rv-top');
+      top?.scrollTo({ top: top.scrollHeight, behavior: 'auto' });
     }, initial ? 120 : 30);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -757,20 +773,28 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     </p>
   ) : null;
 
-  const panels: Panels = practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  const focused = practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels;
+  const panels: Panels = focused ?? { board: browseBoard, prompt: browsePrompt, banner: browseBanner, details: browseDetails, stateKey };
+  // Phones: a question (lesson, Find it first, Show me…) goes above the centred board; while just
+  // browsing, the graph and moves stay above it and the text goes below.
+  const promptAbove = phone && !!focused;
   const marks = Object.fromEntries(
     moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : x.tier === 'note' ? ('note' as const) : ('bad' as const)]),
   );
 
+  const promptBox = <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>;
+
   return (
     <HoverProvider>
-      <div className={`rv ${active ? 'in-moment' : ''}`} ref={topRef}>
-        {whites.length > 1 && (
-          <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={jump} />
-        )}
-        <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={jump} />
+      <div className={`rv ${active ? 'in-moment' : ''} ${promptAbove ? 'prompt-above' : ''}`} ref={topRef}>
+        <div className="rv-top">
+          {whites.length > 1 && (
+            <EvalGraph values={whites} current={active ? active.ply - 1 : ply} marks={active ? {} : graphMarks} onSelect={jump} />
+          )}
+          <MoveStrip plies={game.plies} current={active ? active.ply - 1 : ply} marks={marks} badges={badges} onSelect={jump} />
+          {promptAbove && promptBox}
+        </div>
         <div className="rv-grid">
-          <div className={`rv-prompt ${active ? 'in-moment' : ''}`}>{panels.prompt}</div>
           <div className="rv-board">
             <div className="board-with-eval">
               <EvalColumn whiteCp={practice ? undefined : whites[active ? active.ply - 1 : ply]} orientation={game.userColor} />
@@ -779,6 +803,8 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
               </div>
             </div>
           </div>
+          <div className="rv-bottom" ref={bottomRef}>
+          {!promptAbove && promptBox}
           <div className="rv-banner">{panels.banner}</div>
           <aside className="rv-side">
             {active && seenBefore && (
@@ -826,6 +852,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
               </div>
             )}
           </aside>
+          </div>
         </div>
       </div>
     </HoverProvider>
