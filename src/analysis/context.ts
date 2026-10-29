@@ -45,9 +45,9 @@ export function isPromotionRace(fen: string): boolean {
 export function plyContext(p: PlyRecord, e: MoveEval, user: Color): PlyContext {
   const fen = p.fenBefore;
   const opp = other(user);
-  // Settled material: what the side to move keeps after the engine's best line,
-  // so a half-finished exchange doesn't look like being a queen down.
-  const material = e.materialAfterBest;
+  // Settled material: what the side to move keeps once the engine's best line has finished its
+  // forcing sequence, so a half-finished exchange doesn't look like being a queen (or rook) up.
+  const material = e.materialSettled ?? e.materialAfterBest;
   return {
     ply: p.ply,
     material,

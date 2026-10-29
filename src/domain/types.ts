@@ -171,6 +171,8 @@ export interface MoveEval {
   materialAfterReply: number;
   /** Material balance (mover POV) after the engine's best line from the position before the move. */
   materialAfterBest: number;
+  /** Like materialAfterBest, but only once the line's whole forcing sequence (checks included) is over. */
+  materialSettled?: number;
   mateThreatAgainst?: boolean;
 }
 

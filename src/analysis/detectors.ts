@@ -290,8 +290,9 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
   // played lost something (16.Nxf6+ Qxf6 17.Qxf6 Nxf6 is a trade, not "winning the knight").
   const settledGain = e.materialAfterBest - e.materialBefore;
   if (quickGain < 2 || missed < 2 || settledGain < 2) return [];
-  // Missing a whole piece or more is a lesson even when you stay winning — if it cost a pawn or more.
-  if (small && (missed < 3 || settledGain < 3 || e.cpBefore - e.cpAfter < 100)) return [];
+  // Missing a whole piece or more is a lesson even when you stay winning — if it cost clearly more
+  // than the near-best margin (the engine compresses scores when one side is already winning).
+  if (small && (missed < 3 || settledGain < 3 || e.cpBefore - e.cpAfter < 75)) return [];
 
   const first = playLine(p.fenBefore, best.pv, 1)[0];
   const target = first ? pieceAt(p.fenBefore, first.to) : undefined;
@@ -1507,6 +1508,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     if (f.kind === 'strength') return !(f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor && ctx.evals[f.ply - 1].cpAfter <= -(MATE_CP - 1000));
     if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;
     if (ABOUT_THE_GAME.includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled)) return true;
+    if (!lessonFits(ctx, f)) return false;
     return !nearBest(ctx.evals[Number(f.facts.worsePly ?? f.ply) - 1]);
   });
   // Clearly winning before and after the slip: still worth a look, never the headline or the focus.
@@ -1519,6 +1521,35 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
 
 /** At or above this (your point of view), the game is clearly won. */
 export const STILL_WINNING_CP = 300;
+
+/** An earlier move of yours put a piece on `square` (it has been developed), and it is still there. */
+function movedBefore(ctx: DetectorContext, i: number, square: string): boolean {
+  for (let k = i - 1; k >= 0; k--) {
+    const q = ctx.plies[k];
+    if (q.color !== ctx.userColor) continue;
+    if (q.to === square) return true;
+    if (q.from === square) return false;
+  }
+  return false;
+}
+
+/**
+ * "Don't move an already-developed piece again" and "a piece went there and back" only fit when
+ * the piece really had been developed already (not its first move), and when Stockfish's own
+ * choice isn't itself a quiet move of an already-developed piece (then tempo isn't the issue; a
+ * capture is "something concrete", so it doesn't count).
+ */
+function lessonFits(ctx: DetectorContext, f: Finding): boolean {
+  if (f.category !== 'premature_attack' && f.category !== 'inefficient_moves') return true;
+  const i = f.ply - 1;
+  if (f.category === 'premature_attack' && !movedBefore(ctx, i, ctx.plies[i].from)) return false;
+  const w = Number(f.facts.worsePly ?? f.ply) - 1;
+  const best = ctx.evals[w]?.bestUci;
+  const bestPiece = best ? pieceAt(ctx.plies[w].fenBefore, best.slice(0, 2)) : undefined;
+  const quiet = best && !pieceAt(ctx.plies[w].fenBefore, best.slice(2, 4));
+  if (quiet && bestPiece && bestPiece.type !== 'p' && bestPiece.type !== 'k' && movedBefore(ctx, w, best!.slice(0, 2))) return false;
+  return true;
+}
 
 /** Findings about the state of the game (attached to a move, but not about it). */
 const ABOUT_THE_GAME: string[] = ['development', 'time_management', 'passive_piece'];

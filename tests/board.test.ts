@@ -3,6 +3,8 @@ import { Chess } from 'chess.js';
 import { parsePgn } from '../src/chess/pgn';
 import { SAMPLE_PGN } from '../src/fixtures/sampleGame';
 import {
+  settledMaterial,
+  trappedPiece,
   attackedEnemyPieces,
   hasCastled,
   isLegal,
@@ -84,5 +86,26 @@ describe('exchangeGain (static exchange on one square)', () => {
     expect(exchangeGain('6k1/8/4p3/3n4/8/8/3R4/3R2K1 w - - 0 1', 'd5', 'w')).toBe(0);
     // Undefended: the front rook just takes.
     expect(exchangeGain('6k1/8/8/3n4/8/8/3R4/3R2K1 w - - 0 1', 'd5', 'w')).toBe(3);
+  });
+});
+
+describe('settled material and trapped pieces', () => {
+  const play = (san: string) => {
+    const c = new Chess();
+    for (const m of san.split(' ')) c.move(m);
+    return c;
+  };
+  const opening = 'c4 d6 g3 e5 Bg2 f5 Nc3 Be6 Qb3 Nc6 Qxb7 Nd4';
+  it('counts material only once the forcing sequence (checks included) is over', () => {
+    const fen = play(opening).fen();
+    const line = ['b7a8', 'd8a8', 'g2a8', 'd4c2', 'e1d1', 'c2a1', 'b2b3'];
+    // Mid-trade it looks like a rook and a pawn up; after ...Nc2+ and ...Nxa1 it is just the pawn.
+    expect(materialAfterLine(fen, line, 'w')).toBe(6);
+    expect(settledMaterial(fen, line, 'w')).toBe(1);
+  });
+  it('finds an enemy knight stuck in the corner with no safe square', () => {
+    const c = play(`${opening} Qxa8 Qxa8 Bxa8 Nc2+ Kd1 Nxa1 d3`);
+    expect(trappedPiece(c.fen(), 'b')).toEqual({ type: 'n', square: 'a1' });
+    expect(trappedPiece(new Chess().fen(), 'b')).toBeUndefined();
   });
 });

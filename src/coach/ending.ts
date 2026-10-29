@@ -2,7 +2,7 @@
 // worse position, or resigning a position that was still playable at this level.
 import { Chess } from 'chess.js';
 import type { PositionEval, StoredGame } from '../domain/types';
-import { COLOR_NAME, materialBalance, materialPhrase, other, playLine } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, materialBalance, materialPhrase, other, playLine, trappedPiece } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { userOutcome } from '../chess/outcome';
 import { MATE_CP, positionCp } from '../analysis/evaluation';
@@ -13,6 +13,24 @@ function howItEnded(termination: string | undefined, who: string): string {
   if (t.includes('abandon')) return `${who} abandoned the game`;
   if (t.includes('resign')) return `${who} resigned`;
   return `${who} resigned (or ran out of time)`;
+}
+
+/** ", and Black's knight had been trapped on a1 since move 9": a piece the count doesn't show as lost yet. */
+function trappedNote(game: StoredGame, opp: string): string {
+  const last = game.plies.at(-1)!;
+  const t = trappedPiece(last.fenAfter, other(game.userColor));
+  if (!t) return '';
+  // From when: the earliest position it has sat there, trapped, ever since.
+  let since = game.plies.length - 1;
+  while (since > 0) {
+    const fen = game.plies[since - 1].fenAfter;
+    const still = trappedPiece(fen, other(game.userColor));
+    if (!still || still.square !== t.square) break;
+    since--;
+  }
+  const from = game.plies[since];
+  const when = game.plies.length - since >= 4 && from ? ` since move ${from.moveNumber}` : '';
+  return `, and ${opp}'s ${PIECE_NAME[t.type]} trapped on ${t.square}${when} with no safe square`;
 }
 
 export function endingNote(game: StoredGame, positions: PositionEval[]): string | undefined {
@@ -35,7 +53,7 @@ export function endingNote(game: StoredGame, positions: PositionEval[]): string 
   if (won && cp >= 150 && !/checkmate|time vs|insufficient/i.test(game.headers.termination ?? '')) {
     const up = materialBalance(last.fenAfter, me);
     const how = howItEnded(game.headers.termination, opp);
-    return `${how.charAt(0).toUpperCase()}${how.slice(1)} after ${moveLabel(last)}, with you ${up >= 1 ? `up ${materialPhrase(up)}` : 'clearly better'} — a deserved win.`;
+    return `${how.charAt(0).toUpperCase()}${how.slice(1)} after ${moveLabel(last)}, with you ${up >= 1 ? `up ${materialPhrase(up)}` : 'clearly better'}${trappedNote(game, opp)} — a deserved win.`;
   }
   if (lost) {
     const t = (game.headers.termination ?? '').toLowerCase();

@@ -4,7 +4,7 @@
 // Saved on every mistake/blunder so patterns can be counted across games.
 import { Chess, type Move, type Square } from 'chess.js';
 import type { Color, PieceType } from '../domain/types';
-import { COLOR_NAME, PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, exchangeGain, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, exchangeGain, isLoose, kingSquare, materialAfterLine, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
 export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange';
@@ -519,8 +519,11 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
   const best = better[0]?.move;
   // Free: undefended — or defended on paper, but the best line never takes back and keeps the material.
   const undefended = !!best && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to);
-  const notRetaken = !!best?.captured && better[1]?.move.to !== best.to && net(better, mover) >= PIECE_VALUE[best.captured as PieceType] - 1;
-  if (best?.captured && (undefended || notRetaken) && net(better, mover) >= (best.captured === 'p' ? 1 : 2)) {
+  // What the capture keeps once the exchange has settled (not at the far end of a long engine line,
+  // where unrelated trades come and go).
+  const kept = materialAfterLine(fenBefore, bestPv, mover) - materialBalance(fenBefore, mover);
+  const notRetaken = !!best?.captured && better[1]?.move.to !== best.to && kept >= PIECE_VALUE[best.captured as PieceType] - 1;
+  if (best?.captured && (undefended || notRetaken) && kept >= (best.captured === 'p' ? 1 : 2)) {
     // You did capture — just the smaller prize.
     const took = refutation[0]?.move.captured as PieceType | undefined;
     if (took && PIECE_VALUE[best.captured as PieceType] > PIECE_VALUE[took])

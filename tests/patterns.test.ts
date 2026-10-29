@@ -233,7 +233,9 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     const mate = g.findings.find((f) => f.ply === 34 && f.facts.mate)!; // 17...Qh4?? Qxf7+ Kd8 Qd7#
     expect(mate.severity).toBe(2); // the game was already lost: shown, but not the lesson of the game
     expect(g.report?.headline).toMatch(/^You walked into a discovered attack, with your king still in the centre\./);
-    expect(g.report?.story).toMatch(/14\.\.\.Qg5.*Then the decisive mistake: 15\.\.\.Nd2 walked into a discovered attack/);
+    expect(g.report?.story).toMatch(/Then the decisive mistake: 15\.\.\.Nd2 walked into a discovered attack/);
+    // 14...Qg5 was the queen's first move: "moved an already-developed piece again" doesn't fit it.
+    expect(g.report?.story).not.toMatch(/14\.\.\.Qg5/);
   });
   it('allowing mate in one is "allowed checkmate" with a checks lesson (vs Blundering32, 7...f5 Qf7#)', () => {
     const g = game('blundering-game');

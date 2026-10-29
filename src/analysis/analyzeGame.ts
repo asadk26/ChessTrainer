@@ -1,5 +1,5 @@
 import type { MoveEval, PlyRecord, PositionEval } from '../domain/types';
-import { lineToSan, materialAfterLine, materialBalance } from '../chess/board';
+import { lineToSan, materialAfterLine, materialBalance, settledMaterial } from '../chess/board';
 import type { Engine } from '../engine/types';
 import { MATE_CP, evalChange, practicalDrop } from './evaluation';
 
@@ -53,6 +53,7 @@ export function buildMoveEvals(plies: PlyRecord[], positions: PositionEval[]): M
       materialAfterReply,
       practicalDrop: practicalDrop({ ...change, materialBefore, materialAfterReply }),
       materialAfterBest: best ? materialAfterLine(p.fenBefore, best.pv, p.color) : materialBefore,
+      materialSettled: best ? settledMaterial(p.fenBefore, best.pv, p.color) : materialBefore,
       mateThreatAgainst: change.cpAfter <= -(MATE_CP - 100),
     } satisfies MoveEval;
   });

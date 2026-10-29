@@ -242,6 +242,66 @@ export function materialAfterLine(fen: string, ucis: string[], pov: Color, maxPl
   return value;
 }
 
+/**
+ * Material once the whole forcing sequence of a line is over: captures, checks and the forced
+ * replies to checks all belong to it (Qxa8 Qxa8 Bxa8 Nc2+ Kd1 Nxa1 is one sequence), and it ends
+ * at the first quiet move. Used for "you were up X" claims, so they never count mid-trade.
+ */
+export function settledMaterial(fen: string, ucis: string[], pov: Color, maxPlies = 10): number {
+  const c = new Chess(fen);
+  let value = materialBalance(fen, pov);
+  for (let i = 0; i < Math.min(maxPlies, ucis.length); i++) {
+    const uci = ucis[i];
+    let gaveCheck: boolean;
+    try {
+      gaveCheck = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? 'q' }).san.includes('+');
+    } catch {
+      break;
+    }
+    value = materialBalance(c.fen(), pov);
+    const next = ucis[i + 1];
+    if (!next || gaveCheck) continue;
+    let forcing = !!c.get(next.slice(2, 4) as Square);
+    if (!forcing) {
+      try {
+        const probe = new Chess(c.fen());
+        forcing = probe.move({ from: next.slice(0, 2), to: next.slice(2, 4), promotion: next[4] ?? 'q' }).san.includes('+');
+      } catch {
+        forcing = false;
+      }
+    }
+    if (!forcing) break;
+  }
+  return value;
+}
+
+/**
+ * A piece of `color` (knight, bishop, rook or queen) on the other side's first two ranks that can
+ * move, but every move loses it: it is stuck there and will be collected.
+ */
+export function trappedPiece(fen: string, color: Color): { type: PieceType; square: string } | undefined {
+  const parts = fen.split(' ');
+  parts[1] = color;
+  parts[3] = '-';
+  let c: Chess;
+  try {
+    c = new Chess(parts.join(' '));
+  } catch {
+    return undefined;
+  }
+  const enemy = other(color);
+  for (const row of c.board())
+    for (const p of row) {
+      if (!p || p.color !== color || p.type === 'p' || p.type === 'k') continue;
+      const rank = Number(p.square[1]);
+      if (color === 'b' ? rank > 2 : rank < 7) continue;
+      const moves = c.moves({ square: p.square, verbose: true });
+      if (!moves.length) continue;
+      if (moves.every((m) => !m.captured && exchangeGain(m.after, m.to, enemy) > 0)) return { type: p.type, square: p.square };
+    }
+  return undefined;
+}
+
 export function isCheckMove(san: string): boolean {
   return san.includes('+') || san.includes('#');
 }

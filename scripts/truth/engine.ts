@@ -12,22 +12,24 @@ const jobs = Number(process.argv.find((a) => a.startsWith('--jobs='))?.slice(7) 
 const todo = loadTruth().games.filter((g) => force || !cachedPositions(g.game));
 console.log(`${todo.length} game(s) to analyse, ${jobs} at a time`);
 
+// A fresh engine per game: a reused one carries its hash table over from whichever game it analysed
+// before, so results would depend on scheduling order (and change from run to run).
 let next = 0;
 await Promise.all(
   Array.from({ length: Math.min(jobs, todo.length) }, async () => {
-    const engine = createNodeEngine();
-    try {
-      while (next < todo.length) {
-        const g = todo[next++];
-        const t = Date.now();
+    while (next < todo.length) {
+      const g = todo[next++];
+      const t = Date.now();
+      const engine = createNodeEngine();
+      try {
         const { game } = await analyzeGame(storedGame(g), engine, { depth: 12, prior: [] });
         const out = positionsPath(g.game);
         mkdirSync(dirname(out), { recursive: true });
         writeFileSync(out, JSON.stringify(game.analysis!.positions));
         console.log(`  ${g.game}: ${game.plies.length} plies, ${Math.round((Date.now() - t) / 1000)}s`);
+      } finally {
+        engine.dispose();
       }
-    } finally {
-      engine.dispose();
     }
   }),
 );

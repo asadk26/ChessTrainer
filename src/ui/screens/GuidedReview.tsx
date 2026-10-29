@@ -3,7 +3,7 @@
 // sits right above the board, the verdict right below it, so you always know
 // whether your answer was right without scrolling.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Arrow, Finding, StoredGame, TeachingMoment } from '../../domain/types';
+import type { Arrow, StoredGame, TeachingMoment } from '../../domain/types';
 import { Board, type BoardProps } from '../components/Board';
 import { FlagButton } from '../components/FlagButton';
 import { Verdict, type Panels } from '../components/reviewParts';
@@ -26,8 +26,7 @@ import { formatCp } from '../../analysis/evaluation';
 import { engineNotes, verdictOf } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { usesEngineReply } from '../../analysis/moments';
-import { gamePlayedAt } from '../../analysis/pipeline';
-import { themeOf } from '../../coach/report';
+import { seenBefore } from '../../coach/seenBefore';
 import { navigate, useApp } from '../store';
 
 const uciArrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
@@ -478,23 +477,10 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
   };
 }
 
-/** "You did this before": the same kind of mistake in an earlier analyzed game. */
+/** "You did this before": the same mistake in an earlier analyzed game. */
 function useSeenBefore(game: StoredGame, m: TeachingMoment | undefined) {
   const { games } = useApp();
-  return useMemo(() => {
-    if (!m || m.kind !== 'mistake') return undefined;
-    const theme = themeOf(m.category);
-    const at = gamePlayedAt(game);
-    const earlier = games
-      .filter((g) => g.id !== game.id && g.status === 'analyzed' && gamePlayedAt(g) < at)
-      .sort((a, b) => gamePlayedAt(b) - gamePlayedAt(a));
-    for (const g of earlier) {
-      const credible = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && f.ply > 0;
-      const same = g.findings.find((f) => credible(f) && f.category === m.category) ?? g.findings.find((f) => credible(f) && themeOf(f.category) === theme);
-      if (same) return { game: g, finding: same, exact: same.category === m.category, count: earlier.filter((x) => x.findings.some((f) => credible(f) && themeOf(f.category) === theme)).length };
-    }
-    return undefined;
-  }, [games, game, m]);
+  return useMemo(() => seenBefore(game, m, games), [games, game, m]);
 }
 
 export function GuidedReview({ game, initialPly, explore = false }: { game: StoredGame; initialPly?: number; explore?: boolean }) {
@@ -806,7 +792,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
         <div className="seen-before">
           <span className="eyebrow">You've seen this before</span>
           <p>
-            {seenBefore.exact ? 'The same kind of mistake' : 'A related mistake'} came up in your game vs <b>{seenBefore.game.opponentName}</b>: {seenBefore.finding.evidence}
+            The same mistake came up in your game vs <b>{seenBefore.game.opponentName}</b>: {seenBefore.finding.evidence}
             {seenBefore.count >= 2 ? ` That's ${seenBefore.count + 1} games now.` : ''}
           </p>
           <button className="link" onClick={() => navigate(`/game/${seenBefore.game.id}/review?ply=${seenBefore.finding.ply}`)}>
