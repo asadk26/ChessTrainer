@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { COLOR_NAME, PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, exchangeGain, isLoose, kingSquare, materialAfterLine, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange' | 'threat_ignored';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -28,6 +28,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   stuck_deep: 'Piece stuck deep',
   blocked_with_tempo: 'Check blocked with tempo',
   incomplete_exchange: 'Unfinished trade',
+  threat_ignored: 'Threat ignored',
 };
 
 /** One reusable rule per pattern. */
@@ -50,6 +51,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   stuck_deep: 'When your queen or a piece is deep in their camp, count its escape squares every move — bring it back before they close.',
   blocked_with_tempo: 'Before giving a check, look at how it can be blocked: a block that also attacks your checking piece wins time.',
   incomplete_exchange: 'Finish a trade before starting a new idea: after captures and checks, recount the material and take back.',
+  threat_ignored: 'After every opponent move, ask: what does that move attack? Deal with threats before following your own plan.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -72,6 +74,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   stuck_deep: { refutation: 'left a piece deep in their camp', better: 'missed a chance to trap a piece' },
   blocked_with_tempo: { refutation: 'gave a check that was blocked with tempo', better: 'missed a block with tempo' },
   incomplete_exchange: { refutation: 'left a trade unfinished', better: 'left a trade unfinished' },
+  threat_ignored: { refutation: 'ignored a threat', better: 'ignored a threat' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -173,25 +176,53 @@ function knightFork(fs: Frame[]): PatternHit | undefined {
   }
 }
 
-/** Any other piece hitting two things at once — a queen check that also hits a loose piece, a pawn fork. */
+/** The mating move `me` would have if it were their turn again ("threatens Qd1#"), if any. */
+function mateThreat(fen: string, me: Color): string | undefined {
+  const parts = fen.split(' ');
+  if (parts[1] === me) return undefined;
+  parts[1] = me;
+  parts[3] = '-';
+  let c: Chess;
+  try {
+    c = new Chess(parts.join(' '));
+  } catch {
+    return undefined;
+  }
+  if (c.inCheck()) return undefined;
+  return c.moves({ verbose: true }).find((m) => {
+    c.move(m);
+    const mate = c.isCheckmate();
+    c.undo();
+    return mate;
+  })?.san;
+}
+
+/**
+ * Any piece hitting two things at once (a knight fork without a heavy piece in it, a queen check
+ * that also hits a loose piece, a queen move that threatens mate and attacks a piece, a pawn fork).
+ */
 function fork(fs: Frame[]): PatternHit | undefined {
   for (let i = 0; i < Math.min(fs.length, 4); i++) {
     const { move, after } = fs[i];
-    if (move.piece === 'n') continue;
     const me = move.color as Color;
-    // Only targets it can really win: the king (check), or a piece that is loose or worth more than the attacker.
+    const check = move.san.includes('+');
+    const mate = check ? undefined : mateThreat(after, me);
+    // Only targets it can really win: the king (a check, or a mate threat), or a piece that is loose or worth more than the attacker.
     const targets = [
-      ...(move.san.includes('+') ? [{ type: 'k' as PieceType, square: kingSquare(after, other(me)) }] : []),
+      ...(check || mate ? [{ type: 'k' as PieceType, square: kingSquare(after, other(me)) }] : []),
       ...attackedEnemyPieces(after, move.to).filter((t) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3 && (isLoose(after, t.square) || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType])),
     ];
     if (targets.length < 2) continue;
     // The forking piece must survive long enough to collect: one of the targets is taken later in the line.
     const collected = fs.slice(i + 1).some((f) => f.move.color === me && targets.some((t) => t.type !== 'k' && t.square === f.move.to));
-    const hit = `${move.san} attacks the ${targets.slice(0, 2).map((t) => (t.type === 'k' ? 'king' : sq(t.type, t.square))).join(' and the ')} at once`;
+    const named = targets.filter((t) => t.type !== 'k').slice(0, mate ? 1 : 2).map((t) => sq(t.type, t.square));
+    const hit = mate
+      ? `${move.san} threatens mate (${mate}) and attacks the ${named[0]} at once`
+      : `${move.san} attacks the ${[...(check ? ['king'] : []), ...named].slice(0, 2).join(' and the ')} at once`;
     // A pawn hitting two pieces worth more than itself wins one of them, even when the other gets a
     // desperado capture in first and the material count evens out inside the line.
     if (move.piece === 'p' && collected) return { tag: 'pawn_fork', side: 'refutation', at: i, evidence: hit };
-    if (collected && gainAfter(fs, i, me) >= 2) return { tag: 'fork', side: 'refutation', at: i, evidence: hit };
+    if (collected && gainAfter(fs, i, me) >= 2) return { tag: move.piece === 'n' ? 'knight_fork' : 'fork', side: 'refutation', at: i, evidence: move.piece === 'n' && !mate ? hit.replace(' attacks the ', ' forks the ').replace(' at once', '') : hit };
   }
 }
 
@@ -510,8 +541,9 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
       // falls through to the missed-capture check below
     } else if (reply.to === refutation[0].move.to) {
       return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'moved', evidence: `the ${victim} was ${how} after your move, and ${reply.san} took it` };
-    } else if (pieceAt(fenBefore, reply.to)?.color === mover && underThreat(fenBefore, reply.to)) {
-      return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'already', evidence: `the ${victim} was already under attack, your move didn't save it, and ${reply.san} took it` };
+    } else if (pieceAt(fenBefore, reply.to)?.color === mover && (underThreat(fenBefore, reply.to) || exchangeGain(fenBefore, reply.to, opp) > 0)) {
+      // Already attacked before your move, and the move didn't deal with it: an ignored threat, not a hanging piece.
+      return { tag: 'threat_ignored', side: 'refutation', at: 1, hanging: 'already', evidence: `the ${victim} was already under attack, your move didn't save it, and ${reply.san} took it` };
     } else {
       return { tag: 'hanging_piece', side: 'refutation', at: 1, hanging: 'left', evidence: `your move left the ${victim} ${how}, and ${reply.san} took it` };
     }
@@ -569,5 +601,6 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   pawn_fork: { title: 'Watch the pawn pushes that could hit two of your pieces.', detail: 'A pawn is the cheapest attacker on the board: when it attacks two pieces at once, one of them is lost. Before you put a piece on a square an enemy pawn could attack next to another one — and before a retreat to the edge — check every push and capture their pawns have.' },
   unblocked_queen: { title: 'Before you move a blocker, check the line it was blocking.', detail: 'When your queen sits on the same file, rank or diagonal as an enemy bishop, rook or queen, the piece or pawn in between is all that keeps it safe. Before you move that blocker — even to capture something — check what it uncovers.' },
   removed_defender: { title: 'Before you move a piece, ask what it was guarding.', detail: 'Every piece and pawn may be the only thing protecting something else. Before you move one, look at what it defends right now — if that piece or pawn would be left loose, keep the guard or protect it another way first.' },
+  threat_ignored: { title: 'After every opponent move, ask what it attacks.', detail: 'When a piece of yours is already under attack, your move has to deal with it: move it, defend it, or make a bigger threat. Before following your own plan, look at what the last move attacks.' },
   hanging_piece: { title: 'Before you let go of a piece, check whether it can simply be taken.', detail: 'Do a two-second blunder check on every move: for the square you are moving to, and for the piece you are moving away from — what can now be captured for free?' },
 };

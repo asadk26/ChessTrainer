@@ -38,4 +38,4 @@ These are real games from chunkmonkey420, so treat the labels as a regression su
 ## Running it in this repo
 - `npm run truth` scores the app against this file, using the cached engine output in `positions/`. It needs no engine and gives the same result every time. Holdout shows only totals and per-label totals (labels with 3+ holdout moments).
 - `npm run truth -- --verbose` also prints every tune moment's label, the app's evidence and lesson, and how it was scored.
-- `npm run truth:engine` refreshes `positions/` with the app's own engine pass: depth 12 for every move, then depth 18 around the critical moments, as in the app. Run it after adding games here, or after changing the engine pass. Pass `-- --force` to redo games that already have a cache.
+- `npm run truth:engine` refreshes `positions/` with the app's own engine pass: depth 12 for every move, then depth 18 around the critical moments, as in the app. Run it after adding games here, or after changing the engine pass. Pass `-- --force` to redo games that already have a cache. Each game gets a fresh engine, so the cache is the same on every run.

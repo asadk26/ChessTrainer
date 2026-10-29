@@ -11,7 +11,7 @@ import { gameMoveComparison, usePracticeBoard } from '../components/PracticeBoar
 import { useLessonRunner } from '../components/LessonRunner';
 import { EvalChange } from '../components/EvalBar';
 import { AiExplain, useAiAvailable, useAiBlocker } from '../components/AiExplain';
-import { classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
+import { CLASS_LABEL, classifyMove, gapBetween, qualityOf, qualityOfGap, type MoveClass, type Quality } from '../../analysis/moveQuality';
 import { QualityBadge, whiteEvals } from '../components/ReviewVisuals';
 import { ActionButton, BoardZone, BottomSheet, CoachBubble, DockSheet, EvalStrip } from '../components/ReviewShell';
 import { Icon } from '../components/AppShell';
@@ -27,6 +27,7 @@ import { engineNotes, verdictOf } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone } from '../actions';
 import { usesEngineReply } from '../../analysis/moments';
 import { seenBefore } from '../../coach/seenBefore';
+import { EVAL_LEGEND, betterLine, moveCardLine } from '../../coach/moveCard';
 import { navigate, useApp } from '../store';
 
 const uciArrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
@@ -435,7 +436,7 @@ function useMomentRunner(game: StoredGame, m: TeachingMoment | undefined, onDone
       {showEngine && (
         <div className="engine-details">
           <div>
-            Evaluation (your view): {formatCp(m.numbers.cpBefore)} before → {formatCp(m.numbers.cpAfter)} after {m.playedSan}
+            Evaluation: {formatCp(m.numbers.cpBefore)} before → {formatCp(m.numbers.cpAfter)} after {m.playedSan}
           </div>
           {m.bestSan && (
             <div>
@@ -548,7 +549,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     else setPly((p) => Math.max(0, p - 1));
   };
   const jump = (p: number) => (setPracticePly(null), setActive(undefined), findFirst.cancel(), lineView.close(), setPly(p));
-  const nextMoment = moments.find((m) => m.ply > ply + 1 && stopsAt(m));
 
   const stateKey = lesson?.stateKey ?? runner?.stateKey ?? findFirst.panels?.stateKey ?? lineView.panels?.stateKey ?? `browse:${ply}`;
 
@@ -597,6 +597,14 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const verdict = evalAt ? verdictOf(evalAt) : undefined;
   const cls = ply > 0 ? classes[ply] : undefined;
   const mine = evalAt?.color === game.userColor;
+  // Your move rated below Stockfish's choice: one line, "5.Qb3 — Inaccuracy. Bxb7 was stronger: … (+2.5 vs +1.2)".
+  const cardCls = mine && evalAt?.bestSan && !evalAt.isBest && (cls === 'inaccuracy' || cls === 'mistake' || cls === 'blunder') ? cls : undefined;
+  const cardCmp = useMemo(() => (cardCls ? gameMoveComparison(game, ply) : undefined), [cardCls, game, ply]);
+  const cardWhy = cardCmp?.comparison?.why;
+  const cardLine =
+    cardCls && evalAt && current
+      ? moveCardLine({ move: moveLabel(current), label: CLASS_LABEL[cardCls], bestSan: evalAt.bestSan!, why: cardWhy, bestCp: evalAt.cpBefore, playedCp: evalAt.cpAfter })
+      : undefined;
 
   // ---------------------------------------------------------- play-through
   // The move just played (orange for yours, red for theirs) and, when it wasn't as good,
@@ -622,20 +630,25 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
             : 'No lessons this time — nothing big went wrong.'}
           {noteCount ? ` ${noteCount} smaller point${noteCount === 1 ? '' : 's'} will show up as you pass ${noteCount === 1 ? 'it' : 'them'}.` : ''}
         </p>
+      ) : cardLine ? (
+        <p className="move-caption move-card">
+          <CoachText text={cardLine} />
+          {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
+        </p>
       ) : (
         <p className="move-caption">
           <b>{moveLabel(current!)}</b> {cls && <QualityBadge cls={cls} label />} <span className="muted">— {yours ? 'you played' : `${game.opponentName} played`}</span>
           {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
         </p>
       )}
-      {evalAt && verdict && !evalAt.isBest && evalAt.bestSan && (
+      {!cardLine && evalAt && verdict && !evalAt.isBest && evalAt.bestSan && (
         <p className={`engine-line v-${verdict}`}>
           <span className="engine-chip">Stockfish</span>
           {verdict === 'equal'
             ? ` its first choice was ${evalAt.bestSan} (green arrow), but this is just as good`
             : verdict === 'good'
               ? ` ${evalAt.bestSan} (green arrow) was a little more precise`
-              : ` preferred ${evalAt.bestSan} (green arrow): ${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view`}
+              : ` preferred ${evalAt.bestSan} (green arrow): ${formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of ${formatCp(evalAt.cpAfter * (mine ? 1 : -1))}`}
         </p>
       )}
       {engineNote && engineNote.kind === 'trap' && <CoachText text={engineNote.text} className="ply-note" />}
@@ -643,7 +656,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
         <div className="note-card">
           <span className="eyebrow">{noteHere.kind === 'good_idea' ? 'Good idea' : 'Worth knowing'}</span>
           <b className="note-title">{noteHere.text.title}</b>
-          {noteHere.kind === 'mistake' && evalAt && <EvalChange before={evalAt.cpBefore * (mine ? 1 : -1)} after={evalAt.cpAfter * (mine ? 1 : -1)} />}
+          {noteHere.kind === 'mistake' && evalAt && !cardLine && <EvalChange before={evalAt.cpBefore * (mine ? 1 : -1)} after={evalAt.cpAfter * (mine ? 1 : -1)} />}
           <CoachText
             text={
               noteHere.kind === 'good_idea'
@@ -669,9 +682,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
       )}
     </>
   );
-  const browseDetails = evalAt ? (
+  const browseDetails = evalAt && !cardLine ? (
     <p className="muted small">
-      Engine after {moveLabel(game.plies[ply - 1])}: {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))} (your view)
+      Engine after {moveLabel(game.plies[ply - 1])}: {formatCp(evalAt.cpAfter * (evalAt.color === game.userColor ? 1 : -1))}
     </p>
   ) : null;
 
@@ -708,7 +721,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
                   ? `As good as Stockfish's ${evalAt.bestSan}.`
                   : verdict === 'good'
                     ? `${evalAt.bestSan} (green arrow) was a little more precise.`
-                    : `Stockfish preferred ${evalAt.bestSan} (green arrow).`
+                    : cardLine
+                      ? betterLine(`${evalAt.bestSan} (green arrow)`, cardWhy)
+                      : `Stockfish preferred ${evalAt.bestSan} (green arrow).`
                 : cls === 'great'
                   ? 'The only good move here — well found.'
                   : cls === 'brilliant'
@@ -758,7 +773,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
       {plyFinding && !hiddenPlies.has(ply) && <CoachText text={plyFinding.evidence} className="why-headline" />}
       {verdict && evalAt.bestSan && !evalAt.isBest && (
         <p className="engine-line">
-          <span className="engine-chip">Stockfish</span> preferred {evalAt.bestSan}: {formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of {formatCp(evalAt.cpAfter * (mine ? 1 : -1))}, your view.
+          <span className="engine-chip">Stockfish</span> preferred {evalAt.bestSan}: {formatCp(evalAt.cpBefore * (mine ? 1 : -1))} instead of {formatCp(evalAt.cpAfter * (mine ? 1 : -1))}.
         </p>
       )}
       {whyCmp?.comparison && (
@@ -812,11 +827,6 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
           ))}
         </div>
       )}
-      {mode === 'browse' && nextMoment && !upcoming && (
-        <button className="btn ghost small" onClick={() => (setSheet(null), startMomentAt(nextMoment))}>
-          Skip ahead to the next lesson ({moveLabel(game.plies[nextMoment.ply - 1])})
-        </button>
-      )}
     </div>
   );
 
@@ -868,6 +878,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
         )}
         <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet === 'why' ? `Why? — ${current ? moveLabel(current) : ''}` : mode === 'browse' ? (current ? moveLabel(current) : 'Start') : 'The full explanation'}>
           {sheet === 'why' ? whySheet : moreSheet}
+          <p className="muted small eval-legend">{EVAL_LEGEND}</p>
         </BottomSheet>
       </div>
     </HoverProvider>

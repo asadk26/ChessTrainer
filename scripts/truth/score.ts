@@ -42,6 +42,7 @@ function appLabel(f: Finding): string {
       opened_line: ['opened_line_to_own_king', 'opened_line_missed'],
       back_rank: ['back_rank_mate_allowed', 'mate_missed'],
       hanging_piece: ['hanging_piece', 'free_capture_missed'],
+      threat_ignored: ['threat_ignored', 'threat_ignored'],
       removed_defender: ['removed_defender', 'removed_defender_missed'],
       unblocked_queen: ['opened_line_to_own_queen', 'opened_line_to_queen_missed'],
     };
@@ -66,6 +67,9 @@ function appLabel(f: Finding): string {
   if (f.category === 'missed_threat' && f.facts.threatFrom !== undefined) return 'threat_ignored';
   // "It could just be taken" is what these say when the board shows the piece simply lost; other
   // categories (counterplay against your king…) keep their own text whatever was captured.
+  // A piece already under attack before the move, and the move didn't deal with it (v4 fix 8): the
+  // label is the ignored threat; "hanging" is for a piece the move put en prise or left defenceless.
+  if (f.facts.hanging === 'already' && ['blunder', 'missed_threat', 'gave_back_material'].includes(f.category)) return 'threat_ignored';
   if (f.facts.hanging && ['blunder', 'missed_threat', 'gave_back_material'].includes(f.category)) return 'hanging_piece';
   return 'unclassified';
 }

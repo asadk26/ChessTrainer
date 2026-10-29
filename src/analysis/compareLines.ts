@@ -74,6 +74,8 @@ export interface LineComparison {
   /** Whether at least one clear, stable feature explains the difference. */
   clear: boolean;
   summary: string;
+  /** One clause on why the preferred move is better ("it leaves you a pawn better off"), when clear. */
+  why?: string;
 }
 
 interface Snap {
@@ -437,6 +439,7 @@ function compareCore(input: CompareInput, cuts?: { a: number; b: number; materia
     reasons: chosen.reasons,
     clear: true,
     summary: summary.charAt(0).toUpperCase() + summary.slice(1),
+    why: aClauses.length ? `it ${aClauses[0]}` : bClause ? `after ${otherSan} ${bClause}` : undefined,
   };
 }
 

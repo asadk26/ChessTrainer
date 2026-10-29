@@ -35,6 +35,17 @@ describe('pattern tags on real mistakes', () => {
     // 1...Bg4?? Qxg4: nothing defends g4.
     expect(detectPattern('2b3k1/5ppp/8/8/8/8/5PPP/3Q2K1 b - - 0 1', 'c8g4', ['d1g4'], [], [])).toMatchObject({ tag: 'hanging_piece', hanging: 'moved' });
   });
+  it('a piece already attacked before your move, and not dealt with, is an ignored threat', () => {
+    // The e5 pawn already hits the d4 knight; 1.h3?? doesn't deal with it: exd4.
+    const hit = detectPattern('6k1/5ppp/8/4p3/3N4/8/6PP/6K1 w - - 0 1', 'h2h3', ['e5d4'], [], []);
+    expect(hit).toMatchObject({ tag: 'threat_ignored', side: 'refutation', hanging: 'already' });
+    expect(hit!.evidence).toBe("the knight on d4 was already under attack, your move didn't save it, and exd4 took it");
+  });
+  it('a piece your move takes the last guard from is not an ignored threat', () => {
+    // The d1 rook guarded the d5 knight against the d8 rook; 1.Rf1?? leaves it: Rxd5. The move caused it.
+    const hit = detectPattern('3r2k1/5ppp/8/3N4/8/8/6PP/3R2K1 w - - 0 1', 'd1f1', ['d8d5'], [], []);
+    expect(hit).toMatchObject({ tag: 'removed_defender', side: 'refutation' });
+  });
   it('a piece that is merely defended — lost only to an exchange — is not hanging', () => {
     // 1...Nd4 is defended by the e5 pawn; Nxd4 exd4 is an even trade, nothing is lost.
     expect(detectPattern('6k1/5ppp/2n5/4p3/8/5N2/5PPP/6K1 b - - 0 1', 'c6d4', ['f3d4', 'e5d4'], [], [])).toBeUndefined();
@@ -94,6 +105,28 @@ describe('pattern tags on real mistakes', () => {
     const hit = detectPattern('r2k1b1r/ppNnqppp/8/4P3/2Q2Bb1/5P2/PPP4P/R3KB1R b KQ - 0 12', 'e7h4', ['f4g3', 'h4g5', 'f3g4'], [], []);
     expect(hit).toMatchObject({ tag: 'blocked_with_tempo', side: 'refutation' });
     expect(hit!.evidence).toBe('Bg3 blocks the check and attacks your queen on h4, so it has to move again');
+  });
+  it('a queen check that also attacks a loose piece is a fork', () => {
+    // 1.g3?? Qa5+ hits the king on e1 and the loose bishop on h5 along the 5th rank: Kf1 Qxh5.
+    const hit = detectPattern('3qk3/5ppp/8/7B/8/8/5PP1/4K3 w - - 0 1', 'g2g3', ['d8a5', 'e1f1', 'a5h5'], [], []);
+    expect(hit).toMatchObject({ tag: 'fork', side: 'refutation' });
+    expect(hit!.evidence).toBe('Qa5+ attacks the king and the bishop on h5 at once');
+  });
+  it('a queen move that threatens mate and attacks a piece is a fork', () => {
+    // 1.Na4?? Qd4 threatens Qd1# and hits the loose knight on a4: h3 stops the mate, Qxa4.
+    const hit = detectPattern('3q2k1/5ppp/8/8/8/2N5/6PP/7K w - - 0 1', 'c3a4', ['d8d4', 'h2h3', 'd4a4'], [], []);
+    expect(hit).toMatchObject({ tag: 'fork', side: 'refutation' });
+    expect(hit!.evidence).toBe('Qd4 threatens mate (Qd1#) and attacks the knight on a4 at once');
+  });
+  it('a knight forking two minor pieces is a fork too (no king, queen or rook needed)', () => {
+    // 1.Ne3?? Nd5 hits the bishop on c3 and the knight on e3: Bb2 Nxe3.
+    const hit = detectPattern('6k1/5ppp/5n2/8/8/2B5/6PP/5NK1 w - - 0 1', 'f1e3', ['f6d5', 'c3b2', 'd5e3'], [], []);
+    expect(hit).toMatchObject({ tag: 'knight_fork', side: 'refutation' });
+    expect(hit!.evidence).toBe('Nd5 forks the bishop on c3 and the knight on e3');
+  });
+  it('a double attack that wins nothing is not a fork', () => {
+    // Qa5+ hits the king and the bishop on h5, but the bishop is defended and nothing is taken.
+    expect(detectPattern('3qk3/5ppp/8/7B/8/8/5PPQ/4K3 w - - 0 1', 'g2g3', ['d8a5', 'e1f1', 'a5a6'], [], [])?.tag).not.toBe('fork');
   });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
@@ -223,7 +256,7 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
   });
   it('a piece already under attack is a missed threat, not "left unprotected" (vs aditya_satyam, 7.d3 Qxg4)', () => {
     const g = game('aditya-game');
-    expect(g.patterns?.[13]).toMatchObject({ tag: 'hanging_piece', hanging: 'already' });
+    expect(g.patterns?.[13]).toMatchObject({ tag: 'threat_ignored', hanging: 'already' });
     expect(g.findings.find((f) => f.ply === 13)?.category).toBe('missed_threat');
     expect(moment(g, 13).text.lesson).not.toBe(BLUNDER_CHECK);
   });

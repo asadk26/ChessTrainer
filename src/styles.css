@@ -817,10 +817,10 @@ a { color: var(--accent); }
 .gr-bubble .ply-note, .gr-bubble .why-box, .gr-bubble .line-steps, .gr-bubble .lesson-label { display: none; }
 .gr-bubble .moment-title { font-size: 0.92rem; margin: 0 0 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gr-bubble .move-caption { margin: 0 0 0.15rem; }
-.gr-more {
-  position: absolute; right: 10px; bottom: 5px; font-size: 0.72rem; font-weight: 650; color: var(--accent);
-  background: linear-gradient(90deg, transparent, var(--card) 28%); padding-left: 26px;
-}
+/* Its own line under the (faded) text, never on top of it; the bubble grows by that line. */
+.gr-more { flex: none; align-self: flex-end; font-size: 0.72rem; font-weight: 650; line-height: 14px; color: var(--accent); }
+.gr-bubble.has-more { height: 78px; }
+.gr-bubble.tall.has-more { height: 118px; }
 
 .gr-board-zone { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
 @media (max-width: 860px) { .gr-board-zone { margin: 0 calc(-1 * var(--pad)); } }
@@ -883,6 +883,7 @@ a { color: var(--accent); }
 /* Short phones (SE-size): tighter lesson question and answer so the board keeps its size. */
 @media (max-height: 720px) {
   .gr-bubble.tall { height: 84px; }
+  .gr-bubble.tall.has-more { height: 98px; }
   .gr-bubble.tall .gr-bubble-body { font-size: 0.84rem; line-height: 1.28; }
   .gr-dock { gap: 4px; }
   .gr-dock .verdict { padding: 0.3rem 0.55rem; gap: 0.45rem; }

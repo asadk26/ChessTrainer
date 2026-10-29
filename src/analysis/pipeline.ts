@@ -91,7 +91,7 @@ export function annotatePatterns(findings: Finding[], patterns: NonNullable<Stor
   for (const f of findings) {
     const hit = patterns[f.ply];
     if (f.kind !== 'weakness' || !hit || isStateFinding(f)) continue;
-    if (hit.tag === 'hanging_piece' && hit.side === 'refutation') {
+    if ((hit.tag === 'hanging_piece' || hit.tag === 'threat_ignored') && hit.side === 'refutation') {
       // Allowing mate is about the checks, not about the pawn the first check happens to take.
       if (hit.hanging && !f.facts.mate) f.facts = { ...f.facts, hanging: hit.hanging };
       continue;
