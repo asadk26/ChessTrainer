@@ -16,9 +16,9 @@ describe('a chaotic game that swung back and forth', () => {
     expect(game.moments.find((m) => m.ply === 83)?.text.title).toMatch(/winning game turned into a draw/);
   });
 
-  it('names the missed mates as checkmates, in the summary, moments and drills', () => {
-    expect(r.headline).toMatch(/missed checkmates/);
-    expect(r.hurt[0].text).toMatch(/You missed a checkmate twice: move 41 \(Qg3# instead of Rxh6\) and move 46 \(Qg3# instead of Qxc8\)/);
+  it('teaches the missed mates as checkmates in moments and drills — but, still winning (+5.7) after each, they never lead the summary', () => {
+    expect(r.headline).not.toMatch(/missed checkmates/);
+    expect(r.headline).toMatch(/giving material and counterplay back/);
     // Same mate (Qg3#) twice: one lesson, not two.
     const mateMoments = game.moments.filter((m) => m.text.title.includes('there was checkmate'));
     expect(mateMoments.map((m) => m.ply)).toEqual([81]);

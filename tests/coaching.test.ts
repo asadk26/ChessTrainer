@@ -67,9 +67,9 @@ describe('sample game coaching (from recorded Stockfish output)', () => {
     expect(m.text.question).toMatch(/simplest response/);
   });
 
-  it('chooses one behavioural focus about checking the opponent\'s reply', () => {
-    expect(game.report!.focus.theme).toBe('active_without_followup');
-    expect(game.report!.focus.title).toMatch(/opponent's most obvious reply/);
+  it('the focus skips 11.Nb5 (+4.2 → +4.0, still clearly winning) and takes the missed exd6 (17.Bc4, +6 → +1.5)', () => {
+    expect(game.report!.focus.theme).toBe('tactics');
+    expect(game.report!.focus.title).toMatch(/checks, captures and attacks/);
     expect(game.report!.headline).toMatch(/opening fundamentals were mostly solid/);
     expect(game.report!.didWell.length).toBeLessThanOrEqual(3);
     expect(game.report!.hurt.length).toBeLessThanOrEqual(3);

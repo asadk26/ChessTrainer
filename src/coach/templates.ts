@@ -1,7 +1,7 @@
 // Deterministic coaching language. This is the voice the app uses when no LLM
 // is configured, and the fallback for any field an LLM response leaves out.
 // Tone: a calm human coach talking to a ~850 player. Engine numbers stay out.
-import { PATTERN_LABEL, PATTERN_PHRASE, PATTERN_RULE, PATTERN_RULE_MISSED, type PatternTag } from '../analysis/patterns';
+import { PATTERN_LABEL, PATTERN_PHRASE, PATTERN_RULE, PATTERN_RULE_MISSED, forkedOnRim, patternLesson, type PatternTag } from '../analysis/patterns';
 import type { Color, Finding, MomentText, MoveExplanation, PlyRecord } from '../domain/types';
 import { gerundPhrase } from '../analysis/movePurpose';
 import { betterSentence } from '../analysis/explain';
@@ -143,10 +143,11 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
     question: `After ${played.san}, what can ${opp} do?${hint} Play ${opp}'s strongest reply.`,
     predictCorrect: `Exactly — ${ev}.`,
     predictOther: `Look again: ${ev}.`,
-    reveal: `${capitalise(ev)} — ${article(label)}.`,
+    // When the line is forced mate, say so and show it: that's the whole point.
+    reveal: `${capitalise(ev)} — ${article(label)}.${Array.isArray(f.facts.mateLine) ? ` It's forced mate: ${(f.facts.mateLine as string[]).join(' ')}.` : ''}`,
     betterPrompt: `Find a move that doesn't allow that.`,
     betterCorrect: `Good — that takes the sting out of it.`,
-    lesson: PATTERN_RULE[tag],
+    lesson: patternLesson(tag, 'refutation', forkedOnRim(played, ev)),
   };
 }
 
@@ -262,7 +263,7 @@ function buildCategoryText(input: MomentTextInput): MomentText {
           question: `After ${played.san}, what can ${opp} do? Look at every check. Play ${opp}'s strongest reply.`,
           predictCorrect: `Exactly — ${replyLine[0]} starts a forced mate.`,
           predictOther: `Look at the checks: ${replyLine[0]} starts a forced mate.`,
-          reveal: `This allows a forced mate: ${list(replyLine)}.`,
+          reveal: `This allows a forced mate: ${Array.isArray(facts.mateLine) ? (facts.mateLine as string[]).join(' ') : list(replyLine)}.`,
           betterPrompt: `Find a move that keeps your king safe.`,
           betterCorrect: 'Good — no mate after that.',
           lesson: "Before every move, look at the checks your opponent would have next — especially queen and rook checks near your king.",

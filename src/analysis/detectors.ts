@@ -112,6 +112,14 @@ function firstOpponentCapture(fenAfter: string, replyUci: string[], user: Color)
   return undefined;
 }
 
+/** The whole forced mate in the reply line (up to the mating move), when Stockfish sees one. */
+function mateLine(replySan: string[], after: PositionEval | undefined): string[] | undefined {
+  const mated = replySan.findIndex((s) => s.includes('#'));
+  if (mated >= 0) return replySan.slice(0, mated + 1);
+  const score = after?.lines[0]?.score;
+  return score?.type === 'mate' && score.value > 0 && replySan.length >= 2 * score.value - 1 ? replySan.slice(0, 2 * score.value - 1) : undefined;
+}
+
 function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
   const p = ctx.plies[i];
   const e = ctx.evals[i];
@@ -132,7 +140,7 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
         severity: e.winDrop >= 20 ? 3 : 2,
         confidence: 'high',
         evidence: `${label(p)} allowed a forced mate (${e.replyLineSan.slice(0, 3).join(' ')}).`,
-        facts: { mate: true, replyLine: e.replyLineSan.slice(0, 5), bestSan: e.bestSan, context: tags(c) },
+        facts: { mate: true, replyLine: e.replyLineSan.slice(0, 5), mateLine: mateLine(e.replyLineSan, ctx.positions[i + 1]), bestSan: e.bestSan, context: tags(c) },
       },
     ];
   }
@@ -1332,6 +1340,8 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
     const e = ctx.evals[i];
     const c = cx(ctx, p);
     const d = pd(e);
+    // Inside the opponent's forced mate nothing you do is a credit: not the sacrifice you took, not the "defence".
+    const mated = e.cpAfter <= -(MATE_CP - 1000);
 
     // Genuinely free material: the capture nets ≥2 compared with before the
     // opponent's last move (so recaptures don't count) and the gain holds.
@@ -1340,7 +1350,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       const now = materialBalance(p.fenAfter, user);
       const reply = ctx.plies[i + 1];
       const keptInGame = !reply || materialBalance(reply.fenAfter, user) >= now - 1;
-      if (now - base >= 2 && e.materialAfterReply >= now - 1 && keptInGame) free.push(p.ply);
+      if (now - base >= 2 && e.materialAfterReply >= now - 1 && keptInGame && !mated) free.push(p.ply);
     }
 
     // Simplifying when ahead: pieces come off over the next two plies, the lead stays.
@@ -1356,7 +1366,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       const gap = winPercent(scoreToCp(pos.lines[0].score)) - winPercent(scoreToCp(pos.lines[1].score));
       const recapture = i > 0 && !!ctx.plies[i - 1].captured && ctx.plies[i - 1].to === p.to;
       const forcing = !recapture && (isCheckMove(p.san) || !!p.captured || p.piece === 'k' || inCheck(p.fenBefore));
-      if (gap >= 12 && forcing && e.isBest) defended.push(p.ply);
+      if (gap >= 12 && forcing && e.isBest && !mated) defended.push(p.ply);
     }
 
     // Creating a dangerous passed pawn.
@@ -1365,7 +1375,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
     }
 
     // Neutralising counterplay: under pressure before, safe two plies later, via a trade/check/capture.
-    if (neutralized === undefined && c?.kingPressure && after2 && d <= 5) {
+    if (neutralized === undefined && c?.kingPressure && after2 && d <= 5 && !mated) {
       const traded = nonPawnMaterial(p.fenBefore) - nonPawnMaterial(after2.fenAfter) >= 6;
       if ((traded || isCheckMove(p.san) || p.captured) && !underKingPressure(after2.fenAfter, user)) neutralized = p.ply;
     }
@@ -1489,12 +1499,23 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   findings.push(...detectGameLevel(ctx, findings));
   // A move as good as Stockfish's never gets a mistake lesson, whatever followed it. A finding about
   // a pair of moves (a round trip) is judged on the move it blames for the cost.
-  return findings.filter((f) => {
+  const kept = findings.filter((f) => {
+    // No credit for a move after which you are being mated (taking a sacrificed queen, a "defence"…).
+    if (f.kind === 'strength') return !(f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor && ctx.evals[f.ply - 1].cpAfter <= -(MATE_CP - 1000));
     if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;
     if (ABOUT_THE_GAME.includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled)) return true;
     return !nearBest(ctx.evals[Number(f.facts.worsePly ?? f.ply) - 1]);
   });
+  // Clearly winning before and after the slip: still worth a look, never the headline or the focus.
+  for (const f of kept) {
+    const e = f.kind === 'weakness' && f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor ? ctx.evals[f.ply - 1] : undefined;
+    if (e && e.cpBefore >= STILL_WINNING_CP && e.cpAfter >= STILL_WINNING_CP) f.facts = { ...f.facts, stillWinning: true };
+  }
+  return kept;
 }
+
+/** At or above this (your point of view), the game is clearly won. */
+export const STILL_WINNING_CP = 300;
 
 /** Findings about the state of the game (attached to a move, but not about it). */
 const ABOUT_THE_GAME: string[] = ['development', 'time_management', 'passive_piece'];

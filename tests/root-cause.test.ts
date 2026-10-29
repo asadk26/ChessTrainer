@@ -88,3 +88,10 @@ describe('"Why?" must name the concrete reason', () => {
     expect(e.headline).toBe('16.Bxg4 took the pawn on g4, but it was defended by the knight on f6 — Nxg4 won your bishop.');
   });
 });
+
+describe('no king-safety praise when the king was attacked', () => {
+  it('Drearydoc (mated on move 36) never says "kept your king safe"', () => {
+    const { game: g } = coach('drearydoc-game');
+    expect(g.report!.didWell.map((d) => d.text).join(' ')).not.toMatch(/king safe|castled/);
+  });
+});

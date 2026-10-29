@@ -183,7 +183,9 @@ for (const c of truth.clean_games) {
   }
   if (g.report?.focus.theme === 'opening_development') taught.add('development');
   if (g.report?.focus.theme === 'loose_pieces') taught.add('hanging_piece');
-  const bad = c.must_not_lesson.filter((l) => taught.has(l));
+  const bad: string[] = c.must_not_lesson.filter((l) => taught.has(l));
+  // A clean game has nothing to fix: its focus must be the default advice, not a mistake's lesson.
+  if (g.report && !g.report.focus.generic) bad.push('a mistake lesson as the focus');
   cleanFails += bad.length ? 1 : 0;
   console.log(`  ${bad.length ? '‼' : '✓'} ${pad(c.game, 38)} ${bad.length ? `teaches ${bad.join(', ')}` : 'ok'}   (focus: ${g.report?.focus.title})`);
 }

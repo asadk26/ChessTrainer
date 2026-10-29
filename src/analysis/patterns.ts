@@ -37,7 +37,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   back_rank: 'Give your king an escape square (a "luft") before your back rank can be hit.',
   removed_defender: 'Before you move a piece or pawn, ask what it was guarding — and whether that is still safe once it leaves.',
   unblocked_queen: 'If your queen sits on a line with an enemy bishop, rook or queen, check what blocks that line before you move the blocker.',
-  pawn_fork: 'Before you put two pieces side by side in front of an enemy pawn, check its pushes and captures: one pawn can attack both.',
+  pawn_fork: 'Before moving a piece, check whether an enemy pawn push could attack it and another piece at once.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -67,6 +67,18 @@ export const PATTERN_RULE_MISSED: Partial<Record<PatternTag, string>> = {
   opened_line: 'Open files and diagonals toward their king when your pieces are ready to use them.',
   back_rank: 'When their king has no escape square, look for a rook or queen check on the back rank.',
 };
+
+/** Said after the pawn-fork rule when the forked piece had just gone to the edge. */
+export const RIM_NOTE = 'A piece on the rim has few escape squares, so it can’t easily step out of a fork.';
+
+/** The rule for a tactic, with the rim note for a pawn fork on a piece that went to the edge. */
+export function patternLesson(tag: PatternTag, side: 'refutation' | 'better', rimPiece = false): string {
+  const rule = (side === 'better' && PATTERN_RULE_MISSED[tag]) || PATTERN_RULE[tag];
+  return tag === 'pawn_fork' && side === 'refutation' && rimPiece ? `${rule} ${RIM_NOTE}` : rule;
+}
+
+/** The move put a knight or bishop on the edge, and the tactic's evidence names that square. */
+export const forkedOnRim = (played: { piece: string; to: string }, evidence: string) => ['n', 'b'].includes(played.piece) && /^[ah]/.test(played.to) && evidence.includes(played.to);
 
 export interface PatternHit {
   tag: PatternTag;

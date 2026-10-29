@@ -14,7 +14,7 @@ describe.skipIf(!findStockfishScript())('Stockfish integration', () => {
       expect(cats).toEqual(expect.arrayContaining(['21:inefficient_moves', '25:pointless_check', '29:opened_vs_king']));
       // 8.dxe5 is Stockfish's own move: no criticism of it.
       expect(cats.filter((c) => c.startsWith('15:'))).toEqual([]);
-      expect(game.report!.focus.theme).toBe('active_without_followup');
+      expect(game.report!.focus.theme).toBe('tactics');
       expect(drills.length).toBeGreaterThanOrEqual(2);
     } finally {
       engine.dispose();

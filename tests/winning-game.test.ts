@@ -68,7 +68,9 @@ describe('conclusions are robust to engine variance', () => {
     expect(cats(43)).toContain('gave_back_material');
     expect(cats(45)).toContain('allowed_counterplay');
     expect(game.report!.focus.theme).toBe('conversion');
-    expect(game.report!.hurt[0].text).toMatch(/12\.Qxa7.*22\.Bd4.*23\.Ba7/);
+    // 12.Qxa7 and 22.Bd4 left you clearly winning (above +3): only 23.Ba7, which let the win slip, leads.
+    expect(game.report!.hurt[0].text).toMatch(/23\.Ba7/);
+    expect(game.report!.hurt[0].text).not.toMatch(/12\.Qxa7/);
   });
 });
 

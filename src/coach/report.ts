@@ -1,5 +1,6 @@
 // Builds the concise post-game coaching report from findings + history.
-import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, PATTERN_RULE, type PatternTag } from '../analysis/patterns';
+import { Chess } from 'chess.js';
+import { PATTERN_FOCUS, PATTERN_LABEL, PATTERN_PHRASE, forkedOnRim, patternLesson, type PatternTag } from '../analysis/patterns';
 import type { CategoryId, Color, Finding, GameReport, MoveEval, PlyContext, PlyRecord, ReportItem, StrengthId, ThemeId } from '../domain/types';
 import { rootCause } from '../analysis/rootCause';
 import { CATEGORIES, STRENGTHS, THEMES } from '../domain/categories';
@@ -60,11 +61,15 @@ export function isStateFinding(f: Finding): boolean {
   return ['development', 'passive_piece', 'time_management', 'king_pawns', 'pawn_storm'].includes(f.category) || (f.category === 'king_safety' && !!f.facts.notCastled);
 }
 
+/** A finding that can count toward a pattern (in this game or as history). */
+export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f);
+
 /**
- * A finding that can count toward a pattern (in this game or as history). A slip that cost nothing
- * (a quicker mate missed while the move played still mates) is a lesson, not a pattern or a headline.
+ * A finding that can lead this game's summary (headline, focus, what hurt). A slip made while clearly
+ * winning before and after it (or a quicker mate missed while still mating) is a lesson to look at,
+ * never what the game is about.
  */
-export const countsAsPattern = (f: Finding) => f.kind === 'weakness' && f.severity >= 2 && isCredible(f) && !f.facts.stillWinning;
+const leadsSummary = (f: Finding) => countsAsPattern(f) && !f.facts.stillWinning;
 
 function plyLabel(plies: PlyRecord[], ply: number): string {
   const p = plies[ply - 1];
@@ -89,7 +94,8 @@ export function groupByTheme(findings: Finding[]): ThemeGroup[] {
       theme,
       findings: fs,
       score: fs.reduce((a, f) => a + CATEGORIES[f.category as CategoryId].weight * f.severity * confWeight(f), 0),
-      strong: fs.some((f) => f.confidence === 'high') || fs.length >= 2,
+      // Two categories on the same move are one piece of evidence, not two.
+      strong: fs.some((f) => f.confidence === 'high') || new Set(fs.map((f) => f.ply)).size >= 2,
     }))
     .sort((a, b) => b.score - a.score);
 }
@@ -137,7 +143,7 @@ function conversionClause(f: Finding, plies: PlyRecord[], opp: string): string {
 }
 
 /** "On 13.Nh3, …" — unless the evidence already starts with the move. */
-const onMove = (e: { label: string; finding: Finding }) => (e.finding.evidence.startsWith(e.label) ? e.finding.evidence : `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
+const onMove = (e: { label: string; finding: Finding }) => (e.finding.evidence.startsWith(e.label.split(' ')[0]) ? e.finding.evidence : `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
 
 function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): string {
   const eps = episodes(group, plies);
@@ -191,8 +197,25 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
   }
 }
 
+/** Your king was attacked: you were mated, allowed mate, or the coach found an attack or a weakness around it. */
+export function kingUnderAttack(findings: Finding[], plies: PlyRecord[], userColor: Color): boolean {
+  const last = plies[plies.length - 1];
+  if (last) {
+    const c = new Chess(last.fenAfter);
+    if (c.isCheckmate() && c.turn() === userColor) return true;
+  }
+  return findings.some(
+    (f) =>
+      f.kind === 'weakness' &&
+      isCredible(f) &&
+      (!!f.facts.mate || ['back_rank', 'opened_line'].includes(String(f.facts.pattern)) || ['king_safety', 'king_pawns', 'pawn_storm'].includes(f.category)),
+  );
+}
+
 function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color): ReportItem[] {
-  const strengths = findings.filter((f) => f.kind === 'strength' && isCredible(f));
+  // Never praise king safety in a game where the king was mated or attacked.
+  const kingHit = kingUnderAttack(findings, plies, userColor);
+  const strengths = findings.filter((f) => f.kind === 'strength' && isCredible(f) && !(kingHit && f.category === 'castled_early'));
   const has = (id: StrengthId) => strengths.find((f) => f.category === id);
   const items: ReportItem[] = [];
   const opp = COLOR_NAME[other(userColor)];
@@ -458,7 +481,7 @@ export function gameStory(plies: PlyRecord[], contexts: Map<number, PlyContext> 
 
 export function buildReport(input: ReportInput): GameReport {
   const { plies, findings, userColor, prior, contexts } = input;
-  const groups = groupByTheme(findings);
+  const groups = groupByTheme(findings.filter(leadsSummary));
   const strongGroups = groups.filter((g) => g.strong);
   const didWell = didWellItems(findings, plies, userColor);
   // Main summary: themes with strong evidence first; a weaker (but credible) theme only fills remaining space.
@@ -475,7 +498,8 @@ export function buildReport(input: ReportInput): GameReport {
     .map((f) => ({ text: SOFT_NOTES[f.category as CategoryId]!(f), plies: [f.ply], category: f.category }));
 
   // With no strong theme, a credible weaker one (the one we'll mention) still beats a generic default.
-  const chosen = chooseFocus(groups, prior) ?? groups.find((g) => !g.findings.every(isSoft))?.theme;
+  // In a game you won, weak evidence isn't a lesson: the default advice is more honest than a guess.
+  const chosen = chooseFocus(groups, prior) ?? (input.won ? undefined : groups.find((g) => !g.findings.every(isSoft))?.theme);
   // A loss with a decisive drop: the lesson comes from what explains that move (or its setup),
   // and the story tells it in order — setup, decisive mistake, result.
   const rc = input.evals && input.lost ? rootCause({ plies, evals: input.evals, userColor, findings, termination: input.termination, lost: true }) : undefined;
@@ -484,7 +508,7 @@ export function buildReport(input: ReportInput): GameReport {
   const specific = (f: Finding) => (!!f.facts.pattern && f.facts.patternSide !== 'better') || f.category === 'defended_grab' || !!f.facts.mate || f.facts.hanging === 'moved' || f.facts.hanging === 'left';
   const decisiveLesson = rc && specific(rc.decisive) ? lessonFor(rc.decisive, findings) : undefined;
   const focusTheme = decisiveLesson?.theme ?? chosen ?? 'opponent_threats';
-  const focusMeta = decisiveLesson ?? focusFor(focusTheme, findings);
+  const focusMeta = decisiveLesson ?? focusFor(focusTheme, findings.filter(leadsSummary));
 
   let headline: string;
   const openingStrengths = findings.filter((f) => f.kind === 'strength' && ['center_control', 'developed_pieces', 'castled_early'].includes(f.category));
@@ -492,7 +516,7 @@ export function buildReport(input: ReportInput): GameReport {
   const solidOpening = openingStrengths.length >= 2 && !openingWeak;
   const lead = strongGroups[0];
   // Real mistakes that didn't add up to a strong theme still aren't a "clean game".
-  const slips = findings.filter((f) => f.kind === 'weakness' && f.severity >= 2 && f.confidence !== 'low' && !isStateFinding(f) && !f.facts.stillWinning);
+  const slips = findings.filter((f) => leadsSummary(f) && !isStateFinding(f));
   if (rc && decisiveLesson) {
     const centre = rc.setup.some((f) => f.category === 'king_safety' && f.facts.notCastled);
     const setup = rc.setup
@@ -501,7 +525,7 @@ export function buildReport(input: ReportInput): GameReport {
       .filter(Boolean);
     headline = `${capitalise(decisiveLesson.clause)}${setup.length ? `, after ${setup.join(' and ')}` : ''}${centre ? ', with your king still in the centre' : ''}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead && slips.length) {
-    headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${slips.length === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+    headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${new Set(slips.map((f) => f.ply)).size === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead && input.lost) {
     headline = `No single mistake decided this game — it slipped away a little at a time. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead) {
@@ -530,7 +554,7 @@ export function buildReport(input: ReportInput): GameReport {
     recurring: recurringText(groups, plies, prior),
     focus: {
       title: focusMeta.focusTitle,
-      detail: [focusMeta.focusDetail, decisiveLesson && rc?.setup[0] ? setupLesson(rc.setup[0]) : ''].filter(Boolean).join(' '),
+      detail: [focusMeta.focusDetail, decisiveLesson && rc?.setup[0] ? setupLesson(rc.setup[0], plies) : ''].filter(Boolean).join(' '),
       theme: focusTheme,
       ...(chosen || decisiveLesson ? {} : { generic: true }),
     },
@@ -579,9 +603,10 @@ function setupClause(f: Finding, userColor: Color): string | undefined {
 }
 
 /** The set-up move's lesson for the focus detail: its tactic's rule when it walked into one, else its category's. */
-function setupLesson(f: Finding): string {
+function setupLesson(f: Finding, plies: PlyRecord[]): string {
   const tag = f.facts.pattern as PatternTag | undefined;
-  const lesson = tag && f.facts.patternSide !== 'better' ? lowerFirst(PATTERN_RULE[tag]) : SETUP_LESSON[f.category];
+  const p = plies[f.ply - 1];
+  const lesson = tag && f.facts.patternSide !== 'better' ? lowerFirst(patternLesson(tag, 'refutation', !!p && forkedOnRim(p, String(f.facts.patternEvidence ?? '')))) : SETUP_LESSON[f.category];
   return lesson ? `Also from this game: ${lesson}` : '';
 }
 
