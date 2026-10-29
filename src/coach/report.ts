@@ -35,7 +35,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 21;
+export const REPORT_VERSION = 22;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -157,7 +157,7 @@ function mergeByPattern(eps: { label: string; finding: Finding }[], plies: PlyRe
     if (same.length < 2) return void out.push(onMove(e));
     same.forEach(({ j }) => done.add(j));
     const group = same.map(({ x }) => x).sort((a, b) => a.finding.ply - b.finding.ply);
-    const lead = (x: { finding: Finding }) => (Array.isArray(x.finding.facts.patternLead) ? ` (after ${(x.finding.facts.patternLead as string[]).join(' ')})` : '');
+    const lead = (x: { finding: Finding }) => (Array.isArray(x.finding.facts.patternLead) ? ` after ${(x.finding.facts.patternLead as string[]).join(' ')}` : '');
     const ev = group.map((x) => String(x.finding.facts.patternEvidence ?? ''));
     const head = `${joinList(group.map((x) => plyLabel(plies, x.finding.ply)))} ${group.length === 2 ? 'both' : 'each'} ${PATTERN_PHRASE[tag as PatternTag].refutation}`;
     // Same words after the key move ("hits the king on its back rank…"): say them once.

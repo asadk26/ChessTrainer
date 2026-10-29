@@ -43,7 +43,18 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     let hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
     if (hit?.tag === 'hanging_piece' && hit.side === 'better') hit = unfinishedTrade(game.plies, i, a.positions[i]?.lines[0]?.pv[0]) ?? hit;
     // The reply moves before the one the tactic is about, so the reveal starts from the first reply.
-    const lead = hit && hit.side === 'refutation' && hit.at > 1 ? playLine(p.fenAfter, a.positions[i + 1]?.lines[0]?.pv ?? [], hit.at - 1).map((f) => f.san) : [];
+    // While the line still follows the game, a move of yours in it that isn't what you played is
+    // Stockfish's sample, and is said so (once the opponent's moves differ, it's all a different line).
+    let onGame = true;
+    const lead =
+      hit && hit.side === 'refutation' && hit.at > 1
+        ? playLine(p.fenAfter, a.positions[i + 1]?.lines[0]?.pv ?? [], hit.at - 1).map((f, k) => {
+            const actual = game.plies[i + 1 + k];
+            const sample = onGame && k % 2 === 1 && !!actual && actual.san !== f.san;
+            if (!actual || actual.san !== f.san) onGame = false;
+            return sample ? `${f.san} (a sample move — you played ${actual.san})` : f.san;
+          })
+        : [];
     if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}), ...(lead.length ? { lead } : {}) };
   });
   return out;
