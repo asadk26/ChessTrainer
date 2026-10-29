@@ -12,6 +12,7 @@ import {
   materialBalance,
   playLine,
   undevelopedMinors,
+  exchangeGain,
 } from '../src/chess/board';
 
 describe('board state reconstruction', () => {
@@ -62,5 +63,26 @@ describe('board state reconstruction', () => {
     const fen = g.plies[32].fenBefore; // White to move, exd6 wins a piece
     expect(materialAfterLine(fen, ['e5d6', 'c8d6'], 'w')).toBe(materialBalance(fen, 'w') + 2);
     expect(playLine(fen, ['e5d6', 'c8d6']).map((f) => f.san)).toEqual(['exd6', 'Nxd6']);
+  });
+});
+
+describe('exchangeGain (static exchange on one square)', () => {
+  it('an undefended piece is won outright', () => {
+    expect(exchangeGain('6k1/8/8/3n4/8/8/8/3R2K1 w - - 0 1', 'd5', 'w')).toBe(3);
+  });
+  it('a defended piece attacked by an equal one is only a trade', () => {
+    expect(exchangeGain('6k1/8/4p3/3n4/8/2N5/8/6K1 w - - 0 1', 'd5', 'w')).toBe(0);
+  });
+  it('two attackers against one defender still lose if the first attacker is worth more (maladly, b5 before 18...a5)', () => {
+    // Nxb5 axb5 Qxb5: a knight for two pawns, so b5 is safe.
+    expect(exchangeGain('2r2rk1/2qnbppp/p3p3/1p1pPn2/3P4/P1N2N1P/1P2QPP1/R1BR2K1 b - - 0 18', 'b5', 'w')).toBeLessThanOrEqual(0);
+    // After 18...a5 the pawn has no defender: free.
+    expect(exchangeGain('2r2rk1/2qnbppp/4p3/pp1pPn2/3P4/P1N2N1P/1P2QPP1/R1BR2K1 w - - 0 19', 'b5', 'w')).toBe(1);
+  });
+  it('a rook behind a rook (a battery) counts', () => {
+    // Rd2 and Rd1 against a knight on d5 defended once by the e6 pawn: Rxd5 exd5 Rxd5 loses the exchange — not worth it.
+    expect(exchangeGain('6k1/8/4p3/3n4/8/8/3R4/3R2K1 w - - 0 1', 'd5', 'w')).toBe(0);
+    // Undefended: the front rook just takes.
+    expect(exchangeGain('6k1/8/8/3n4/8/8/3R4/3R2K1 w - - 0 1', 'd5', 'w')).toBe(3);
   });
 });

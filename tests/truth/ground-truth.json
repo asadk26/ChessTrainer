@@ -1,7 +1,8 @@
 {
   "version": 2,
   "changelog": [
-    "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand."
+    "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand.",
+    "v2 (2026-10-29): unsealed RA_Recto 22...g6, akash 34.Qe2 and maladly 18...a5 (holdout -> tune) for debugging, at the owner's request; fresh holdout replacements come in v3."
   ],
   "created": "2026-10-28",
   "player": "chunkmonkey420",
@@ -340,7 +341,7 @@
       "expected_lesson": "Ask what the moving piece was defending.",
       "must_not_label": [],
       "confidence": "high",
-      "split": "holdout"
+      "split": "tune"
     },
     {
       "id": "akash-264-51-Qa2",
@@ -506,7 +507,7 @@
         "development"
       ],
       "confidence": "high",
-      "split": "holdout"
+      "split": "tune"
     },
     {
       "id": "HoVhAnnes1jan-15-Qb4",
@@ -846,7 +847,7 @@
       "expected_lesson": "After every move, trace your queen's lines to the end.",
       "must_not_label": [],
       "confidence": "high",
-      "split": "holdout"
+      "split": "tune"
     },
     {
       "id": "AmbrAlexey-17b-cxb4",

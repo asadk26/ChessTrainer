@@ -48,6 +48,40 @@ export function pieceAt(fen: string, square: string): { type: PieceType; color: 
   return p ? { type: p.type as PieceType, color: p.color } : undefined;
 }
 
+/**
+ * What `byColor` wins by capturing on `square` (static exchange): each side recaptures with its
+ * cheapest attacker — re-read after every capture, so a battery behind counts — and either side
+ * may stop when going on would lose. Positive: the unit there can be won; 0 or less: it's safe.
+ */
+export function exchangeGain(fen: string, square: string, byColor: Color): number {
+  const c = new Chess(fen);
+  const target = c.get(square as Square);
+  if (!target || target.color === byColor) return 0;
+  const value = (t: string) => (t === 'k' ? 100 : PIECE_VALUE[t as PieceType]);
+  const cheapest = (side: Color) =>
+    c
+      .attackers(square as Square, side)
+      .map((s) => ({ s, p: c.get(s)! }))
+      .sort((a, b) => value(a.p.type) - value(b.p.type))[0];
+  const gain: number[] = [];
+  let onSquare = value(target.type);
+  let side = byColor;
+  for (let d = 0; ; d++) {
+    const a = cheapest(side);
+    if (!a) break;
+    gain[d] = onSquare - (d > 0 ? gain[d - 1] : 0);
+    onSquare = value(a.p.type);
+    c.remove(a.s);
+    c.put({ type: a.p.type, color: a.p.color }, square as Square);
+    side = other(side);
+    if (a.p.type === 'k') break;
+  }
+  if (!gain.length) return 0;
+  for (let d = gain.length - 1; d > 0; d--) gain[d - 1] = -Math.max(-gain[d - 1], gain[d]);
+  // Not capturing at all is always allowed.
+  return Math.max(0, gain[0]);
+}
+
 /** Squares of `byColor` pieces that attack `square`. */
 export function attackersOf(fen: string, square: string, byColor: Color): string[] {
   return new Chess(fen).attackers(square as Square, byColor);

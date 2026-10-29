@@ -1,5 +1,5 @@
 // Orchestrates: engine facts -> findings -> teaching moments -> report -> drills.
-import type { Drill, Finding, PlyRecord, PositionEval, StoredGame } from '../domain/types';
+import type { Drill, Finding, PieceType, PlyRecord, PositionEval, StoredGame } from '../domain/types';
 import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
@@ -12,8 +12,8 @@ import { endingNote } from '../coach/ending';
 import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel } from '../chess/pgn';
-import { COLOR_NAME } from '../chess/board';
-import { PATTERN_PHRASE, detectPattern } from './patterns';
+import { COLOR_NAME, PIECE_NAME, playLine } from '../chess/board';
+import { PATTERN_PHRASE, detectPattern, type PatternHit } from './patterns';
 import { verdictOf } from './engineReview';
 
 /** Chronological key: PGN date when available, import time otherwise. */
@@ -40,10 +40,30 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     const taught = game.findings.some((f) => f.ply === p.ply && f.kind === 'weakness' && f.severity >= 2);
     if (e.color !== game.userColor || (v !== 'mistake' && v !== 'blunder' && !taught)) return;
     const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
-    const hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
+    let hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
+    if (hit?.tag === 'hanging_piece' && hit.side === 'better') hit = unfinishedTrade(game.plies, i, a.positions[i]?.lines[0]?.pv[0]) ?? hit;
     if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}) };
   });
   return out;
+}
+
+/**
+ * The free piece you didn't take had just captured one of yours (in the last few moves, and hasn't
+ * moved since): not a gift — a trade you left unfinished.
+ */
+function unfinishedTrade(plies: PlyRecord[], i: number, bestUci: string | undefined): PatternHit | undefined {
+  if (!bestUci) return;
+  const sqr = bestUci.slice(2, 4);
+  const me = plies[i].color;
+  // The last move that touched the square decides: an opponent capture landing there, and nothing since.
+  for (let k = i - 1; k >= Math.max(0, i - 4); k--) {
+    const q = plies[k];
+    if (q.from === sqr) return;
+    if (q.to !== sqr) continue;
+    if (q.color === me || !q.captured) return;
+    const best = playLine(plies[i].fenBefore, [bestUci], 1)[0];
+    return { tag: 'incomplete_exchange', side: 'better', at: 0, evidence: `${moveLabel(q)} took your ${PIECE_NAME[q.captured as PieceType]}, and ${best?.san ?? bestUci} would have taken back` };
+  }
 }
 
 /** Findings about a missed chance of your own: a better-line tactic is what they're about. */

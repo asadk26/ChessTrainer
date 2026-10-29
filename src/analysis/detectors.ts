@@ -266,9 +266,10 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
       },
     ];
   }
-  if (pd(e) < 10) return [];
+  // A small practical cost (you stay winning) still teaches a missed piece: checked below.
+  const small = pd(e) < 10;
 
-  if (best.score.type === 'mate' && best.score.value > 0 && best.score.value <= 3) {
+  if (!small && best.score.type === 'mate' && best.score.value > 0 && best.score.value <= 3) {
     return [
       {
         kind: 'weakness',
@@ -289,6 +290,8 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
   // played lost something (16.Nxf6+ Qxf6 17.Qxf6 Nxf6 is a trade, not "winning the knight").
   const settledGain = e.materialAfterBest - e.materialBefore;
   if (quickGain < 2 || missed < 2 || settledGain < 2) return [];
+  // Missing a whole piece or more is a lesson even when you stay winning — if it cost a pawn or more.
+  if (small && (missed < 3 || settledGain < 3 || e.cpBefore - e.cpAfter < 100)) return [];
 
   const first = playLine(p.fenBefore, best.pv, 1)[0];
   const target = first ? pieceAt(p.fenBefore, first.to) : undefined;
@@ -299,7 +302,7 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
       kind: 'weakness',
       category: 'tactical_blindness',
       ply: p.ply,
-      severity: sev(pd(e)),
+      severity: small ? 2 : sev(pd(e)),
       confidence: 'high',
       evidence: target
         ? `${e.bestSan} would have won the ${squareName(target.type, first!.to)}${capturing && targetLoose ? ` — your ${PIECE_NAME[capturing.type]} on ${first!.from} was attacking it` : ''}.`

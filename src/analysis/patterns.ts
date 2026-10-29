@@ -4,10 +4,10 @@
 // Saved on every mistake/blunder so patterns can be counted across games.
 import { Chess, type Move, type Square } from 'chess.js';
 import type { Color, PieceType } from '../domain/types';
-import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, exchangeGain, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -27,6 +27,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   greedy_queen: 'Queen raid',
   stuck_deep: 'Piece stuck deep',
   blocked_with_tempo: 'Check blocked with tempo',
+  incomplete_exchange: 'Unfinished trade',
 };
 
 /** One reusable rule per pattern. */
@@ -48,6 +49,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   greedy_queen: 'Before grabbing material with your queen, look at your king without it: which checks does your opponent get?',
   stuck_deep: 'When your queen or a piece is deep in their camp, count its escape squares every move — bring it back before they close.',
   blocked_with_tempo: 'Before giving a check, look at how it can be blocked: a block that also attacks your checking piece wins time.',
+  incomplete_exchange: 'Finish a trade before starting a new idea: after captures and checks, recount the material and take back.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -69,6 +71,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   greedy_queen: { refutation: 'sent your queen away to grab material', better: 'missed a queen raid' },
   stuck_deep: { refutation: 'left a piece deep in their camp', better: 'missed a chance to trap a piece' },
   blocked_with_tempo: { refutation: 'gave a check that was blocked with tempo', better: 'missed a block with tempo' },
+  incomplete_exchange: { refutation: 'left a trade unfinished', better: 'left a trade unfinished' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -410,7 +413,8 @@ function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternH
   const opp = other(mover);
   const guards = attackersOf(fenBefore, x, mover);
   if (!guards.includes(played.from as never) || attackersOf(fs[0].after, x, mover).includes(played.to as never)) return;
-  const free = (fen: string) => isLoose(fen, x) || attackersOf(fen, x, opp).length > attackersOf(fen, x, mover).length;
+  // Free = the exchange on that square wins material for them (cheapest attacker first, either side may stop).
+  const free = (fen: string) => exchangeGain(fen, x, opp) > 0;
   if (free(fenBefore) || !free(fs[0].after)) return;
   const net = materialBalance(fs[fs.length - 1].after, mover) - materialBalance(fenBefore, mover);
   if (net > -(unit.type === 'p' ? 1 : 2)) return;
@@ -498,7 +502,7 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     // "Hanging" means it could be taken for free: undefended, attacked by something cheaper, or (a piece)
     // simply outnumbered. A pawn pushed into an outnumbered square is a break that failed, not a loose
     // pawn; and a piece lost to a longer line isn't hanging, whatever the category says.
-    const outnumbered = reply.captured !== 'p' && attackersOf(afterPlayed, reply.to, opp).length > attackersOf(afterPlayed, reply.to, mover).length;
+    const outnumbered = reply.captured !== 'p' && exchangeGain(afterPlayed, reply.to, opp) > 0;
     if (!loose && !outnumbered) {
       // falls through to the missed-capture check below
     } else if (reply.to === refutation[0].move.to) {
@@ -510,14 +514,18 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     }
   }
   const best = better[0]?.move;
-  if (best?.captured && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to) && net(better, mover) >= (best.captured === 'p' ? 1 : 2)) {
+  // Free: undefended — or defended on paper, but the best line never takes back and keeps the material.
+  const undefended = !!best && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to);
+  const notRetaken = !!best?.captured && better[1]?.move.to !== best.to && net(better, mover) >= PIECE_VALUE[best.captured as PieceType] - 1;
+  if (best?.captured && (undefended || notRetaken) && net(better, mover) >= (best.captured === 'p' ? 1 : 2)) {
     // You did capture — just the smaller prize.
     const took = refutation[0]?.move.captured as PieceType | undefined;
     if (took && PIECE_VALUE[best.captured as PieceType] > PIECE_VALUE[took])
-      return { tag: 'bigger_capture', side: 'better', at: 0, evidence: `you took the ${sq(took, refutation[0].move.to)}, but ${best.san} won the ${sq(best.captured as PieceType, best.to)}, which was undefended` };
+      return { tag: 'bigger_capture', side: 'better', at: 0, evidence: `you took the ${sq(took, refutation[0].move.to)}, but ${best.san} won the ${sq(best.captured as PieceType, best.to)}, which was ${undefended ? 'undefended' : 'free'}` };
     const line = lineName(best.from, best.to, best.piece as PieceType);
     const how = line ? `your ${PIECE_NAME[best.piece as PieceType]} on ${best.from} could take it ${line} (${best.san})` : `${best.san} takes it for free`;
-    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was undefended — ${how}` };
+    const state = undefended ? 'undefended' : `free (${COLOR_NAME[other(mover)]} can't afford to take back)`;
+    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was ${state} — ${how}` };
   }
   return undefined;
 }
@@ -546,6 +554,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
   back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  incomplete_exchange: { title: 'Finish the trade before anything else.', detail: 'When pieces are being traded, a check or a threat in the middle can make you forget to take back. After every capture and check, recount the material: if you are a piece down, taking back comes first.' },
   blocked_with_tempo: { title: 'Before giving a check, look at how it can be blocked.', detail: 'A check is only good if the answer helps you. When the opponent can block it with a piece that also attacks your checking piece, your piece has to move again and they gain a tempo — often with more threats. Check the blocks before you check.' },
   greedy_queen: { title: 'Before grabbing material with your queen, check your king.', detail: 'A pawn far from your king costs your queen several moves — and while it is away, your king has one defender fewer. Before a queen capture, ask what checks and threats your opponent gets with your queen out of play.' },
   stuck_deep: { title: 'Count your raiding piece’s escape squares every move.', detail: 'A queen or piece deep in the opponent’s camp can be cut off: one rook or pawn move takes away its last squares. Every move it stays there, count its ways back — and bring it home while you still can.' },
