@@ -1540,14 +1540,20 @@ function movedBefore(ctx: DetectorContext, i: number, square: string): boolean {
 
 /**
  * "Don't move an already-developed piece again" and "a piece went there and back" only fit when
- * the piece really had been developed already (not its first move), and when Stockfish's own
+ * the piece really had been developed already (on its first move the lesson is about the attack
+ * itself), and when Stockfish's own
  * choice isn't itself a quiet move of an already-developed piece (then tempo isn't the issue; a
  * capture is "something concrete", so it doesn't count).
  */
 function lessonFits(ctx: DetectorContext, f: Finding): boolean {
   if (f.category !== 'premature_attack' && f.category !== 'inefficient_moves') return true;
   const i = f.ply - 1;
-  if (f.category === 'premature_attack' && !movedBefore(ctx, i, ctx.plies[i].from)) return false;
+  // A piece's first move: the finding stays, but its lesson is about the attack, not about moving
+  // a developed piece again (see firstMove in the template).
+  if (f.category === 'premature_attack' && !movedBefore(ctx, i, ctx.plies[i].from)) {
+    f.facts = { ...f.facts, firstMove: true };
+    return true;
+  }
   const w = Number(f.facts.worsePly ?? f.ply) - 1;
   const best = ctx.evals[w]?.bestUci;
   const bestPiece = best ? pieceAt(ctx.plies[w].fenBefore, best.slice(0, 2)) : undefined;

@@ -87,10 +87,21 @@ describe('recurring patterns are not forced onto new games', () => {
   });
 
   it('does report the recurrence when the new game has strong evidence', () => {
-    const { game: g, positions } = fixtureGame('knight-trip-game');
-    const { game } = coachFromPositions(g, positions, prior);
+    // Two earlier games that left pieces unprotected (halfmast), then 11...Qd7 Nxd7.
+    const h = fixtureGame('halfmast-game');
+    const loose = coachFromPositions(h.game, h.positions, []).game.findings;
+    const earlier = [1, 2].map((d) => ({ gameId: `h${d}`, label: `vs y (${d})`, playedAt: Date.UTC(2026, 9, d), findings: loose }));
+    const { game: g, positions } = fixtureGame('queen-blunder-game');
+    const { game } = coachFromPositions(g, positions, earlier);
     expect(game.report!.recurring).toMatch(/appeared in 3 of your last 3 games/);
     expect(game.report!.recurring).not.toMatch(/again you /);
+  });
+
+  it('a round trip on a big swing is not strong evidence of a habit (the real reason was the missed Nxe4)', () => {
+    const { game: g, positions } = fixtureGame('knight-trip-game');
+    const { game } = coachFromPositions(g, positions, prior);
+    expect(game.findings.find((f) => f.ply === 8 && f.category === 'inefficient_moves')).toMatchObject({ confidence: 'low', facts: { unexplained: true } });
+    expect(game.moments.some((m) => m.ply === 8 && m.category === 'inefficient_moves')).toBe(false);
   });
 
   it('ignores low-confidence findings in history', () => {

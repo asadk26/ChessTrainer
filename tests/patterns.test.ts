@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import { fixtureGame } from './helpers';
 import { coachFromPositions } from '../src/analysis/pipeline';
 import { PATTERN_RULE, detectPattern } from '../src/analysis/patterns';
+import { buildMomentText } from '../src/coach/templates';
 import { patternStats } from '../src/analysis/patternStats';
 import { captureOpportunity } from '../src/analysis/boardFacts';
 import { lineSteps, stepCaption } from '../src/analysis/lineSteps';
@@ -278,8 +279,10 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     expect(mate.severity).toBe(2); // the game was already lost: shown, but not the lesson of the game
     expect(g.report?.headline).toMatch(/^You walked into a discovered attack, with your king still in the centre\./);
     expect(g.report?.story).toMatch(/Then the decisive mistake: 15\.\.\.Nd2 walked into a discovered attack/);
-    // 14...Qg5 was the queen's first move: "moved an already-developed piece again" doesn't fit it.
-    expect(g.report?.story).not.toMatch(/14\.\.\.Qg5/);
+    // 14...Qg5 was the queen's first move: the finding stays, with a lesson about the attack itself.
+    const qg5 = g.findings.find((f) => f.ply === 28 && f.category === 'premature_attack')!;
+    expect(qg5.facts.firstMove).toBe(true);
+    expect(g.report?.story).toMatch(/14\.\.\.Qg5 attacked the knight on e5, but it could simply move away/);
   });
   it('allowing mate in one is "allowed checkmate" with a checks lesson (vs Blundering32, 7...f5 Qf7#)', () => {
     const g = game('blundering-game');
@@ -316,5 +319,15 @@ describe('regression: a discovered check in a line (AyeNaing1, 26...Nxb3) froze 
     const t = Date.now();
     detectPattern('5rk1/2q3pp/p6r/n1p4B/3p4/1P1P4/1B3PPb/2RQ1R1K b - - 4 26', 'a5b3', ['d1b3', 'g8h8'], ['g7g6', 'c1c5', 'c7c5', 'h5f3', 'h2b8', 'h1g1'], []);
     expect(Date.now() - t).toBeLessThan(2000);
+  });
+});
+
+describe("a piece's first move gets the attack lesson, not the developed-piece one", () => {
+  it('halfmast 14...Qg5: "an attack the target can just step away from gains nothing"', () => {
+    const g = game('halfmast-game');
+    const f = g.findings.find((x) => x.ply === 28 && x.category === 'premature_attack')!;
+    const t = buildMomentText({ primary: f, all: [f], played: g.plies[27], reply: g.plies[28], mover: 'b', bestSan: 'b5', betterPly: g.plies[27] });
+    expect(t.lesson).toMatch(/^An attack the target can just step away from gains nothing\./);
+    expect(t.lesson).not.toMatch(/already-developed/);
   });
 });

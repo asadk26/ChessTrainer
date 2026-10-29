@@ -186,6 +186,8 @@ export function buildMoments(input: MomentInput): TeachingMoment[] {
     // About the game as a whole (castled late, slow development, a passive piece, the clock),
     // not about the move it happens to be attached to: summary only, never a "find a better move" lesson.
     if (isStateFinding(f)) continue;
+    // Speculative (low confidence): never the basis of a lesson.
+    if (f.confidence === 'low') continue;
     byPly.set(f.ply, [...(byPly.get(f.ply) ?? []), f]);
   }
 

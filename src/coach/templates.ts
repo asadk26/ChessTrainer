@@ -198,8 +198,9 @@ function buildCategoryText(input: MomentTextInput): MomentText {
           : `What would you play here instead of ${played.san}?`,
         betterCorrect: `Good — that uses your move for something lasting instead of chasing.`,
         betterOther: `Not quite. ${bestSan ? `${bestSan} is a more useful way to spend the move.` : ''}`,
-        lesson:
-          "Don't move an already-developed piece again unless it achieves something concrete. Before an active-looking move, find your opponent's simplest reply — if it leaves your piece with nothing to do, play a useful move instead.",
+        lesson: facts.firstMove
+          ? 'An attack the target can just step away from gains nothing. Before an active-looking move, find your opponent’s simplest reply — if it leaves your piece with nothing to do, play a useful move instead.'
+          : "Don't move an already-developed piece again unless it achieves something concrete. Before an active-looking move, find your opponent's simplest reply — if it leaves your piece with nothing to do, play a useful move instead.",
       };
     }
     case 'pointless_check':

@@ -1,5 +1,5 @@
 // Orchestrates: engine facts -> findings -> teaching moments -> report -> drills.
-import type { Drill, Finding, PieceType, PlyRecord, PositionEval, StoredGame } from '../domain/types';
+import type { Drill, Finding, MoveEval, PieceType, PlyRecord, PositionEval, StoredGame } from '../domain/types';
 import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
@@ -106,6 +106,32 @@ export function annotatePatterns(findings: Finding[], patterns: NonNullable<Stor
   }
 }
 
+/**
+ * Tempo, structure and style reasons: plausible for a small slip, but not checked on the board.
+ * A move that loses a mistake's worth or more needs a concrete reason (a tactic, a lost piece);
+ * one of these on its own would be a guess, and a wrong lesson is worse than none.
+ */
+const HEURISTIC: string[] = [
+  'premature_attack', 'pointless_check', 'inefficient_moves', 'development', 'early_queen', 'central_tension', 'premature_capture',
+  'poor_trade', 'pawn_structure', 'passive_piece', 'piece_to_rim', 'king_pawns', 'missed_king_attack', 'failure_to_simplify', 'hunting_material',
+];
+
+/**
+ * When the only reason found for a mistake or blunder (on the app's own scale) is a heuristic one,
+ * it isn't trusted: low confidence, so it shows no lesson and makes no claim (unclassified).
+ */
+export function markUnexplained(findings: Finding[], moves: MoveEval[]) {
+  const concrete = new Set(findings.filter((f) => f.kind === 'weakness' && (!HEURISTIC.includes(f.category) || f.facts.pattern)).map((f) => f.ply));
+  for (const f of findings) {
+    if (f.kind !== 'weakness' || f.ply <= 0 || !HEURISTIC.includes(f.category) || f.facts.pattern || concrete.has(f.ply)) continue;
+    const e = moves[Number(f.facts.worsePly ?? f.ply) - 1];
+    const v = e && verdictOf(e);
+    if (v !== 'mistake' && v !== 'blunder') continue;
+    f.facts = { ...f.facts, unexplained: true };
+    f.confidence = 'low';
+  }
+}
+
 /** Games from real play. Adaptive Coach games record training results, never real-game weaknesses. */
 export const isRealGame = (g: Pick<StoredGame, 'adaptive'>) => !g.adaptive;
 
@@ -139,10 +165,13 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   // attack, a fork…), the finding says so instead of the generic "left unprotected".
   const patterns = gamePatterns({ ...game, findings, analysis: { positions, moves } as StoredGame['analysis'] });
   annotatePatterns(findings, patterns, game.plies);
+  markUnexplained(findings, moves);
   // Three-part explanations for every credible mistake / missed chance of the user.
   const explanations: Record<number, MoveExplanation> = {};
   for (const f of findings) {
-    if (f.kind !== 'weakness' || f.ply <= 0 || f.confidence === 'low' || explanations[f.ply]) continue;
+    // An unexplained finding (a heuristic label on a big swing) still gets the move's explanation,
+    // which comes from the engine lines, not from the label.
+    if (f.kind !== 'weakness' || f.ply <= 0 || (f.confidence === 'low' && !f.facts.unexplained) || explanations[f.ply]) continue;
     // Findings about the state of the game (development by move 10, a passive piece, the clock)
     // aren't about one move, so they don't get a move explanation.
     if (isStateFinding(f)) continue;

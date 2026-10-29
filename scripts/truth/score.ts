@@ -87,6 +87,8 @@ function labelAt(game: StoredGame, ply: number): Labelled {
   const moment = game.moments.find((m) => m.ply === ply && m.kind === 'mistake');
   const f = primaryFinding(fs) ?? [...fs].sort((a, b) => b.severity - a.severity)[0];
   if (!f) return { label: 'not_flagged', moment: !!moment };
+  // The app flagged the move but isn't confident why: no lesson, no claim.
+  if (f.confidence === 'low') return { label: 'unclassified', finding: f, moment: !!moment };
   return { label: appLabel(f), finding: f, lesson: moment?.text.lesson, moment: !!moment };
 }
 
@@ -131,6 +133,16 @@ const results: Scored[] = truth.moments.map((m) => {
 const pct = (n: number, d: number) => (d ? `${((100 * n) / d).toFixed(0)}%` : '—');
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
 
+/** exact / half / wrong / unclassified / not flagged, and precision: of the moments the app labels, how many are right. */
+function counts(rs: Scored[]) {
+  const exact = rs.filter((r) => r.score === 1).length;
+  const half = rs.filter((r) => r.score === 0.5).length;
+  const unflagged = rs.filter((r) => r.got.label === 'not_flagged').length;
+  const unclassified = rs.filter((r) => r.got.label === 'unclassified').length;
+  const wrong = rs.length - exact - half - unflagged - unclassified;
+  return { exact, half, wrong, unclassified, unflagged, labelled: exact + half + wrong };
+}
+
 function splitSummary(split: 'tune' | 'holdout') {
   const rs = results.filter((r) => r.m.split === split);
   const pts = rs.reduce((s, r) => s + r.score, 0);
@@ -145,9 +157,28 @@ function splitSummary(split: 'tune' | 'holdout') {
   );
 }
 
+/** Of the moments where the app gives a label, how many are right (exact or secondary). */
+function precisionLine(split: 'tune' | 'holdout') {
+  const c = counts(results.filter((r) => r.m.split === split));
+  const right = c.exact + c.half;
+  console.log(`${pad(split, 8)} precision ${right}/${c.labelled} = ${pct(right, c.labelled)} right when it labels (exact ${c.exact} + secondary ${c.half}; wrong ${c.wrong})`);
+}
+
 console.log(`\nGround truth v${truth.version} — the app vs hand-verified labels\n`);
 splitSummary('tune');
 splitSummary('holdout');
+console.log('');
+precisionLine('tune');
+precisionLine('holdout');
+// By the app's own confidence in the label (aggregate): where would a stricter cut help?
+for (const split of ['tune', 'holdout'] as const) {
+  const parts = (['high', 'medium'] as const).map((c) => {
+    const rs = results.filter((r) => r.m.split === split && r.got.finding?.confidence === c && !['unclassified', 'not_flagged'].includes(r.got.label));
+    const right = rs.filter((r) => r.score > 0).length;
+    return `${c} ${right}/${rs.length}`;
+  });
+  console.log(`${pad(split, 8)} right when labelled, by confidence: ${parts.join(' · ')}`);
+}
 
 // Holdout per-label totals (labels with 3+ holdout moments only — no per-moment detail).
 {
@@ -155,10 +186,13 @@ splitSummary('holdout');
   const byLabel = new Map<string, Scored[]>();
   for (const r of hold) byLabel.set(r.m.primary_label, [...(byLabel.get(r.m.primary_label) ?? []), r]);
   const rows = [...byLabel.entries()].filter(([, rs]) => rs.length >= 3).sort((a, b) => b[1].length - a[1].length);
-  console.log(`\nholdout by label (3+ moments)\n${pad('label', 28)} ${pad('n', 4)}${pad('exact', 7)}${pad('half', 6)}score`);
+  console.log(`\nholdout by label (3+ moments, aggregates only)\n${pad('label', 22)}${pad('n', 4)}${pad('exact', 7)}${pad('half', 6)}${pad('wrong', 7)}${pad('unclass', 9)}${pad('unflagged', 11)}${pad('precision', 11)}score`);
   for (const [l, rs] of rows) {
     const pts = rs.reduce((a, r) => a + r.score, 0);
-    console.log(`${pad(l, 28)} ${pad(String(rs.length), 4)}${pad(String(rs.filter((r) => r.score === 1).length), 7)}${pad(String(rs.filter((r) => r.score === 0.5).length), 6)}${pts.toFixed(1)}/${rs.length} = ${pct(pts, rs.length)}`);
+    const c = counts(rs);
+    console.log(
+      `${pad(l, 22)}${pad(String(rs.length), 4)}${pad(String(c.exact), 7)}${pad(String(c.half), 6)}${pad(String(c.wrong), 7)}${pad(String(c.unclassified), 9)}${pad(String(c.unflagged), 11)}${pad(c.labelled ? `${c.exact + c.half}/${c.labelled}` : '—', 11)}${pts.toFixed(1)}/${rs.length}`,
+    );
   }
   const bad = hold.filter((r) => r.problem).length;
   if (bad) console.log(`!! ${bad} holdout moment(s) don't match their game at the given ply (check the truth file)`);
@@ -193,6 +227,7 @@ for (const split of holdoutDetails ? (['tune', 'holdout'] as const) : (['tune'] 
     const cat = r.got.finding ? ` [${r.got.finding.category}${r.got.moment ? ', moment' : ''}]` : '';
     console.log(`  ${mark} ${pad(r.m.id, 34)} want ${pad(r.m.primary_label, 26)} got ${r.got.label}${cat}${r.problem ? `  !! ${r.problem}` : ''}`);
     if (verbose) {
+      if (r.got.finding) console.log(`      conf:   ${r.got.finding.confidence}, severity ${r.got.finding.severity}${r.got.finding.facts.pattern ? `, pattern ${r.got.finding.facts.pattern}` : ''}`);
       if (r.got.finding) console.log(`      app:    ${r.got.finding.evidence}`);
       if (r.got.lesson) console.log(`      lesson: ${r.got.lesson}`);
       console.log(`      truth:  ${r.m.mechanism}`);
