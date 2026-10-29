@@ -63,7 +63,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   trapped_piece: { refutation: 'let a piece get trapped', better: 'missed a chance to trap a piece' },
   opened_line: { refutation: 'opened a line toward your king', better: 'missed a chance to open their king' },
   back_rank: { refutation: 'walked into a back-rank attack', better: 'missed a back-rank attack' },
-  removed_defender: { refutation: 'took the guard away from one of your pieces', better: 'missed a chance to remove a defender' },
+  removed_defender: { refutation: 'removed a defender', better: 'missed a chance to remove a defender' },
   unblocked_queen: { refutation: 'opened the line to your queen', better: 'missed a line opening onto their queen' },
   pawn_fork: { refutation: 'walked into a pawn fork', better: 'missed a pawn fork' },
   bigger_capture: { refutation: 'took the smaller prize', better: 'took the smaller prize' },
@@ -77,7 +77,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
 export const PATTERN_RULE_MISSED: Partial<Record<PatternTag, string>> = {
   pawn_fork: 'Look at every pawn push you have: one that attacks two pieces at once wins one of them.',
-  hanging_piece: 'After every move, trace your queen’s, rooks’ and bishops’ lines to the end: a piece sitting undefended at the far end is free.',
+  hanging_piece: 'After every move, trace your queen’s, rooks’ and bishops’ lines to the end: what sits at the far end may be free.',
   knight_fork: 'Look at every square your knights can jump to: one that hits two valuable pieces (or king and piece) wins material.',
   fork: 'Look at every check and attack you have: one move that hits two things — often a check plus a loose piece — wins one of them.',
   pin: 'When an enemy piece stands in front of their king or queen, pin it — then pile up on it.',
@@ -344,7 +344,10 @@ function stuckDeep(fenBefore: string, fs: Frame[], mover: Color): PatternHit | u
     const net = materialBalance(fs[fs.length - 1].after, mover) - materialBalance(fenBefore, mover);
     if (lost < 0 || net > -2) continue;
     const squares = safe.length === 0 ? 'no safe squares' : safe.length === 1 ? 'one safe square' : `only ${safe.length} safe squares`;
-    const how = safe.length === 0 ? "it couldn't get out" : `the best line still wins it (${fs.slice(2, lost + 1).map((f) => f.move.san).join(' ')})`;
+    // "even the best escape, ...Qg6, loses to Rxg6": the piece's own move in the line, then the capture.
+    const escape = fs.slice(2, lost).find((f) => f.move.color === mover);
+    const dots = mover === 'b' ? '...' : '';
+    const how = safe.length === 0 || !escape ? "it couldn't get out" : `even the best escape, ${dots}${escape.move.san}, loses to ${fs[lost].move.san}`;
     return { tag: 'stuck_deep', side: 'refutation', at: 1, square: t.square, evidence: `your ${PIECE_NAME[t.type]} on ${t.square} was deep in their camp with ${squares}; after ${hit.move.san}, ${how}` };
   }
 }
@@ -364,7 +367,7 @@ function greedyQueen(fenBefore: string, fs: Frame[], mover: Color): PatternHit |
     tag: 'greedy_queen',
     side: 'refutation',
     at: 1,
-    evidence: `${played.san} took the ${sq(played.captured as PieceType, played.to)} far from your king, and ${check.move.san} started on it`,
+    evidence: `${played.san} took the ${sq(played.captured as PieceType, played.to)} far from your king, and ${check.move.san} began an attack on your king`,
   };
 }
 

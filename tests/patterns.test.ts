@@ -83,12 +83,12 @@ describe('pattern tags on real mistakes', () => {
   it('a queen capture far from your king, answered by checks, is a queen raid (succi1203 27...Qxb2)', () => {
     const hit = detectPattern('2r2rk1/pp4p1/1q2p1Qp/3p1p2/4n3/P6P/1P3PP1/1B2RR1K b - - 1 27', 'b6b2', ['g6e6', 'g8h8', 'e6d5'], [], []);
     expect(hit).toMatchObject({ tag: 'greedy_queen', side: 'refutation' });
-    expect(hit!.evidence).toBe('Qxb2 took the pawn on b2 far from your king, and Qxe6+ started on it');
+    expect(hit!.evidence).toBe('Qxb2 took the pawn on b2 far from your king, and Qxe6+ began an attack on your king');
   });
   it('a queen left deep with few squares, attacked and won, is stuck deep (RA_Recto 18...Bxe2 Rhg1)', () => {
     const hit = detectPattern('r4rk1/p4pp1/1p1bp2p/3p3b/N2Q1P2/P6P/1PP1P1q1/1K1R3R b - - 1 18', 'h5e2', ['h1g1', 'g2g6', 'g1g6', 'f7g6'], [], []);
     expect(hit).toMatchObject({ tag: 'stuck_deep', side: 'refutation' });
-    expect(hit!.evidence).toBe('your queen on g2 was deep in their camp with only 3 safe squares; after Rhg1, the best line still wins it (Qg6 Rxg6)');
+    expect(hit!.evidence).toBe('your queen on g2 was deep in their camp with only 3 safe squares; after Rhg1, even the best escape, ...Qg6, loses to Rxg6');
   });
   it('a check answered by a block that attacks the checker is a check blocked with tempo (EnvoyMJK 12...Qh4+ Bg3)', () => {
     const hit = detectPattern('r2k1b1r/ppNnqppp/8/4P3/2Q2Bb1/5P2/PPP4P/R3KB1R b KQ - 0 12', 'e7h4', ['f4g3', 'h4g5', 'f3g4'], [], []);

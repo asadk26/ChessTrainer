@@ -42,7 +42,9 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
     let hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
     if (hit?.tag === 'hanging_piece' && hit.side === 'better') hit = unfinishedTrade(game.plies, i, a.positions[i]?.lines[0]?.pv[0]) ?? hit;
-    if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}) };
+    // The reply moves before the one the tactic is about, so the reveal starts from the first reply.
+    const lead = hit && hit.side === 'refutation' && hit.at > 1 ? playLine(p.fenAfter, a.positions[i + 1]?.lines[0]?.pv ?? [], hit.at - 1).map((f) => f.san) : [];
+    if (hit) out[p.ply] = { tag: hit.tag, side: hit.side, evidence: hit.evidence, ...(hit.hanging ? { hanging: hit.hanging } : {}), ...(lead.length ? { lead } : {}) };
   });
   return out;
 }
@@ -88,8 +90,8 @@ export function annotatePatterns(findings: Finding[], patterns: NonNullable<Stor
     // a tactic in the better line only explains a missed win.
     if (hit.side === 'refutation' ? MISSED.includes(f.category) : !MISSED.includes(f.category)) continue;
     const p = plies[f.ply - 1];
-    f.facts = { ...f.facts, pattern: hit.tag, patternSide: hit.side, patternEvidence: hit.evidence };
-    f.evidence = `${moveLabel(p)} ${PATTERN_PHRASE[hit.tag][hit.side]}: ${hit.evidence}.`;
+    f.facts = { ...f.facts, pattern: hit.tag, patternSide: hit.side, patternEvidence: hit.evidence, ...(hit.lead ? { patternLead: hit.lead } : {}) };
+    f.evidence = `${moveLabel(p)} ${PATTERN_PHRASE[hit.tag][hit.side]}: ${hit.lead ? `after ${hit.lead.join(' ')}, ` : ''}${hit.evidence}.`;
   }
 }
 

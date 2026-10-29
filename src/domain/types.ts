@@ -426,7 +426,8 @@ export interface StoredGame {
    * Tactical pattern behind each of your mistakes/blunders (by ply), from the board and Stockfish's
    * lines — saved so patterns can be counted across games.
    */
-  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string; hanging?: 'moved' | 'left' | 'already' }>;
+  /** `lead`: the opponent's moves from their first reply up to the move the tactic is about (SAN). */
+  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string; hanging?: 'moved' | 'left' | 'already'; lead?: string[] }>;
   /** Set on games played against the Adaptive Coach: they record training, not real-game weaknesses. */
   adaptive?: { sessionId: string; skill: AdaptiveSkill };
   /** "This seems wrong" notes the player left on the coaching. */

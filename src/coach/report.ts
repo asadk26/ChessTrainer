@@ -35,7 +35,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 20;
+export const REPORT_VERSION = 21;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -142,6 +142,32 @@ function conversionClause(f: Finding, plies: PlyRecord[], opp: string): string {
   }
 }
 
+/**
+ * Moves that walked into the same tactic share one sentence: "19...Rfd8 and 20...Rdb8 both walked
+ * into a back-rank attack: Rxd8+ hits…; Qxb8+ hits…". Others keep their own.
+ */
+function mergeByPattern(eps: { label: string; finding: Finding }[], plies: PlyRecord[]): string {
+  const key = (e: { finding: Finding }) => (e.finding.facts.pattern && e.finding.facts.patternSide !== 'better' ? String(e.finding.facts.pattern) : undefined);
+  const out: string[] = [];
+  const done = new Set<number>();
+  eps.forEach((e, k) => {
+    if (done.has(k)) return;
+    const tag = key(e);
+    const same = tag ? eps.map((x, j) => ({ x, j })).filter(({ x }) => key(x) === tag) : [];
+    if (same.length < 2) return void out.push(onMove(e));
+    same.forEach(({ j }) => done.add(j));
+    const group = same.map(({ x }) => x).sort((a, b) => a.finding.ply - b.finding.ply);
+    const lead = (x: { finding: Finding }) => (Array.isArray(x.finding.facts.patternLead) ? ` (after ${(x.finding.facts.patternLead as string[]).join(' ')})` : '');
+    const ev = group.map((x) => String(x.finding.facts.patternEvidence ?? ''));
+    const head = `${joinList(group.map((x) => plyLabel(plies, x.finding.ply)))} ${group.length === 2 ? 'both' : 'each'} ${PATTERN_PHRASE[tag as PatternTag].refutation}`;
+    // Same words after the key move ("hits the king on its back rank…"): say them once.
+    const rest = ev.map((t) => t.slice(t.indexOf(' ') + 1));
+    if (rest.every((r) => r === rest[0])) out.push(`${head}: ${group.map((x, j) => `${ev[j].split(' ')[0]}${lead(x)}`).join(', then ')} — each ${rest[0]}.`);
+    else out.push(`${head}: ${group.map((x, j) => `${lead(x) ? `after ${(x.finding.facts.patternLead as string[]).join(' ')}, ` : ''}${ev[j]}`).join('; ')}.`);
+  });
+  return out.join(' ');
+}
+
 /** "On 13.Nh3, …" — unless the evidence already starts with the move. */
 const onMove = (e: { label: string; finding: Finding }) => (e.finding.evidence.startsWith(e.label.split(' ')[0]) ? e.finding.evidence : `On ${e.label}, ${lowerFirst(e.finding.evidence)}`);
 
@@ -170,10 +196,7 @@ function hurtText(group: ThemeGroup, plies: PlyRecord[], userColor: Color): stri
         const each = mates.map((e) => `move ${plies[e.finding.ply - 1].moveNumber} (${e.finding.facts.bestSan} instead of ${plies[e.finding.ply - 1].san})`);
         return [`You missed a checkmate ${mates.length === 2 ? 'twice' : `${mates.length} times`}: ${joinList(each)}. ${mates.every((e) => plies[e.finding.ply - 1].captured) ? 'Each time you took material instead — but mate ends the game, so checks come first.' : 'Checks come first: mate ends the game.'}`, ...rest].join(' ');
       }
-      return [...eps]
-        .sort((a, b) => b.finding.severity - a.finding.severity)
-        .map(onMove)
-        .join(' ');
+      return mergeByPattern([...eps].sort((a, b) => b.finding.severity - a.finding.severity), plies);
     }
     case 'king_safety': {
       const storms = eps.filter((e) => Array.isArray(e.finding.facts.storm) && (e.finding.facts.storm as string[]).length >= 2);

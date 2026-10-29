@@ -126,7 +126,8 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
   const opp = COLOR_NAME[other(mover)];
   const label = PATTERN_LABEL[tag].toLowerCase();
   if (f.facts.patternSide === 'better') {
-    const ask = `There's ${article(label)} for you here. Can you find it?`;
+    // A free capture you missed may be defended on paper: ask about a free piece, not a hanging one.
+    const ask = `There's ${article(tag === 'hanging_piece' ? 'free piece' : label)} for you here. Can you find it?`;
     return {
       ...t,
       question: ask,
@@ -144,7 +145,8 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
     predictCorrect: `Exactly — ${ev}.`,
     predictOther: `Look again: ${ev}.`,
     // When the line is forced mate, say so and show it: that's the whole point.
-    reveal: `${capitalise(ev)} — ${article(label)}.${Array.isArray(f.facts.mateLine) ? ` It's forced mate: ${(f.facts.mateLine as string[]).join(' ')}.` : ''}`,
+    // Start from the opponent's first reply: "Qh1+ Ke2, then Qxh2+ checks the king…".
+    reveal: `${Array.isArray(f.facts.patternLead) ? `${(f.facts.patternLead as string[]).join(' ')}, then ${ev}` : capitalise(ev)} — ${article(label)}.${Array.isArray(f.facts.mateLine) ? ` It's forced mate: ${(f.facts.mateLine as string[]).join(' ')}.` : ''}`,
     betterPrompt: `Find a move that doesn't allow that.`,
     betterCorrect: `Good — that takes the sting out of it.`,
     lesson: patternLesson(tag, 'refutation', forkedOnRim(played, ev)),
