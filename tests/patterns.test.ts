@@ -80,6 +80,16 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'skewer', side: 'refutation' });
     expect(hit!.evidence).toBe('Ra6+ checks the king, and the rook on e6 stands behind it on the same line');
   });
+  it('a queen capture far from your king, answered by checks, is a queen raid (succi1203 27...Qxb2)', () => {
+    const hit = detectPattern('2r2rk1/pp4p1/1q2p1Qp/3p1p2/4n3/P6P/1P3PP1/1B2RR1K b - - 1 27', 'b6b2', ['g6e6', 'g8h8', 'e6d5'], [], []);
+    expect(hit).toMatchObject({ tag: 'greedy_queen', side: 'refutation' });
+    expect(hit!.evidence).toBe('Qxb2 took the pawn on b2 far from your king, and Qxe6+ started on it');
+  });
+  it('a queen left deep with few squares, attacked and won, is stuck deep (RA_Recto 18...Bxe2 Rhg1)', () => {
+    const hit = detectPattern('r4rk1/p4pp1/1p1bp2p/3p3b/N2Q1P2/P6P/1PP1P1q1/1K1R3R b - - 1 18', 'h5e2', ['h1g1', 'g2g6', 'g1g6', 'f7g6'], [], []);
+    expect(hit).toMatchObject({ tag: 'stuck_deep', side: 'refutation' });
+    expect(hit!.evidence).toBe('your queen on g2 was deep in their camp with only 3 safe squares; after Rhg1, the best line still wins it (Qg6 Rxg6)');
+  });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
     const hit = detectPattern(f, 'e1e2', ['e8d7'], ['b5c7', 'e8d7', 'c7a8'], []);

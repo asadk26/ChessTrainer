@@ -30,6 +30,8 @@ function appLabel(f: Finding): string {
       pawn_fork: ['pawn_fork_allowed', 'pawn_fork_missed'],
       bigger_capture: ['missed_bigger_capture', 'missed_bigger_capture'],
       skewer: ['skewer_allowed', 'skewer_missed'],
+      greedy_queen: ['greedy_queen_raid', 'greedy_queen_raid_missed'],
+      stuck_deep: ['trapped_piece_risk', 'trap_missed'],
       discovered_attack: ['discovered_attack_allowed', 'discovered_attack_missed'],
       in_between_move: ['in_between_move', 'in_between_move_missed'],
       pin: ['pin_allowed', 'pin_exploit_missed'],
