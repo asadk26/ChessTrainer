@@ -1,6 +1,7 @@
 {
-  "version": 4,
+  "version": 5,
   "changelog": [
+    "v5 (2026-10-29): added 6 tune moments for the weak holdout labels: queen-check forks, a queen double attack, a pawn fork, and two threat_ignored (one via a discovered attack). Holdout unchanged.",
     "v4 (2026-10-29): added rushikeshdantakale (Oct 29) as a tune game: 5.Qb3 moment, near-clean game, and summary expectations (no mid-exchange material claims; 11.Bg5 is best at depth 20).",
     "v3 (2026-10-29): unsealed RA_Recto 22...g6, akash-264 34.Qe2, maladly 18...a5 (now tune); added 26 fresh holdout moments from the 30-day export; new labels piece_to_rim (secondary only), mate_threat, queen_check_fork (secondary only).",
     "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand."
@@ -1792,6 +1793,173 @@
       ],
       "confidence": "high",
       "split": "tune"
+    },
+    {
+      "id": "MorganGeorge-21-f4",
+      "game": "chunkmonkey420 vs MorganGeorge",
+      "my_color": "white",
+      "move_number": 21,
+      "played": "f4",
+      "ply": 41,
+      "fen_before": "2r1r1k1/pp1n1ppp/q1p1b3/4p3/PB2P3/1P1P2P1/2Q2PBP/1R3RK1 w - - 5 21",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_check_fork",
+        "opened_line_to_own_king"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 3,
+        "eval_after_cp_mover": -333,
+        "win_pct_drop": 27.6,
+        "best_move": "Rfc1",
+        "opponent_best_reply": "Qb6+"
+      },
+      "mechanism": "f4 opens the g1-a7 diagonal: Qb6+ checks the king and attacks the b4 bishop on the b-file, winning it.",
+      "expected_lesson": "Before a pawn move near your king, check which enemy checks it opens, and whether any check also hits a loose piece.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "MorganGeorge-31-Bd2",
+      "game": "chunkmonkey420 vs MorganGeorge",
+      "my_color": "white",
+      "move_number": 31,
+      "played": "Bd2",
+      "ply": 61,
+      "fen_before": "2r1r1k1/5ppp/8/8/1qp1P1n1/Rb1PB1P1/1Q4BP/5RK1 w - - 4 31",
+      "kind": "mistake",
+      "primary_label": "pawn_fork_allowed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": -37,
+        "eval_after_cp_mover": -367,
+        "win_pct_drop": 26,
+        "best_move": "dxc4",
+        "opponent_best_reply": "c3"
+      },
+      "mechanism": "Bd2 puts the bishop next to the queen on b2: c3 attacks both at once.",
+      "expected_lesson": "Before moving a piece, check whether an enemy pawn push could attack it and another piece at once.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "Jose-Dang-11-Nb5",
+      "game": "chunkmonkey420 vs Jose-Dang",
+      "my_color": "white",
+      "move_number": 11,
+      "played": "Nb5",
+      "ply": 21,
+      "fen_before": "r1b1k2r/ppq2ppp/3p1n2/4n3/4P3/BPN5/P1P2PPP/R2QK2R w KQkq - 2 11",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_check_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -100,
+        "eval_after_cp_mover": -483,
+        "win_pct_drop": 26.4,
+        "best_move": "Qd2",
+        "opponent_best_reply": "Qa5+"
+      },
+      "mechanism": "Nb5 leaves the knight loose: Qa5+ checks the king and attacks the b5 knight (and the a3 bishop).",
+      "expected_lesson": "Before moving, check every enemy check: does any check also hit a loose piece?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "Criss_Cross11-11-Nxc6",
+      "game": "chunkmonkey420 vs Criss_Cross11",
+      "my_color": "white",
+      "move_number": 11,
+      "played": "Nxc6",
+      "ply": 21,
+      "fen_before": "r2qk1nr/p4ppp/2p1p3/2b1Pb2/1N6/8/PPPB1PPP/R2QK1NR w KQkq - 0 11",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_double_attack"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 49,
+        "eval_after_cp_mover": -271,
+        "win_pct_drop": 27.6,
+        "best_move": "Na6",
+        "opponent_best_reply": "Qd5"
+      },
+      "mechanism": "After Nxc6, Qd5 attacks the c6 knight and the g2 pawn (with the h1 rook behind it) at the same time; White cannot cover both.",
+      "expected_lesson": "A queen move that attacks two things at once usually wins one: check queen moves to central squares.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "BlunderKing0720-15-Qd1",
+      "game": "chunkmonkey420 vs BlunderKing0720",
+      "my_color": "white",
+      "move_number": 15,
+      "played": "Qd1",
+      "ply": 29,
+      "fen_before": "3rk2r/pp3ppp/2p5/4p3/QR6/2bq1PPP/P2N1PB1/2B1K2R w Kk - 1 15",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "removed_defender"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 300,
+        "eval_after_cp_mover": -264,
+        "win_pct_drop": 47.7,
+        "best_move": "Re4",
+        "opponent_best_reply": "Bxb4"
+      },
+      "mechanism": "The b4 rook was already attacked by the c3 bishop (a cheaper piece), so it had to move. Qd1 ignores that, and also takes the queen off its defense: Bxb4.",
+      "expected_lesson": "Before making your own move, ask what is already attacked, especially by a cheaper piece.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "NK439-17-dxe5",
+      "game": "chunkmonkey420 vs NK439",
+      "my_color": "white",
+      "move_number": 17,
+      "played": "dxe5",
+      "ply": 33,
+      "fen_before": "r4rk1/pbqpppb1/1p4p1/2p1n2p/2PPQ1n1/1PB1PN2/P2N1PBP/R4RK1 w - - 6 17",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "discovered_attack_allowed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -238,
+        "eval_after_cp_mover": -540,
+        "win_pct_drop": 17.4,
+        "best_move": "Qf4",
+        "opponent_best_reply": "Bxe4"
+      },
+      "mechanism": "16...Nce5 moved the knight off the b7-e4 diagonal, uncovering the b7 bishop onto the e4 queen. dxe5 takes the knight but leaves the queen: Bxe4.",
+      "expected_lesson": "When the opponent moves a piece, look at what it uncovered behind it before grabbing material.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
     }
   ],
   "clean_games": [
@@ -2235,6 +2403,41 @@
           "\"up 2 pawns\" without mentioning the trapped a1 knight"
         ]
       }
+    },
+    {
+      "game": "chunkmonkey420 vs MorganGeorge",
+      "my_color": "white",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. c4 Nc6 2. g3 Nf6 3. Bg2 d5 4. cxd5 Nxd5 5. Qb3 e6 6. e4 Nb6 7. Nc3 Bc5 8. Nf3 O-O 9. O-O Nd4 10. Nxd4 Bxd4 11. Nb5 e5 12. Nxd4 Qxd4 13. d3 Be6 14. Qc2 c6 15. Be3 Qa4 16. b3 Qb5 17. Rab1 Rac8 18. a4 Qa6 19. Bd2 Nd7 20. Bb4 Rfe8 21. f4 c5 22. Bd2 exf4 23. Bxf4 Nf6 24. Qe2 b5 25. Ra1 Bxb3 26. axb5 Qxb5 27. Rxa7 Qb6 28. Ra3 c4+ 29. Be3 Qb4 30. Qb2 Ng4 31. Bd2 Qc5+ 32. d4 Qh5 33. Rf5 Qxh2+ 34. Kf1 Qxg3 35. Bf4 Qd3+ 36. Kg1 Qd1+ 37. Bf1 Qe1 38. Qe2 Qxe2 39. Bxe2 Nf6 40. e5 Ne4 41. Bf3 Nc3 42. Bb7 Rcd8 43. Be3 Rb8 44. Bc6 Re6 45. d5 Rg6+ 46. Kf2 Nd1+ 47. Ke2 Nxe3 48. Kxe3 Rg3+ 49. Kf4 Rd3 50. Ke4 Bd1 51. Ra1 Bg4 52. Rg5 Bf3+ 53. Kf4 c3 54. Bb5 Rxd5 55. Kxf3 Rdxb5 56. Rc1 Rc8 57. e6 fxe6 58. Rxb5 e5 59. Ke4 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Jose-Dang",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185407616254",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3 Bc5 5. Nxe5 Nxe5 6. d4 Nxc4 7. dxc5 d6 8. b3 Ne5 9. cxd6 cxd6 10. Ba3 Qc7 11. Nb5 Qa5+ 12. c3 Qxb5 13. Bxd6 Nd3+ 14. Kf1 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs Criss_Cross11",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185352469470",
+      "movetext": "1. e4 c6 2. d4 d5 3. e5 c5 4. dxc5 Nc6 5. Bb5 Qa5+ 6. Nc3 Bf5 7. Bd2 e6 8. Bxc6+ bxc6 9. Nxd5 Qd8 10. Nb4 Bxc5 11. Nxc6 Qc7 12. Qf3 Rc8 13. Na5 Qxe5+ 14. Ne2 Bxc2 15. O-O Qxb2 16. Bc3 Qb5 17. Bxg7 Qxa5 18. Bxh8 Rd8 19. Qc6+ Kf8 20. Rfc1 Bd3 21. Rxc5 Qb4 22. Bc3 Qb1+ 23. Rxb1 Bxb1 24. Bd4 Bd3 25. Qc7 Ke8 26. Rg5 Ne7 27. Bf6 Bxe2 28. Qxe7# 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs BlunderKing0720",
+      "my_color": "white",
+      "result": "0-1",
+      "link": null,
+      "movetext": "1. c4 e5 2. g3 Nf6 3. Bg2 d5 4. cxd5 Nxd5 5. Nf3 Nc6 6. d3 Bg4 7. h3 Bxf3 8. exf3 Bb4+ 9. Nd2 Nc3 10. bxc3 Bxc3 11. Rb1 Qxd3 12. Qb3 Nb4 13. Qa4+ c6 14. Rxb4 Rd8 15. Qd1 Bxb4 16. f4 O-O 17. Bf3 Rfe8 18. Be2 exf4 19. O-O Qxe2 20. Qxe2 Rxe2 21. Nf3 Rde8 22. Bxf4 Rxa2 23. Rb1 Bc5 24. Be3 Bxe3 25. fxe3 Rxe3 26. Rxb7 g6 27. Nh2 Ree2 28. Rb8+ Kg7 29. Rb1 Rxh2 30. h4 Rag2+ 31. Kf1 Rxg3 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs NK439",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185775356662",
+      "movetext": "1. c4 b6 2. g3 Bb7 3. Nf3 g6 4. Bg2 Bg7 5. O-O Nc6 6. d4 Na5 7. b3 c5 8. Bb2 Nh6 9. e3 Nf5 10. Nbd2 Nc6 11. g4 Nh6 12. Bc3 Nxg4 13. Ng5 h5 14. Qf3 O-O 15. Qe4 Qc7 16. Ngf3 Nce5 17. dxe5 Bxe4 0-1"
     },
     {
       "game": "chunkmonkey420 vs RajinderSinghAP",
