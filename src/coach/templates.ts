@@ -137,7 +137,7 @@ function withTactic(t: MomentText, input: MomentTextInput): MomentText {
       lesson: PATTERN_RULE_MISSED[tag] ?? PATTERN_RULE[tag],
     };
   }
-  const hint = tag === 'knight_fork' || tag === 'fork' || tag === 'pawn_fork' || tag === 'discovered_attack' ? ' Look for a move that makes two threats at once.' : tag === 'back_rank' ? ' Look at the checks.' : '';
+  const hint = tag === 'knight_fork' || tag === 'fork' || tag === 'pawn_fork' || tag === 'discovered_attack' ? ' Look for a move that makes two threats at once.' : tag === 'back_rank' || tag === 'skewer' ? ' Look at the checks.' : '';
   return {
     ...t,
     question: `After ${played.san}, what can ${opp} do?${hint} Play ${opp}'s strongest reply.`,

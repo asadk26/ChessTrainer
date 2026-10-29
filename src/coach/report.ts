@@ -35,7 +35,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 19;
+export const REPORT_VERSION = 20;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -508,7 +508,8 @@ export function buildReport(input: ReportInput): GameReport {
   const specific = (f: Finding) => (!!f.facts.pattern && f.facts.patternSide !== 'better') || f.category === 'defended_grab' || !!f.facts.mate || f.facts.hanging === 'moved' || f.facts.hanging === 'left';
   const decisiveLesson = rc && specific(rc.decisive) ? lessonFor(rc.decisive, findings) : undefined;
   const focusTheme = decisiveLesson?.theme ?? chosen ?? 'opponent_threats';
-  const focusMeta = decisiveLesson ?? focusFor(focusTheme, findings.filter(leadsSummary));
+  // The default advice stays default: no tactic from a weak finding dressed up as this game's lesson.
+  const focusMeta = decisiveLesson ?? focusFor(focusTheme, chosen ? findings.filter(leadsSummary) : []);
 
   let headline: string;
   const openingStrengths = findings.filter((f) => f.kind === 'strength' && ['center_control', 'developed_pieces', 'castled_early'].includes(f.category));

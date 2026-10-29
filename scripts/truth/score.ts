@@ -9,6 +9,7 @@ import type { Finding, StoredGame } from '../../src/domain/types.ts';
 import { coachFromPositions } from '../../src/analysis/pipeline.ts';
 import { primaryFinding } from '../../src/analysis/moments.ts';
 import { isStateFinding } from '../../src/coach/report.ts';
+import { THEMES } from '../../src/domain/categories.ts';
 import { cachedPositions, loadTruth, storedGame, type TruthGame, type TruthMoment } from './data.ts';
 
 const verbose = process.argv.includes('--verbose');
@@ -32,6 +33,7 @@ function appLabel(f: Finding): string {
       skewer: ['skewer_allowed', 'skewer_missed'],
       greedy_queen: ['greedy_queen_raid', 'greedy_queen_raid_missed'],
       stuck_deep: ['trapped_piece_risk', 'trap_missed'],
+      blocked_with_tempo: ['check_blocked_with_tempo', 'block_with_tempo_missed'],
       discovered_attack: ['discovered_attack_allowed', 'discovered_attack_missed'],
       in_between_move: ['in_between_move', 'in_between_move_missed'],
       pin: ['pin_allowed', 'pin_exploit_missed'],
@@ -189,7 +191,7 @@ for (const c of truth.clean_games) {
   if (g.report?.focus.theme === 'loose_pieces') taught.add('hanging_piece');
   const bad: string[] = c.must_not_lesson.filter((l) => taught.has(l));
   // A clean game has nothing to fix: its focus must be the default advice, not a mistake's lesson.
-  if (g.report && !g.report.focus.generic) bad.push('a mistake lesson as the focus');
+  if (g.report && (!g.report.focus.generic || g.report.focus.title !== THEMES.opponent_threats.focusTitle)) bad.push('a mistake lesson as the focus');
   cleanFails += bad.length ? 1 : 0;
   console.log(`  ${bad.length ? '‼' : '✓'} ${pad(c.game, 38)} ${bad.length ? `teaches ${bad.join(', ')}` : 'ok'}   (focus: ${g.report?.focus.title})`);
 }

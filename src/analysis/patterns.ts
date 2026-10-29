@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -26,6 +26,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   skewer: 'Skewer',
   greedy_queen: 'Queen raid',
   stuck_deep: 'Piece stuck deep',
+  blocked_with_tempo: 'Check blocked with tempo',
 };
 
 /** One reusable rule per pattern. */
@@ -46,6 +47,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   skewer: 'Keep your king off the line your queen or rook stands on: a check along it wins the piece behind the king.',
   greedy_queen: 'Before grabbing material with your queen, look at your king without it: which checks does your opponent get?',
   stuck_deep: 'When your queen or a piece is deep in their camp, count its escape squares every move — bring it back before they close.',
+  blocked_with_tempo: 'Before giving a check, look at how it can be blocked: a block that also attacks your checking piece wins time.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -65,7 +67,8 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   bigger_capture: { refutation: 'took the smaller prize', better: 'took the smaller prize' },
   skewer: { refutation: 'walked into a skewer', better: 'missed a skewer' },
   greedy_queen: { refutation: 'sent your queen away to grab material', better: 'missed a queen raid' },
-  stuck_deep: { refutation: 'left a piece deep in their camp with no way back', better: 'missed a chance to trap a piece' },
+  stuck_deep: { refutation: 'left a piece deep in their camp', better: 'missed a chance to trap a piece' },
+  blocked_with_tempo: { refutation: 'gave a check that was blocked with tempo', better: 'missed a block with tempo' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -281,6 +284,32 @@ function openedLine(fs: Frame[]): PatternHit | undefined {
   }
 }
 
+/** Squares strictly between two squares on one line (empty if they don't share one). */
+function between(a: string, b: string): string[] {
+  const fd = b.charCodeAt(0) - a.charCodeAt(0);
+  const rd = Number(b[1]) - Number(a[1]);
+  if (fd !== 0 && rd !== 0 && Math.abs(fd) !== Math.abs(rd)) return [];
+  const out: string[] = [];
+  for (let f = a.charCodeAt(0) + Math.sign(fd), r = Number(a[1]) + Math.sign(rd); `${String.fromCharCode(f)}${r}` !== b; f += Math.sign(fd), r += Math.sign(rd)) out.push(`${String.fromCharCode(f)}${r}`);
+  return out;
+}
+
+/** Your check, answered by a block that also attacks the checking piece. */
+function blockedWithTempo(fs: Frame[], mover: Color): PatternHit | undefined {
+  const check = fs[0]?.move;
+  const block = fs[1]?.move;
+  if (!check || !block || check.color !== mover || !/\+/.test(check.san) || !['b', 'r', 'q'].includes(check.piece)) return;
+  const k = kingSquare(fs[0].after, other(mover));
+  if (block.piece === 'k' || !between(check.to, k).includes(block.to)) return;
+  if (!attackersOf(fs[1].after, check.to, other(mover)).includes(block.to as never)) return;
+  return {
+    tag: 'blocked_with_tempo',
+    side: 'refutation',
+    at: 1,
+    evidence: `${block.san} blocks the check and attacks your ${PIECE_NAME[check.piece as PieceType]} on ${check.to}, so it has to move again`,
+  };
+}
+
 const relativeRank = (square: string, color: Color) => (color === 'w' ? Number(square[1]) : 9 - Number(square[1]));
 const distance = (a: string, b: string) => Math.max(Math.abs(a.charCodeAt(0) - b.charCodeAt(0)), Math.abs(Number(a[1]) - Number(b[1])));
 
@@ -434,6 +463,8 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
   const refutation = frames(fenBefore, [playedUci, ...replyPv]);
   const better = frames(fenBefore, bestPv);
   const opp = other(mover);
+  const block = blockedWithTempo(refutation, mover);
+  if (block) return block;
   for (const d of DETECTORS) {
     // The punishment must be the opponent's move; the missed idea must be yours.
     const r = refutation.length > 1 ? d(refutation.slice(1)) : undefined;
@@ -515,6 +546,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
   back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  blocked_with_tempo: { title: 'Before giving a check, look at how it can be blocked.', detail: 'A check is only good if the answer helps you. When the opponent can block it with a piece that also attacks your checking piece, your piece has to move again and they gain a tempo — often with more threats. Check the blocks before you check.' },
   greedy_queen: { title: 'Before grabbing material with your queen, check your king.', detail: 'A pawn far from your king costs your queen several moves — and while it is away, your king has one defender fewer. Before a queen capture, ask what checks and threats your opponent gets with your queen out of play.' },
   stuck_deep: { title: 'Count your raiding piece’s escape squares every move.', detail: 'A queen or piece deep in the opponent’s camp can be cut off: one rook or pawn move takes away its last squares. Every move it stays there, count its ways back — and bring it home while you still can.' },
   skewer: { title: 'Keep your king off the lines your other pieces stand on.', detail: 'A skewer is a check along a line with another of your pieces behind the king: the king has to step away, and the piece behind it is lost. Before every move — especially in the endgame — look at the ranks, files and diagonals your king shares with your queen and rooks, and at which enemy piece could check along them.' },

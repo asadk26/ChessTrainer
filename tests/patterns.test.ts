@@ -90,6 +90,11 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'stuck_deep', side: 'refutation' });
     expect(hit!.evidence).toBe('your queen on g2 was deep in their camp with only 3 safe squares; after Rhg1, the best line still wins it (Qg6 Rxg6)');
   });
+  it('a check answered by a block that attacks the checker is a check blocked with tempo (EnvoyMJK 12...Qh4+ Bg3)', () => {
+    const hit = detectPattern('r2k1b1r/ppNnqppp/8/4P3/2Q2Bb1/5P2/PPP4P/R3KB1R b KQ - 0 12', 'e7h4', ['f4g3', 'h4g5', 'f3g4'], [], []);
+    expect(hit).toMatchObject({ tag: 'blocked_with_tempo', side: 'refutation' });
+    expect(hit!.evidence).toBe('Bg3 blocks the check and attacks your queen on h4, so it has to move again');
+  });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
     const hit = detectPattern(f, 'e1e2', ['e8d7'], ['b5c7', 'e8d7', 'c7a8'], []);
