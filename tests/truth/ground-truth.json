@@ -1,6 +1,7 @@
 {
-  "version": 3,
+  "version": 4,
   "changelog": [
+    "v4 (2026-10-29): added rushikeshdantakale (Oct 29) as a tune game: 5.Qb3 moment, near-clean game, and summary expectations (no mid-exchange material claims; 11.Bg5 is best at depth 20).",
     "v3 (2026-10-29): unsealed RA_Recto 22...g6, akash-264 34.Qe2, maladly 18...a5 (now tune); added 26 fresh holdout moments from the 30-day export; new labels piece_to_rim (secondary only), mate_threat, queen_check_fork (secondary only).",
     "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand."
   ],
@@ -1761,6 +1762,36 @@
       ],
       "confidence": "medium",
       "split": "holdout"
+    },
+    {
+      "id": "rushikeshdantakale-5-Qb3",
+      "game": "chunkmonkey420 vs rushikeshdantakale",
+      "my_color": "white",
+      "move_number": 5,
+      "played": "Qb3",
+      "ply": 9,
+      "fen_before": "rn1qkbnr/ppp3pp/3pb3/4pp2/2P5/2N3P1/PP1PPPBP/R1BQK1NR w KQkq - 2 5",
+      "kind": "missed_opportunity",
+      "primary_label": "free_capture_missed",
+      "secondary_labels": [
+        "missed_bigger_capture",
+        "removed_defender"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 367,
+        "eval_after_cp_mover": 122,
+        "win_pct_drop": 18.4,
+        "best_move": "Bxb7",
+        "opponent_best_reply": "Nd7"
+      },
+      "mechanism": "4...Be6 took the c8 bishop off b7's defense. 5.Bxb7 takes the pawn with the g2 bishop and the a8 rook has no safe square (Nd7 Bxa8). 5.Qb3 hits the same pawn but gives Black a move to defend it (Nd7/Rb8). Only an inaccuracy: Black blundered next move (5...Nc6?, 6.Qxb7).",
+      "expected_lesson": "When the opponent moves a defender away, check what it was guarding: take it now, before they cover it.",
+      "must_not_label": [
+        "hanging_piece",
+        "development"
+      ],
+      "confidence": "high",
+      "split": "tune"
     }
   ],
   "clean_games": [
@@ -1796,6 +1827,16 @@
       "note": "Clean win: refuted the unsound 4...Nxf2 sacrifice, artificial castling Kg1.",
       "must_not_lesson": [
         "hanging_piece"
+      ]
+    },
+    {
+      "game": "chunkmonkey420 vs rushikeshdantakale",
+      "my_color": "white",
+      "note": "Near-clean win (accuracy ~92). Only real slip 5.Qb3 (5.Bxb7 was stronger). 11.Bg5 was Stockfish's TOP move at depth 20 (+4.9; Bg2 only +4.5), so no lesson may criticize it; 10.Bc6+ (forcing ...Kd8, losing castling) was best at move 10 but d3 is within 0.3. Key positives: 6.Qxb7 winning the a8 rook, and leaving the black knight trapped on a1 instead of rushing.",
+      "must_not_lesson": [
+        "hanging_piece",
+        "development",
+        "moved_piece_twice"
       ]
     },
     {
@@ -2175,6 +2216,25 @@
       "result": "1-0",
       "link": "https://www.chess.com/game/live/185403438142",
       "movetext": "1. e4 e5 2. f4 exf4 3. Nf3 d6 4. d4 Bg4 5. Bc4 Nc6 6. Bxf4 Nf6 7. Nc3 Be7 8. e5 dxe5 9. dxe5 Qxd1+ 10. Rxd1 Nh5 11. Nd5 O-O-O 12. Nxe7+ Nxe7 13. Rxd8+ Rxd8 14. Be3 Nf5 15. Ke2 Nh4 16. Bxf7 Nxf3 17. gxf3 Bxf3+ 18. Kxf3 Rf8 19. Kg4 Rxf7 20. Kxh5 g6+ 21. Kh6 Rf3 22. Bxa7 Rh3+ 23. Kg7 b6 24. Re1 Rh5 25. e6 Kd8 26. Bb8 Rxh2 27. e7+ Ke8 28. Bxc7 Rxc2 29. Bxb6 Rxb2 30. Bd8 h5 31. Rf1 Re2 32. a4 g5 33. a5 g4 34. a6 Re5 35. a7 Rg5+ 36. Kh6 Ra5 37. Rf8+ Kd7 38. e8=Q+ Kd6 39. Rf6+ Kd5 40. Rf5+ 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs rushikeshdantakale",
+      "my_color": "white",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. c4 d6 2. g3 e5 3. Bg2 f5 4. Nc3 Be6 5. Qb3 Nc6 6. Qxb7 Nd4 7. Qxa8 Qxa8 8. Bxa8 Nc2+ 9. Kd1 Nxa1 10. d3 Ne7 11. Bg5 Bd7 12. Nf3 h6 13. Be3 g5 14. Bxa7 c6 15. Kd2 e4 16. Nd4 Bg7 17. e3 c5 18. Ndb5 1-0",
+      "expected_summary": {
+        "story": [
+          "Black loosened b7 (4...Be6) and blundered the a8 rook (5...Nc6?, 6.Qxb7)",
+          "8...Nc2+ forked the a1 rook but the knight was then trapped on a1",
+          "White up a pawn plus the trapped knight when Black abandoned"
+        ],
+        "must_not_flag": [
+          "11.Bg5 (engine top move at depth 20)",
+          "material claims counted in the middle of an exchange (e.g. \"up a rook and a pawn by move 6\"): material should be judged after captures settle",
+          "\"up 2 pawns\" without mentioning the trapped a1 knight"
+        ]
+      }
     },
     {
       "game": "chunkmonkey420 vs RajinderSinghAP",
