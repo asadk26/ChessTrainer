@@ -1,8 +1,8 @@
 {
-  "version": 2,
+  "version": 3,
   "changelog": [
-    "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand.",
-    "v2 (2026-10-29): unsealed RA_Recto 22...g6, akash 34.Qe2 and maladly 18...a5 (holdout -> tune) for debugging, at the owner's request; fresh holdout replacements come in v3."
+    "v3 (2026-10-29): unsealed RA_Recto 22...g6, akash-264 34.Qe2, maladly 18...a5 (now tune); added 26 fresh holdout moments from the 30-day export; new labels piece_to_rim (secondary only), mate_threat, queen_check_fork (secondary only).",
+    "v2 (2026-10-28): sir-Deniy 17...Qb6+ relabeled removed_defender -> threat_ignored (the queen never defended e1; the rook was already attacked). Found by Claude Code, verified by hand."
   ],
   "created": "2026-10-28",
   "player": "chunkmonkey420",
@@ -1067,6 +1067,700 @@
       ],
       "confidence": "medium",
       "split": "holdout"
+    },
+    {
+      "id": "suvasishpodder-8b-Qh4",
+      "game": "suvasishpodder vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 8,
+      "played": "Qh4",
+      "ply": 16,
+      "fen_before": "r1bqkb1r/1pp2ppp/p7/n2np3/P7/2PP3P/BP3PP1/RNBQK1NR b KQkq - 2 8",
+      "kind": "mistake",
+      "primary_label": "removed_defender",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": -54,
+        "eval_after_cp_mover": -518,
+        "win_pct_drop": 32.1,
+        "best_move": "Nf6",
+        "opponent_best_reply": "Bxd5"
+      },
+      "mechanism": "The queen on d8 was the only defender of the d5 knight, which the a2 bishop attacked. After Qh4, Bxd5.",
+      "expected_lesson": "Ask what the moving piece was defending.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Rostatinoi-25-c5",
+      "game": "chunkmonkey420 vs Rostatinoi",
+      "my_color": "white",
+      "move_number": 25,
+      "played": "c5",
+      "ply": 49,
+      "fen_before": "1r6/2p4p/3bk3/1P1Npnp1/2P5/1p1N3P/3R1PP1/6K1 w - - 0 25",
+      "kind": "mistake",
+      "primary_label": "removed_defender",
+      "secondary_labels": [
+        "pawn_defender"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -9,
+        "eval_after_cp_mover": -507,
+        "win_pct_drop": 35.8,
+        "best_move": "Rd1",
+        "opponent_best_reply": "Kxd5"
+      },
+      "mechanism": "The c4 pawn was the only defender of the d5 knight, which the black king on e6 attacked. After c5, Kxd5.",
+      "expected_lesson": "Pawns are defenders too: ask what a pawn was guarding before pushing it.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "AlexDasNeves-14-Bf4",
+      "game": "chunkmonkey420 vs AlexDasNeves",
+      "my_color": "white",
+      "move_number": 14,
+      "played": "Bf4",
+      "ply": 27,
+      "fen_before": "r4rk1/p1qn1ppp/2p1pn2/1p2Nb2/1b1P4/1BN4P/P1PB1PP1/R2QR1K1 w - - 2 14",
+      "kind": "mistake",
+      "primary_label": "removed_defender",
+      "secondary_labels": [
+        "fork_allowed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 21,
+        "eval_after_cp_mover": -534,
+        "win_pct_drop": 39.7,
+        "best_move": "Nxb5",
+        "opponent_best_reply": "Bxc3"
+      },
+      "mechanism": "The d2 bishop was the only defender of the c3 knight (attacked by Bb4). After Bf4, Bxc3 wins the knight and forks the rooks on a1 and e1.",
+      "expected_lesson": "Ask what the moving piece was defending.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "lucasrocfer-11-Bf4",
+      "game": "chunkmonkey420 vs lucasrocfer",
+      "my_color": "white",
+      "move_number": 11,
+      "played": "Bf4",
+      "ply": 21,
+      "fen_before": "r2qk2r/pp2npp1/3p1b1p/2n5/8/5N2/PPP2PPP/RNBQR1K1 w kq - 0 11",
+      "kind": "mistake",
+      "primary_label": "removed_defender",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 16,
+        "eval_after_cp_mover": -391,
+        "win_pct_drop": 32.3,
+        "best_move": "c3",
+        "opponent_best_reply": "Bxb2"
+      },
+      "mechanism": "The c1 bishop was the only defender of b2 (attacked by the f6 bishop). After Bf4, Bxb2 and Bxa1 wins the exchange and a pawn.",
+      "expected_lesson": "Ask what the moving piece was defending.",
+      "must_not_label": [
+        "development"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "MoezFathallah-17b-h6",
+      "game": "MoezFathallah vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 17,
+      "played": "h6",
+      "ply": 34,
+      "fen_before": "r1b2rk1/pp3ppp/4p3/3pQ3/P7/1B6/2PqnPPP/3R1R1K b - - 3 17",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "hanging_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 458,
+        "eval_after_cp_mover": -563,
+        "win_pct_drop": 73.2,
+        "best_move": "Qf4",
+        "opponent_best_reply": "Rxd2"
+      },
+      "mechanism": "The black queen on d2 was attacked by the rook on d1 and nothing defended it. h6 ignores it: Rxd2.",
+      "expected_lesson": "Before making your own move, ask what the opponent's last move attacks.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "jnhbleachie-10b-Nb4",
+      "game": "jnhbleachie vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 10,
+      "played": "Nb4",
+      "ply": 20,
+      "fen_before": "r1bq1rk1/ppp2ppp/2n1p3/3p4/2PP1B2/b2QPN2/P1P1BPPP/R4RK1 b - - 0 10",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "hanging_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -53,
+        "eval_after_cp_mover": -530,
+        "win_pct_drop": 32.7,
+        "best_move": "Bd6",
+        "opponent_best_reply": "Qxa3"
+      },
+      "mechanism": "The bishop on a3 was attacked by the queen on d3 and undefended. Nb4 counterattacks but the queen simply takes: Qxa3.",
+      "expected_lesson": "Before making your own move, ask what the opponent's last move attacks.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Acefor3v3r-26-Ba4",
+      "game": "chunkmonkey420 vs Acefor3v3r",
+      "my_color": "white",
+      "move_number": 26,
+      "played": "Ba4",
+      "ply": 51,
+      "fen_before": "N1b4k/q5p1/p1n2r1p/5p2/4p2Q/1B6/2P2PPP/3RK2R w - - 2 26",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "hanging_piece",
+        "trapped_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 291,
+        "eval_after_cp_mover": 21,
+        "win_pct_drop": 22.6,
+        "best_move": "Qh5",
+        "opponent_best_reply": "Qxa8"
+      },
+      "mechanism": "The knight on a8 (after taking the rook) was attacked by the a7 queen and undefended. Ba4 leaves it: Qxa8.",
+      "expected_lesson": "Before making your own move, ask what the opponent's last move attacks.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "abcristal-11b-Qd7",
+      "game": "abcristal vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 11,
+      "played": "Qd7",
+      "ply": 22,
+      "fen_before": "r2qk2r/1pp2ppp/pbb1pn2/3pN3/1P1P1B2/P1N1P3/2P2PPP/R2QK2R b KQkq - 3 11",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": -71,
+        "eval_after_cp_mover": -648,
+        "win_pct_drop": 35.1,
+        "best_move": "a5",
+        "opponent_best_reply": "Nxd7"
+      },
+      "mechanism": "The queen moved to d7, where the e5 knight attacks it: Nxd7.",
+      "expected_lesson": "Before letting go, check if the destination square is attacked.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Dargo2014-14-Na5",
+      "game": "chunkmonkey420 vs Dargo2014",
+      "my_color": "white",
+      "move_number": 14,
+      "played": "Na5",
+      "ply": 27,
+      "fen_before": "r2q1rk1/3b2pp/p1pbpn2/3p2B1/8/1NN5/PPP2PPP/R2Q1RK1 w - - 4 14",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": -23,
+        "eval_after_cp_mover": -599,
+        "win_pct_drop": 38,
+        "best_move": "Ne4",
+        "opponent_best_reply": "Qxa5"
+      },
+      "mechanism": "The knight moved to a5, where the d8 queen attacks it and nothing defends it: Qxa5.",
+      "expected_lesson": "Before letting go, check if the destination square is attacked and undefended.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "VladikGor-7-Nh3",
+      "game": "chunkmonkey420 vs VladikGor",
+      "my_color": "white",
+      "move_number": 7,
+      "played": "Nh3",
+      "ply": 13,
+      "fen_before": "r1b1kbnr/ppp2ppp/3p1q2/3Pn3/5B2/2N5/PPP2PPP/R2QKBNR w KQkq - 2 7",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [
+        "piece_to_rim"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 161,
+        "eval_after_cp_mover": -365,
+        "win_pct_drop": 43.7,
+        "best_move": "Qd2",
+        "opponent_best_reply": "Bxh3"
+      },
+      "mechanism": "Nh3 defends the attacked f4 bishop but the knight itself is undefended on h3: Bxh3.",
+      "expected_lesson": "A move that defends one piece can hang another: check the destination square.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Costarma-32-Nd5+",
+      "game": "chunkmonkey420 vs Costarma",
+      "my_color": "white",
+      "move_number": 32,
+      "played": "Nd5+",
+      "ply": 63,
+      "fen_before": "8/7Q/1kp4B/1pb1q3/8/1P2NKP1/P1Pr3P/8 w - - 0 32",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 1,
+        "eval_after_cp_mover": -761,
+        "win_pct_drop": 44.4,
+        "best_move": "Bf4",
+        "opponent_best_reply": "Qxd5+"
+      },
+      "mechanism": "The knight gives check on d5, but the e5 queen takes it with check: Qxd5+.",
+      "expected_lesson": "A check is not safe just because it is a check: is the checking piece defended?",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "WoW4iko-10-Qf3",
+      "game": "chunkmonkey420 vs WoW4iko",
+      "my_color": "white",
+      "move_number": 10,
+      "played": "Qf3",
+      "ply": 19,
+      "fen_before": "r1bq1rk1/pppp1pp1/2n4p/8/2BNn3/2P5/PBP2PPP/R2Q1RK1 w - - 1 10",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -20,
+        "eval_after_cp_mover": -385,
+        "win_pct_drop": 28.7,
+        "best_move": "Re1",
+        "opponent_best_reply": "Nd2"
+      },
+      "mechanism": "Qf3 lets Nd2, a knight fork hitting the f3 queen, f1 rook and c4 bishop.",
+      "expected_lesson": "Check every square an enemy knight can reach next move.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Blundering32-5b-Bc5",
+      "game": "Blundering32 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 5,
+      "played": "Bc5",
+      "ply": 10,
+      "fen_before": "r1bqkb1r/pppp1ppp/2n5/4P3/2B1n3/5N2/PPP2PPP/RNBQK2R b KQkq - 0 5",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "mate_threat"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -78,
+        "eval_after_cp_mover": -432,
+        "win_pct_drop": 25.9,
+        "best_move": "d6",
+        "opponent_best_reply": "Qd5"
+      },
+      "mechanism": "Qd5! attacks the e4 knight and threatens Qxf7# with the c4 bishop at the same time (also hits c5).",
+      "expected_lesson": "When a queen can threaten mate and a piece at once, the piece usually falls.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "kasperrandsbaek-37b-Qc5",
+      "game": "kasperrandsbaek vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 37,
+      "played": "Qc5",
+      "ply": 74,
+      "fen_before": "2r3k1/2r3pp/8/3P2B1/p1P2RQ1/4q3/P1K4P/8 b - - 5 37",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_check_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 531,
+        "eval_after_cp_mover": 186,
+        "win_pct_drop": 21.1,
+        "best_move": "h5",
+        "opponent_best_reply": "Qe6+"
+      },
+      "mechanism": "Qe6+ checks the king on g8 and attacks the c8 rook along the diagonal.",
+      "expected_lesson": "Before moving, check every enemy check: does any check also hit a loose piece?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "CptVoyager-32b-f6",
+      "game": "CptVoyager vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 32,
+      "played": "f6",
+      "ply": 64,
+      "fen_before": "8/r1p1kp2/2Bp4/r3n1Q1/P1PN2b1/3PP1P1/q4P2/4R1K1 b - - 12 32",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_check_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -59,
+        "eval_after_cp_mover": -655,
+        "win_pct_drop": 36.4,
+        "best_move": "Kf8",
+        "opponent_best_reply": "Qg7+"
+      },
+      "mechanism": "f6 opens the 7th rank: Qg7+ checks the king and attacks the g4 bishop.",
+      "expected_lesson": "Before moving, check every enemy check: does any check also hit a loose piece?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Urist_ZP-6-g3",
+      "game": "chunkmonkey420 vs Urist_ZP",
+      "my_color": "white",
+      "move_number": 6,
+      "played": "g3",
+      "ply": 11,
+      "fen_before": "r1b1kb1r/pppp1Npp/2n5/4p3/2B1n2q/8/PPPP1PPP/RNBQK2R w KQkq - 1 6",
+      "kind": "mistake",
+      "primary_label": "fork_allowed",
+      "secondary_labels": [
+        "queen_check_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -38,
+        "eval_after_cp_mover": -460,
+        "win_pct_drop": 31,
+        "best_move": "Qe2",
+        "opponent_best_reply": "Nxg3"
+      },
+      "mechanism": "g3 attacks the queen but Nxg3 fxg3 Qe4+ checks the king and wins the h1 rook along the long diagonal.",
+      "expected_lesson": "Before attacking a piece, check what checks it gets in return.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "medium",
+      "split": "holdout"
+    },
+    {
+      "id": "kasperrandsbaek-45b-Rxc4",
+      "game": "kasperrandsbaek vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 45,
+      "played": "Rxc4",
+      "ply": 90,
+      "fen_before": "2r3k1/6pp/3P4/6B1/2R3Q1/pq6/4K2P/8 b - - 0 45",
+      "kind": "mistake",
+      "primary_label": "back_rank_mate_allowed",
+      "secondary_labels": [
+        "mate_allowed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 788,
+        "eval_after_cp_mover": -9970,
+        "win_pct_drop": 94.4,
+        "best_move": "Qxc4+",
+        "opponent_best_reply": "Qe6+"
+      },
+      "mechanism": "Capturing with the rook leaves the back rank: Qe6+ Kf8 Qe7+ Kg8 Qe8#. 45...Qxc4+ (with check) was winning.",
+      "expected_lesson": "When your back rank is weak, recapture with the piece that keeps it covered; prefer captures with check.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "CptVoyager-26b-Bg4",
+      "game": "CptVoyager vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 26,
+      "played": "Bg4",
+      "ply": 52,
+      "fen_before": "3k4/r1p2p2/2Bp4/r3n2Q/P1PN4/3PP1Pb/q4P2/4R1K1 b - - 0 26",
+      "kind": "mistake",
+      "primary_label": "mate_allowed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 132,
+        "eval_after_cp_mover": -9970,
+        "win_pct_drop": 61.5,
+        "best_move": "Qxf2+",
+        "opponent_best_reply": "Qh4+"
+      },
+      "mechanism": "Bg4 allows a forced mate: Qh4+ f6 Qxf6+ Kc8 Qh8#. 26...Qxf2+ was best.",
+      "expected_lesson": "Before each move with your king exposed, check every enemy check.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "ozturk388-23b-Nxe1+",
+      "game": "ozturk388 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 23,
+      "played": "Nxe1+",
+      "ply": 46,
+      "fen_before": "2krr3/ppp2ppp/5q2/2N5/2P3P1/1B3n1P/PPK5/2R1R3 b - - 10 23",
+      "kind": "missed_opportunity",
+      "primary_label": "mate_missed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 9980,
+        "eval_after_cp_mover": 1559,
+        "win_pct_drop": 0,
+        "best_move": "Rd2+",
+        "opponent_best_reply": "Kb1"
+      },
+      "mechanism": "23...Rd2+ Kb1 Qxb2# was mate in 2. Nxe1+ still wins, just much slower.",
+      "expected_lesson": "Before any check, ask: is there a check that is mate?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "dtemplar1-32b-Qxg1",
+      "game": "dtemplar1 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 32,
+      "played": "Qxg1",
+      "ply": 64,
+      "fen_before": "6k1/2rr2pp/1q3p1Q/5P2/2P1pK2/1P5R/P1P1b2P/6R1 b - - 1 32",
+      "kind": "missed_opportunity",
+      "primary_label": "mate_missed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 9980,
+        "eval_after_cp_mover": 804,
+        "win_pct_drop": 4.5,
+        "best_move": "Qf2+",
+        "opponent_best_reply": "Qxh7+"
+      },
+      "mechanism": "32...Qf2+ Kxe4 Qd4# was mate in 2; Qxg1 wins material but not the game at once.",
+      "expected_lesson": "Before any check, ask: is there a check that is mate?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Tadadam440-37-h6",
+      "game": "chunkmonkey420 vs Tadadam440",
+      "my_color": "white",
+      "move_number": 37,
+      "played": "h6",
+      "ply": 73,
+      "fen_before": "6k1/p2R2B1/8/7P/1p6/4P3/rP6/5RK1 w - - 0 37",
+      "kind": "missed_opportunity",
+      "primary_label": "mate_missed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 9980,
+        "eval_after_cp_mover": 1046,
+        "win_pct_drop": 1.7,
+        "best_move": "Rf8+",
+        "opponent_best_reply": "Ra6"
+      },
+      "mechanism": "37.Rf8+ Kh7 Rh8# was mate in 2 (h6 still mates later).",
+      "expected_lesson": "Before any check, ask: is there a check that is mate?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Acefor3v3r-41-Rxh6",
+      "game": "chunkmonkey420 vs Acefor3v3r",
+      "my_color": "white",
+      "move_number": 41,
+      "played": "Rxh6",
+      "ply": 81,
+      "fen_before": "2b5/6Q1/p2R3r/5p2/4pk2/8/4KP1P/7q w - - 1 41",
+      "kind": "missed_opportunity",
+      "primary_label": "mate_missed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 9990,
+        "eval_after_cp_mover": 822,
+        "win_pct_drop": 4.2,
+        "best_move": "Qg3#",
+        "opponent_best_reply": "Qf3+"
+      },
+      "mechanism": "41.Qg3# was mate in one.",
+      "expected_lesson": "Before any check, ask: is there a check that is mate?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "MrWunderBlunder-27-Na7",
+      "game": "chunkmonkey420 vs MrWunderBlunder",
+      "my_color": "white",
+      "move_number": 27,
+      "played": "Na7",
+      "ply": 53,
+      "fen_before": "2r2k2/5p2/p1N3pp/1p6/1P3P2/6PB/P1P3nP/2K4R w - - 6 27",
+      "kind": "missed_opportunity",
+      "primary_label": "free_capture_missed",
+      "secondary_labels": [
+        "queen_line_diagonal"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 1087,
+        "eval_after_cp_mover": 581,
+        "win_pct_drop": 8.7,
+        "best_move": "Bxc8",
+        "opponent_best_reply": "Rc7"
+      },
+      "mechanism": "The h3 bishop saw the undefended c8 rook down the diagonal: 27.Bxc8. Still winning after Na7, but a rook less.",
+      "expected_lesson": "After every move, trace your long-range pieces' lines to the end.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Danae1907-13-Bxf4",
+      "game": "chunkmonkey420 vs Danae1907",
+      "my_color": "white",
+      "move_number": 13,
+      "played": "Bxf4",
+      "ply": 25,
+      "fen_before": "r1bqk2r/ppp5/2n5/2bnp2p/2B2ppP/1N1P2B1/PPP2PP1/RN1Q1RK1 w kq - 0 13",
+      "kind": "mistake",
+      "primary_label": "defended_target_grab",
+      "secondary_labels": [
+        "free_capture_missed"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 165,
+        "eval_after_cp_mover": -152,
+        "win_pct_drop": 28.4,
+        "best_move": "Nxc5",
+        "opponent_best_reply": "Nxf4"
+      },
+      "mechanism": "The f4 pawn was defended by the d5 knight: Bxf4 Nxf4 loses the bishop. Meanwhile 13.Nxc5 took a free bishop.",
+      "expected_lesson": "Count a target's defenders before capturing it; list all captures first.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "flyingJu-8-d3",
+      "game": "chunkmonkey420 vs flyingJu",
+      "my_color": "white",
+      "move_number": 8,
+      "played": "d3",
+      "ply": 15,
+      "fen_before": "r1bq1rk1/ppp2ppp/2np4/2bNp3/2P1n3/5NP1/PP1P1PBP/R1BQK2R w KQ - 0 8",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "fork_allowed",
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -158,
+        "eval_after_cp_mover": -699,
+        "win_pct_drop": 28.8,
+        "best_move": "O-O",
+        "opponent_best_reply": "Nxf2"
+      },
+      "mechanism": "Nxf2 was already threatened (the e4 knight and c5 bishop against a pawn only the king defends), forking the d1 queen and h1 rook. d3 does not stop it; 8.O-O did.",
+      "expected_lesson": "Before making your own move, ask what the opponent threatens.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "medium",
+      "split": "holdout"
+    },
+    {
+      "id": "hsw1210-15b-Nh4",
+      "game": "hsw1210 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 15,
+      "played": "Nh4",
+      "ply": 30,
+      "fen_before": "2kr4/ppp2ppp/8/4Pn1n/2B3b1/4BN2/PPP1K1PP/7R b - - 3 15",
+      "kind": "missed_opportunity",
+      "primary_label": "fork_missed",
+      "secondary_labels": [
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 243,
+        "eval_after_cp_mover": -73,
+        "win_pct_drop": 27.7,
+        "best_move": "Nhg3+",
+        "opponent_best_reply": "Bxf7"
+      },
+      "mechanism": "15...Nfg3+! hxg3 Nxg3+ checks the king on e2 and forks the h1 rook.",
+      "expected_lesson": "Look for knight checks that also attack a rook or queen, even after a sacrifice.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "medium",
+      "split": "holdout"
     }
   ],
   "clean_games": [
@@ -1320,6 +2014,167 @@
       "result": "0-1",
       "link": null,
       "movetext": "1. e4 c6 2. Bc4 d5 3. exd5 cxd5 4. Bb3 Nf6 5. d3 Nc6 6. Ba4 Bg4 7. f3 Bh5 8. Nc3 e6 9. Bg5 Be7 10. h4 O-O 11. Qd2 d4 12. Nce2 Nd5 13. Bxc6 bxc6 14. O-O-O f6 15. Bh6 gxh6 16. Qxh6 Ne3 17. Re1 Nxg2 18. Qxh5 Nxe1 19. Nh3 Qd5 20. Qg4+ Kh8 21. Rxe1 Qxa2 22. Rg1 Rg8 23. Qxd4 Rxg1+ 24. Nhxg1 e5 25. Qc4 Qa1+ 26. Kd2 Rb8 27. b3 Bb4+ 28. Ke3 f5 29. Nh3 f4+ 30. Ke4 Qe1 31. d4 Qxh4 32. Nhg1 exd4 33. Qxd4+ Kg8 34. Qc4+ Kg7 35. Qd4+ Kh6 36. Nxf4 Re8+ 37. Kd3 Rd8 38. Qxd8 Qxd8+ 39. Kc4 Bd6 40. Nge2 Qg8+ 41. Kd3 Bxf4 42. Nxf4 Qd8+ 43. Ke3 c5 44. Nd3 Qd4+ 45. Kd2 a5 46. f4 c4 47. bxc4 Qxc4 48. c3 a4 49. Nb4 Qxf4+ 0-1"
+    },
+    {
+      "game": "suvasishpodder vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185407968892",
+      "movetext": "1. e4 e5 2. Bc4 Nf6 3. d3 Nc6 4. c3 d5 5. exd5 Nxd5 6. h3 a6 7. a4 Na5 8. Ba2 Qh4 9. Bxd5 c6 10. Nf3 Qf6 11. Bg5 Qg6 12. Be4 f5 13. Bxf5 Qxf5 14. O-O Nb3 15. Qxb3 Be6 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Rostatinoi",
+      "my_color": "white",
+      "result": "1/2-1/2",
+      "link": "https://www.chess.com/game/live/185331362398",
+      "movetext": "1. e4 d6 2. d4 e5 3. dxe5 dxe5 4. Qxd8+ Kxd8 5. Nf3 Nc6 6. Bb5 Bd7 7. O-O f6 8. Rd1 Bd6 9. Nc3 Nb4 10. Bxd7 Kxd7 11. Rd2 a6 12. a3 Nc6 13. b4 b5 14. a4 Nxb4 15. axb5 a5 16. Ba3 Ke6 17. Nd5 Ne7 18. Bxb4 axb4 19. Rxa8 Rxa8 20. h3 g5 21. Ne1 Rb8 22. c4 f5 23. exf5+ Nxf5 24. Nd3 b3 25. c5 e4 26. cxd6 exd3 27. Nxc7+ Kxd6 28. b6 Rxb6 29. Ne8+ Ke7 30. Nc7 Kf7 31. Rb2 d2 32. Rxd2 b2 33. Rd7+ Ne7 34. Rxe7+ Kg8 35. Re8+ Kf7 36. Re1 b1=Q 37. Rxb1 Rxb1+ 38. Kh2 h5 39. Nd5 g4 40. hxg4 Rb5 41. Nc3 Rc5 42. Ne4 Re5 43. f3 hxg4 44. Nd6+ Ke6 45. Nc4 Rh5+ 46. Kg3 gxf3 47. gxf3 Kf5 48. Ne3+ Kg6 49. f4 Rc5 50. Kg4 Kf6 51. Kh4 Rc8 52. f5 Rh8+ 53. Kg4 Rg8+ 54. Kf4 Rh8 55. Nd5+ Kf7 56. Kg5 Rg8+ 57. Kh6 Re8 58. Kg5 Re5 59. Nf4 Re8 60. f6 Re5+ 61. Kh6 Kxf6 62. Nh5+ Kf7 63. Ng7 Rd5 64. Nh5 Rd6+ 65. Kg5 Rg6+ 66. Kf5 Rh6 67. Nf4 Rf6+ 68. Ke5 Rh6 69. Nd5 Re6+ 70. Kd4 Rd6 71. Kc5 Ke6 72. Nc7+ Kd7 73. Nb5 Rc6+ 74. Kd5 Rb6 75. Nd4 Rd6+ 76. Ke5 1/2-1/2"
+    },
+    {
+      "game": "chunkmonkey420 vs AlexDasNeves",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185389469272",
+      "movetext": "1. e4 d5 2. exd5 Qxd5 3. Nc3 Qa5 4. d4 c6 5. Bd2 Qc7 6. Nf3 Bf5 7. Bc4 e6 8. O-O Bd6 9. h3 Nf6 10. Re1 O-O 11. b4 b5 12. Bb3 Bxb4 13. Ne5 Nbd7 14. Bf4 Qa5 15. Nxc6 Qa3 16. Bc1 Bxc2 17. Bxc2 Qxc3 18. Nxb4 Qxb4 19. Bd3 a6 20. Rb1 Qd6 21. a4 b4 22. Bd2 a5 23. Bb5 Qxd4 24. Rb3 Nc5 25. Rg3 Nce4 26. Rxe4 Qxe4 27. Bh6 Kh8 28. Bxg7+ Kg8 29. Bxf6+ Qg6 30. Rxg6+ fxg6 31. Qd4 Rxf6 32. Qxf6 Rf8 33. Qxe6+ Kg7 34. Qe7+ Rf7 35. Qe5+ Rf6 36. Bc4 g5 37. Qe7+ Kg6 38. Bd3+ Rf5 39. Qe6+ Kh5 40. Qxf5 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs lucasrocfer",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185245981952",
+      "movetext": "1. e4 c5 2. e5 d6 3. Bb5+ Bd7 4. Bxd7+ Nxd7 5. exd6 exd6 6. Nf3 Be7 7. O-O h6 8. d4 Bf6 9. Re1+ Ne7 10. dxc5 Nxc5 11. Bf4 Bxb2 12. Bxd6 Bxa1 13. Rxe7+ Kf8 14. Rd7+ Ke8 15. Rxd8+ Rxd8 16. Qe1+ Ne6 17. Bc7 Rc8 18. Be5 Bxe5 19. Qxe5 Rxc2 20. Nbd2 Rc1+ 21. Nf1 Rc5 22. Qb8+ Nd8 23. Qxa7 Rb5 24. Qa4 Ke7 25. Qxb5 f6 26. Ne3 Re8 27. Nd5+ Kf7 28. Nc7 Re7 29. Qc4+ Kg6 30. h4 Nc6 31. Nd5 Rd7 32. Nf4+ Kh7 33. Qe4+ g6 34. Qxg6+ Kh8 35. Qxf6+ Kh7 36. Qf5+ 1-0"
+    },
+    {
+      "game": "MoezFathallah vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185768241460",
+      "movetext": "1. e4 c6 2. Bc4 d5 3. exd5 cxd5 4. Bb3 Nf6 5. d4 Nc6 6. Nc3 e6 7. Nf3 Bb4 8. O-O O-O 9. Bf4 Qa5 10. Bd2 Ne4 11. a4 Nxc3 12. bxc3 Bxc3 13. Qe1 Bxd2 14. Nxd2 Nxd4 15. Qe5 Qxd2 16. Rad1 Ne2+ 17. Kh1 h6 18. Rxd2 Ng3+ 19. Qxg3 1-0"
+    },
+    {
+      "game": "jnhbleachie vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185397900526",
+      "movetext": "1. d4 Nf6 2. Nc3 d5 3. Bf4 e6 4. e3 Bb4 5. Nf3 Ne4 6. Qd3 O-O 7. Be2 Nxc3 8. bxc3 Ba3 9. O-O Nc6 10. c4 Nb4 11. Qb3 dxc4 12. Bxc4 a5 13. Rab1 a4 14. Qxa3 Nxc2 15. Qc3 e5 16. Nxe5 Bf5 17. Bd3 Bxd3 18. Qxd3 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Acefor3v3r",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185215434894",
+      "movetext": "1. e4 d5 2. exd5 Qxd5 3. Nc3 Qd8 4. d4 Nf6 5. Nf3 Nc6 6. Bf4 e6 7. Nb5 Bd6 8. Bxd6 cxd6 9. Qd2 O-O 10. O-O-O a6 11. Nc3 d5 12. a3 Ne4 13. Nxe4 dxe4 14. Ng5 Qd5 15. Qf4 f5 16. b3 b5 17. a4 bxa4 18. Bc4 Qa5 19. Qh4 h6 20. Nxe6 Rf6 21. Nc7+ Kh8 22. Nxa8 axb3 23. Bxb3 Qa1+ 24. Kd2 Qxd4+ 25. Ke1 Qa7 26. Ba4 Qxa8 27. Bxc6 Qxc6 28. Rd8+ Kh7 29. g4 Qxc2 30. Kf1 Qc7 31. g5 Rg6 32. gxh6 Rxh6 33. Qg5 Rg6 34. Qh5+ Rh6 35. Qe8 Qc4+ 36. Ke1 Qc1+ 37. Ke2 Qxh1 38. Qh8+ Kg6 39. Rd6+ Kg5 40. Qxg7+ Kf4 41. Rxh6 Qf3+ 42. Kf1 a5 43. Rh4+ Qg4 44. Rxg4+ fxg4 45. Qc7+ Kf3 46. Qxc8 1-0"
+    },
+    {
+      "game": "abcristal vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185195260652",
+      "movetext": "1. d4 d5 2. Bf4 Nc6 3. e3 e6 4. Bb5 Bd7 5. Nc3 a6 6. Ba4 Bb4 7. a3 Ba5 8. b4 Bb6 9. Bxc6 Bxc6 10. Nf3 Nf6 11. Ne5 Qd7 12. Nxd7 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Dargo2014",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/184786660626",
+      "movetext": "1. e4 c6 2. d4 d5 3. e5 c5 4. dxc5 Nc6 5. Bb5 e6 6. Nf3 Bxc5 7. Bg5 f6 8. exf6 Nxf6 9. O-O O-O 10. Nc3 a6 11. Bxc6 bxc6 12. Nd4 Bd7 13. Nb3 Bd6 14. Na5 Qxa5 15. a3 Bb8 16. b4 Qc7 17. a4 Qxh2# 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs VladikGor",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185351436204",
+      "movetext": "1. e4 Nc6 2. d4 e6 3. d5 exd5 4. exd5 Ne5 5. Bf4 d6 6. Nc3 Qf6 7. Nh3 Bxh3 8. Bxe5 Qxe5+ 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs Costarma",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185434053970",
+      "movetext": "1. e4 e5 2. Nf3 h6 3. Nxe5 d5 4. Qf3 Qe7 5. d4 Nc6 6. Bb5 a6 7. exd5 axb5 8. dxc6 f6 9. Qh5+ Kd8 10. cxb7 Bxb7 11. O-O fxe5 12. Re1 Nf6 13. Qf5 Be4 14. Rxe4 Nxe4 15. Qxe4 Rb8 16. Nc3 g5 17. dxe5 Bg7 18. Nd5 Qe6 19. f4 gxf4 20. Bxf4 Rf8 21. Rd1 Kc8 22. g3 Rd8 23. b3 c6 24. Ne7+ Kb7 25. Rxd8 Rxd8 26. Nf5 Rd1+ 27. Kg2 Bf8 28. Ne3 Rd2+ 29. Kf3 Bc5 30. Qh7+ Kb6 31. Bxh6 Qxe5 32. Nd5+ Qxd5+ 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs WoW4iko",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185368919020",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. Nc3 h6 5. O-O Bb4 6. d4 Bxc3 7. bxc3 Nxe4 8. Bb2 exd4 9. Nxd4 O-O 10. Qf3 d5 11. Nxc6 bxc6 12. Bd3 Nd2 13. Bh7+ Kh8 14. Qd3 Nxf1 15. Rxf1 g6 16. c4+ Kxh7 17. Qd4 f6 18. cxd5 Qxd5 19. Qe3 Rf7 20. f4 Bf5 21. Qc3 Rd8 22. Qe1 Qc5+ 23. Kh1 Re7 24. Qa1 Rd6 25. Bxf6 Rxf6 26. Qxf6 h5 27. h3 Re6 28. Qf7+ Kh6 29. Qxc7 Re2 30. Qd8 Qd5 31. Qh8# 1-0"
+    },
+    {
+      "game": "Blundering32 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185403084464",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 Nxe4 5. dxe5 Bc5 6. Qd5 Bxf2+ 7. Ke2 f5 8. Qf7# 1-0"
+    },
+    {
+      "game": "kasperrandsbaek vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185428451002",
+      "movetext": "1. d4 Nf6 2. c4 d5 3. Nc3 dxc4 4. e4 Nc6 5. Nf3 Bg4 6. Be3 e5 7. d5 Nd4 8. Bxc4 Nxf3+ 9. gxf3 Bh3 10. Bb5+ Nd7 11. Qa4 a6 12. Bxd7+ Bxd7 13. Qb3 a5 14. O-O-O Bb4 15. f4 Bd6 16. fxe5 Bxe5 17. f4 a4 18. Qxb7 Rb8 19. Qa6 Bxc3 20. bxc3 O-O 21. Qd3 Bg4 22. Rdg1 Bf3 23. Qd4 f6 24. e5 Bxh1 25. exf6 Rxf6 26. Rxh1 Rg6 27. f5 c5 28. Qxc5 Rd6 29. c4 Rc8 30. Qd4 Rf6 31. Bg5 Qb6 32. Qg4 Rf7 33. f6 Rfc7 34. f7+ Kxf7 35. Rf1+ Kg8 36. Rf4 Qe3+ 37. Kc2 Qc5 38. Kc3 Qa3+ 39. Kc2 Qxa2+ 40. Kd3 a3 41. d6 Qb1+ 42. Kc3 Qb2+ 43. Kd3 Qb3+ 44. Ke2 Rxc4 45. Rxc4 Rxc4 46. Qe6+ Kf8 47. Qe7+ Kg8 48. Qe8# 1-0"
+    },
+    {
+      "game": "CptVoyager vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185328944210",
+      "movetext": "1. c4 e5 2. Nc3 Nf6 3. g3 e4 4. Bg2 Qe7 5. Nb5 Qc5 6. b3 a6 7. Ba3 Qe5 8. Bxf8 axb5 9. Bxg7 Rg8 10. Bxf6 Qxf6 11. Bxe4 bxc4 12. bxc4 Rg4 13. d3 h5 14. h3 Rg5 15. Nf3 Rga5 16. a4 d6 17. Ra2 Qc3+ 18. Qd2 Qb3 19. Nd4 Qb1+ 20. Qd1 Qxa2 21. O-O Bxh3 22. Re1 Nd7 23. Bxb7 R8a7 24. Bc6 Kd8 25. e3 Ne5 26. Qxh5 Bg4 27. Qh8+ Ke7 28. Qe8+ Kf6 29. Qd8+ Kg7 30. Qg5+ Kf8 31. Qh6+ Ke7 32. Qg5+ f6 33. Qg7+ Kd8 34. Qf8# 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Urist_ZP",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185408166758",
+      "movetext": "1. e4 e5 2. Bc4 Nc6 3. Nf3 Nf6 4. Ng5 Nxe4 5. Nxf7 Qh4 6. g3 Nxg3 7. fxg3 Qe4+ 8. Qe2 Qxh1+ 9. Kf2 Bc5+ 10. d4 Bxd4+ 0-1"
+    },
+    {
+      "game": "ozturk388 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185264173712",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bb5 Nf6 4. Bc4 Nxe4 5. Nxe5 Nxe5 6. Qe2 d5 7. Bb3 Bc5 8. d3 Bxf2+ 9. Kf1 Bg4 10. Qxg4 Nxg4 11. dxe4 dxe4 12. Nc3 Qf6 13. Nxe4 Qa6+ 14. c4 Be3 15. h3 Bxc1 16. Rxc1 Ne3+ 17. Kf2 Nf5 18. g4 Nd4 19. Rhe1 O-O-O 20. Nc5 Qf6+ 21. Ke3 Rhe8+ 22. Kd2 Nf3+ 23. Kc2 Nxe1+ 24. Rxe1 Qf2+ 25. Kc3 Qxe1+ 26. Kc2 Qd2+ 27. Kb1 Re1+ 28. Bd1 Rxd1# 0-1"
+    },
+    {
+      "game": "dtemplar1 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185777959038",
+      "movetext": "1. e4 c6 2. Bc4 d5 3. exd5 cxd5 4. Bd3 Nf6 5. Nf3 e6 6. b3 Be7 7. Bb2 O-O 8. Ne5 Nbd7 9. f4 Nxe5 10. Bxe5 d4 11. Qf3 Bd7 12. Qxb7 Qe8 13. Bxf6 Bxf6 14. Be4 d3 15. Nc3 Bxc3 16. dxc3 Rc8 17. Bxd3 Bc6 18. Qxa7 Bxg2 19. Rg1 Bf3 20. Rg3 Qc6 21. Qd4 f6 22. c4 Rfe8 23. Qa7 Rc7 24. Qe3 Bh5 25. Kd2 e5 26. f5 Rd8 27. Qh6 Bf3 28. Rag1 Rdd7 29. Ke3 e4 30. Be2 Qb6+ 31. Kf4 Bxe2 32. Rh3 Qxg1 33. Qxh7+ Kf7 34. Qg6+ Qxg6 35. fxg6+ Kxg6 36. Rg3+ Kf7 37. Kxe4 Re7+ 38. Kf4 g5+ 39. Kf5 Re5# 0-1"
+    },
+    {
+      "game": "chunkmonkey420 vs Tadadam440",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185285832900",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6 5. Ng5 d5 6. exd5 Na5 7. Bb5+ Bd7 8. Qe2 Qe7 9. Bxd7+ Nxd7 10. Qb5 Qxg5 11. d4 Qf5 12. dxc5 Qxc2 13. Qxa5 Nxc5 14. Qxc7 O-O 15. Nc3 e4 16. Qxc5 b6 17. Qd4 Rfe8 18. d6 Rad8 19. Bg5 Rd7 20. Nd5 e3 21. fxe3 Re4 22. Qc3 Qxc3 23. Nxc3 Rxd6 24. Nxe4 Re6 25. Rad1 h6 26. Nf6+ gxf6 27. Bxh6 Kh7 28. Bf4 Kg6 29. h4 b5 30. g4 Ra6 31. h5+ Kh7 32. Rd7 Kg8 33. g5 fxg5 34. Bxg5 f6 35. Bxf6 b4 36. Bg7 Rxa2 37. h6 Ra6 38. Bf6 Re6 39. h7+ Kf8 40. h8=Q# 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs MrWunderBlunder",
+      "my_color": "white",
+      "result": "1/2-1/2",
+      "link": "https://www.chess.com/game/live/185382094404",
+      "movetext": "1. e4 c6 2. d4 d5 3. e5 Bf5 4. Nf3 e6 5. Bg5 Be7 6. Bxe7 Nxe7 7. Nc3 a6 8. Qd2 Nd7 9. O-O-O c5 10. Qg5 O-O 11. dxc5 Nxc5 12. Nd4 h6 13. Qh4 Ng6 14. Qxd8 Raxd8 15. b4 Nd7 16. Nxf5 exf5 17. Rxd5 Ndxe5 18. f4 Rxd5 19. Nxd5 Nc4 20. Bxc4 b5 21. Bd3 Nh4 22. g3 Ng2 23. Bxf5 g6 24. Bh3 Rd8 25. Ne7+ Kf8 26. Nc6 Rc8 27. Na7 Rc3 28. Bxg2 Ra3 29. Kb2 Ra4 30. Nc6 Kg7 31. Kb3 Kf6 32. Nd4 a5 33. Nxb5 Rxb4+ 34. Ka3 Rxb5 35. Ka4 Rc5 36. g4 Rxc2 37. Bd5 Ke7 38. Re1+ Kd6 39. Bb3 Rc5 40. Rd1+ Ke7 41. Re1+ Kd6 42. Bxf7 Kc6 43. Re6+ Kb7 44. Rxg6 h5 45. gxh5 Rxh5 46. Rg2 Rf5 47. Rb2+ Kc7 48. Rc2+ Kb6 49. Rc4 Rxf7 50. h4 Rf5 51. Re4 Kc6 52. Re6+ Kb7 53. Re7+ Kc6 54. Rh7 Kb6 55. Rh6+ Kc7 56. h5 Kb7 57. Rh7+ Kb6 58. h6 Rxf4+ 59. Ka3 Kb5 60. Rb7+ Kc6 61. Rb3 Rh4 62. Rc3+ Kb5 63. Kb2 Rxh6 64. Rb3+ Ka6 65. a4 Rh2+ 66. Ka3 Rh4 67. Rg3 Rc4 68. Kb3 Rc6 69. Rg5 Rb6+ 70. Kc4 Rb4+ 71. Kc5 Rxa4 72. Rg6+ Ka7 73. Kc6 Rc4+ 74. Kb5 Re4 75. Ra6+ Kb7 76. Rb6+ Ka7 77. Kxa5 Re5+ 78. Rb5 Rxb5+ 79. Kxb5 1/2-1/2"
+    },
+    {
+      "game": "chunkmonkey420 vs Danae1907",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185221781912",
+      "movetext": "1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. O-O Nf6 5. d3 d5 6. exd5 Nxd5 7. Bg5 f6 8. Bh4 g5 9. Bg3 h5 10. h4 g4 11. Nfd2 f5 12. Nb3 f4 13. Bxf4 Nxf4 14. Nxc5 Qxh4 15. g3 Qh3 16. gxf4 h4 17. Ne6 Bxe6 18. Bxe6 Ke7 19. Bxg4 Rag8 20. f3 Qg3+ 21. Kh1 h3 22. Rg1 Qf2 23. Nc3 Kd6 24. Ne4+ 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs flyingJu",
+      "my_color": "white",
+      "result": "0-1",
+      "link": "https://www.chess.com/game/live/185567784110",
+      "movetext": "1. c4 e5 2. g3 Nf6 3. Bg2 Bc5 4. Nc3 Nc6 5. Nd5 O-O 6. e4 d6 7. Nf3 Nxe4 8. d3 Nxf2 9. Qe2 Nxh1 10. Bg5 f6 0-1"
+    },
+    {
+      "game": "hsw1210 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/185403438142",
+      "movetext": "1. e4 e5 2. f4 exf4 3. Nf3 d6 4. d4 Bg4 5. Bc4 Nc6 6. Bxf4 Nf6 7. Nc3 Be7 8. e5 dxe5 9. dxe5 Qxd1+ 10. Rxd1 Nh5 11. Nd5 O-O-O 12. Nxe7+ Nxe7 13. Rxd8+ Rxd8 14. Be3 Nf5 15. Ke2 Nh4 16. Bxf7 Nxf3 17. gxf3 Bxf3+ 18. Kxf3 Rf8 19. Kg4 Rxf7 20. Kxh5 g6+ 21. Kh6 Rf3 22. Bxa7 Rh3+ 23. Kg7 b6 24. Re1 Rh5 25. e6 Kd8 26. Bb8 Rxh2 27. e7+ Ke8 28. Bxc7 Rxc2 29. Bxb6 Rxb2 30. Bd8 h5 31. Rf1 Re2 32. a4 g5 33. a5 g4 34. a6 Re5 35. a7 Rg5+ 36. Kh6 Ra5 37. Rf8+ Kd7 38. e8=Q+ Kd6 39. Rf6+ Kd5 40. Rf5+ 1-0"
     },
     {
       "game": "chunkmonkey420 vs RajinderSinghAP",
