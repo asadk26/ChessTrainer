@@ -124,6 +124,17 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'knight_fork', side: 'refutation' });
     expect(hit!.evidence).toBe('Nd5 forks the bishop on c3 and the knight on e3');
   });
+  it('a queen hitting a loose piece and, through a loose pawn, a rook behind it is a fork', () => {
+    // 1.Nc6?? Qd5 hits the c6 knight and the g2 pawn with the h1 rook behind it: Na5 Qxg2, and the rook is next.
+    const hit = detectPattern('6k1/3q1ppp/8/8/1N6/8/6P1/4K2R w K - 0 1', 'b4c6', ['d7d5', 'c6a5', 'd5g2'], [], []);
+    expect(hit).toMatchObject({ tag: 'fork', side: 'refutation' });
+    expect(hit!.evidence).toBe('Qd5 attacks the knight on c6 and the rook on h1 behind the pawn on g2 at once');
+  });
+  it('an attacked queen left where a discovered attack hit it is an ignored threat', () => {
+    // ...Nce5 uncovered the b7 bishop onto the e4 queen; 1.dxe5?? takes the knight and leaves the queen: Bxe4.
+    const hit = detectPattern('6k1/1b3ppp/8/4n3/3PQ3/8/6PP/6K1 w - - 0 1', 'd4e5', ['b7e4'], [], []);
+    expect(hit).toMatchObject({ tag: 'threat_ignored', hanging: 'already' });
+  });
   it('a double attack that wins nothing is not a fork', () => {
     // Qa5+ hits the king and the bishop on h5, but the bishop is defended and nothing is taken.
     expect(detectPattern('3qk3/5ppp/8/7B/8/8/5PPQ/4K3 w - - 0 1', 'g2g3', ['d8a5', 'e1f1', 'a5a6'], [], [])?.tag).not.toBe('fork');

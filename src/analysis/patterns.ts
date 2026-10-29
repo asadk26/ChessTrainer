@@ -198,8 +198,39 @@ function mateThreat(fen: string, me: Color): string | undefined {
 }
 
 /**
+ * A piece standing behind a loose pawn on a line of the slider on `from` ("Qd5 hits g2, and the h1
+ * rook behind it"): taking the pawn attacks that piece next.
+ */
+function xrayTargets(fen: string, from: string): { square: string; type: PieceType; through: string }[] {
+  const piece = pieceAt(fen, from);
+  if (!piece || !['q', 'r', 'b'].includes(piece.type)) return [];
+  const dirs = [
+    ...(piece.type !== 'b' ? [[1, 0], [-1, 0], [0, 1], [0, -1]] : []),
+    ...(piece.type !== 'r' ? [[1, 1], [1, -1], [-1, 1], [-1, -1]] : []),
+  ];
+  const out: { square: string; type: PieceType; through: string }[] = [];
+  for (const [df, dr] of dirs) {
+    let pawn: string | undefined;
+    for (let f = from.charCodeAt(0) + df, r = Number(from[1]) + dr; f >= 97 && f <= 104 && r >= 1 && r <= 8; f += df, r += dr) {
+      const s = `${String.fromCharCode(f)}${r}`;
+      const t = pieceAt(fen, s);
+      if (!t) continue;
+      if (!pawn) {
+        if (t.color === piece.color || t.type !== 'p' || !isLoose(fen, s)) break;
+        pawn = s;
+        continue;
+      }
+      if (t.color !== piece.color && t.type !== 'k' && t.type !== 'p') out.push({ square: s, type: t.type, through: pawn });
+      break;
+    }
+  }
+  return out;
+}
+
+/**
  * Any piece hitting two things at once (a knight fork without a heavy piece in it, a queen check
- * that also hits a loose piece, a queen move that threatens mate and attacks a piece, a pawn fork).
+ * that also hits a loose piece, a queen move that threatens mate and attacks a piece, a queen that
+ * hits a loose piece and, through a loose pawn, a rook behind it, a pawn fork).
  */
 function fork(fs: Frame[]): PatternHit | undefined {
   for (let i = 0; i < Math.min(fs.length, 4); i++) {
@@ -208,21 +239,31 @@ function fork(fs: Frame[]): PatternHit | undefined {
     const check = move.san.includes('+');
     const mate = check ? undefined : mateThreat(after, me);
     // Only targets it can really win: the king (a check, or a mate threat), or a piece that is loose or worth more than the attacker.
-    const targets = [
+    const winnable = (t: { square: string; type: PieceType }) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3 && (isLoose(after, t.square) || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType]);
+    // Behind the pawn, the piece isn't attacked yet: it counts when nothing defends it (or it's worth more).
+    const xray = xrayTargets(after, move.to).filter((t) => attackersOf(after, t.square, other(me)).length === 0 || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType]);
+    const targets: { square: string; type: PieceType; through?: string }[] = [
       ...(check || mate ? [{ type: 'k' as PieceType, square: kingSquare(after, other(me)) }] : []),
-      ...attackedEnemyPieces(after, move.to).filter((t) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3 && (isLoose(after, t.square) || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType])),
+      ...attackedEnemyPieces(after, move.to).filter(winnable),
+      ...xray,
     ];
     if (targets.length < 2) continue;
-    // The forking piece must survive long enough to collect: one of the targets is taken later in the line.
-    const collected = fs.slice(i + 1).some((f) => f.move.color === me && targets.some((t) => t.type !== 'k' && t.square === f.move.to));
-    const named = targets.filter((t) => t.type !== 'k').slice(0, mate ? 1 : 2).map((t) => sq(t.type, t.square));
+    // The forking piece must survive long enough to collect: one of the targets (or the pawn in front
+    // of an x-rayed piece) is taken later in the line.
+    const grabs = new Set(targets.flatMap((t) => (t.type === 'k' ? [] : [t.square, ...(t.through ? [t.through] : [])])));
+    const k = fs.findIndex((f, j) => j > i && f.move.color === me && grabs.has(f.move.to));
+    const collected = k > 0;
+    // It wins material, or the capture that collects keeps attacking another target from where it lands.
+    const keepsGoing = collected && fs[k].move.from === move.to && targets.some((t) => t.type !== 'k' && t.square !== fs[k].move.to && attackersOf(fs[k].after, t.square, me).includes(fs[k].move.to as never) && pieceAt(fs[k].after, t.square)?.color === other(me));
+    const name = (t: { square: string; type: PieceType; through?: string }) => (t.type === 'k' ? 'king' : t.through ? `${sq(t.type, t.square)} behind the pawn on ${t.through}` : sq(t.type, t.square));
+    const named = targets.filter((t) => t.type !== 'k').slice(0, mate ? 1 : 2).map(name);
     const hit = mate
       ? `${move.san} threatens mate (${mate}) and attacks the ${named[0]} at once`
       : `${move.san} attacks the ${[...(check ? ['king'] : []), ...named].slice(0, 2).join(' and the ')} at once`;
     // A pawn hitting two pieces worth more than itself wins one of them, even when the other gets a
     // desperado capture in first and the material count evens out inside the line.
     if (move.piece === 'p' && collected) return { tag: 'pawn_fork', side: 'refutation', at: i, evidence: hit };
-    if (collected && gainAfter(fs, i, me) >= 2) return { tag: move.piece === 'n' ? 'knight_fork' : 'fork', side: 'refutation', at: i, evidence: move.piece === 'n' && !mate ? hit.replace(' attacks the ', ' forks the ').replace(' at once', '') : hit };
+    if (collected && (gainAfter(fs, i, me) >= 2 || keepsGoing)) return { tag: move.piece === 'n' ? 'knight_fork' : 'fork', side: 'refutation', at: i, evidence: move.piece === 'n' && !mate ? hit.replace(' attacks the ', ' forks the ').replace(' at once', '') : hit };
   }
 }
 

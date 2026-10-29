@@ -132,3 +132,17 @@ describe('lines stop where they make their point', () => {
     expect(quiet.kind).toBe('quiet');
   });
 });
+
+describe('the one-line why follows the line until captures finish', () => {
+  it('5.Bxb7 wins a rook and a pawn for the bishop, not "a pawn" (vs rushikeshdantakale)', () => {
+    const fen = 'rn1qkbnr/ppp3pp/3pb3/4pp2/2P5/2N3P1/PP1PPPBP/R1BQK1NR w KQkq - 2 5';
+    const c = compareLines({
+      fen,
+      mover: 'w',
+      preferred: { ucis: ['g2b7', 'b8d7', 'b7a8', 'd8a8', 'g1f3', 'f8e7'], cp: 250 },
+      other: { ucis: ['d1b3', 'b8d7', 'b3b7', 'a8b8', 'b7a7', 'g8f6'], cp: 130 },
+    })!;
+    expect(c.why).toBe('it wins a rook and a pawn for your bishop');
+    expect(c.preferredFrames.map((f) => f.san)).toEqual(['Bxb7', 'Nd7', 'Bxa8', 'Qxa8']);
+  });
+});

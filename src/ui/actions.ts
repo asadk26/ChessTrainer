@@ -10,7 +10,7 @@ import { chesscomFetch } from '../sync/chesscomClient';
 import { REPORT_VERSION } from '../coach/report';
 import { type ImportSummary } from '../storage/repository';
 import { repo } from '../storage/repo';
-import { getBrowserEngine } from '../engine/browserEngine';
+import { createBrowserEngine, getBrowserEngine } from '../engine/browserEngine';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames, waitingForAnalysis } from '../analysis/pipeline';
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
@@ -92,7 +92,8 @@ export function runAnalysis(gameId: string, onProgress: (done: number, total: nu
     const game = await repo.getGame(gameId);
     if (!game) throw new Error('Game not found');
     const settings = await repo.getSettings();
-    const engine = await getBrowserEngine();
+    // Its own engine, started fresh: the same game always gets the same analysis.
+    const engine = await createBrowserEngine();
     if (!engine) throw new Error('Stockfish could not start in this browser (WebAssembly + Web Workers are required).');
     await repo.saveGame({ ...game, status: 'analyzing' });
     try {
@@ -109,6 +110,8 @@ export function runAnalysis(gameId: string, onProgress: (done: number, total: nu
     } catch (e) {
       await repo.saveGame({ ...game, status: 'error', error: (e as Error).message });
       throw e;
+    } finally {
+      engine.dispose();
     }
   })();
   running.set(gameId, job);
@@ -421,11 +424,16 @@ const betaInflight = new Map<string, Promise<BetaCoachReview>>();
 /** The Beta evidence's one-depth Stockfish pass, made once per game in the browser. */
 async function ensureBetaEval(game: StoredGame, onProgress?: (stage: string) => void): Promise<StoredGame> {
   if (!needsBetaEval(game)) return game;
-  const engine = await getBrowserEngine();
+  const engine = await createBrowserEngine();
   if (!engine) throw new Error('Stockfish could not start in this browser.');
-  const own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), (done, total) =>
-    onProgress?.(`Stockfish is checking every move at depth ${BETA_DEPTH} (${done}/${total})… this happens once per game`),
-  );
+  let own: Awaited<ReturnType<typeof evaluateForBeta>>;
+  try {
+    own = await evaluateForBeta(game, (fen) => engine.analyse(fen, { depth: BETA_DEPTH, multiPv: 3 }), (done, total) =>
+      onProgress?.(`Stockfish is checking every move at depth ${BETA_DEPTH} (${done}/${total})… this happens once per game`),
+    );
+  } finally {
+    engine.dispose();
+  }
   const next = { ...((await repo.getGame(game.id)) ?? game), aiCoachEval: own };
   await repo.saveGame(next);
   return next;

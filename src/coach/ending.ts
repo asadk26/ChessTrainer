@@ -2,7 +2,7 @@
 // worse position, or resigning a position that was still playable at this level.
 import { Chess } from 'chess.js';
 import type { PositionEval, StoredGame } from '../domain/types';
-import { COLOR_NAME, PIECE_NAME, materialBalance, materialPhrase, other, playLine, trappedPiece } from '../chess/board';
+import { COLOR_NAME, PIECE_NAME, materialBalance, materialPhrase, other, playLine, settledMaterial, trappedPiece } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import { userOutcome } from '../chess/outcome';
 import { MATE_CP, positionCp } from '../analysis/evaluation';
@@ -51,7 +51,9 @@ export function endingNote(game: StoredGame, positions: PositionEval[]): string 
   }
   // A win the opponent gave up on while you were clearly winning: say so, it was deserved.
   if (won && cp >= 150 && !/checkmate|time vs|insufficient/i.test(game.headers.termination ?? '')) {
-    const up = materialBalance(last.fenAfter, me);
+    // Counted once the engine's forcing sequence from the final position is over (a resignation can
+    // come in the middle of a trade or before a fork that wins material back).
+    const up = settledMaterial(last.fenAfter, final.lines[0]?.pv ?? [], me);
     const how = howItEnded(game.headers.termination, opp);
     return `${how.charAt(0).toUpperCase()}${how.slice(1)} after ${moveLabel(last)}, with you ${up >= 1 ? `up ${materialPhrase(up)}` : 'clearly better'}${trappedNote(game, opp)} — a deserved win.`;
   }

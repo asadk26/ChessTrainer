@@ -231,9 +231,16 @@ function diffs(a: Snap, b: Snap, ctx: DiffCtx): Reason[] {
       const gave = describe(lb.ours, la.ours);
       const got = describe(lb.theirs, la.theirs);
       const onlyPawns = gave.every((g) => /pawn/.test(g)) && got.every((g) => /pawn/.test(g));
+      // The preferred line pays a piece for more: "wins a rook and a pawn for your bishop" (what that
+      // line itself wins from here, captures finished).
+      const none = Object.fromEntries([...TYPES, 'k'].map((t) => [t, 0])) as Counts;
+      const paid = describe(la.ours, none);
+      const won = describe(la.theirs, none);
       out.push(
         ctx.materialTextOther && /wins your/.test(ctx.materialTextOther)
           ? { key: 'material', favors: 'preferred', forOther: ctx.materialTextOther }
+          : paid.some((g) => !/pawn/.test(g)) && won.length
+          ? { key: 'material', favors: 'preferred', forPreferred: `wins ${joinAnd(won.map(a11))} for your ${joinAnd(paid)}`, forOther: `you're ${materialPhrase(dm)} worse off` }
           : gave.length && !onlyPawns
           ? { key: 'material', favors: 'preferred', forOther: `you give up your ${joinAnd(gave)}${got.length ? ` for ${a11(joinAnd(got))}` : ''}` }
           : { key: 'material', favors: 'preferred', forPreferred: `leaves you ${materialPhrase(dm)} better off`, forOther: `you're ${materialPhrase(dm)} worse off` },
@@ -302,6 +309,20 @@ function diffs(a: Snap, b: Snap, ctx: DiffCtx): Reason[] {
 }
 
 /** Cut a line after `k` plies, but don't stop in the middle of an exchange. */
+/**
+ * Past `k`, on to where the line's captures are over: a full move (two plies) with no capture.
+ * Bxb7 Nd7 isn't the end of anything when Bxa8 Qxa8 comes next.
+ */
+function capturesOver(frames: SequenceFrame[], k: number): number {
+  let n = settle(frames, k);
+  while (n < frames.length) {
+    const next = frames.slice(n, n + 2).findIndex((f) => f.san.includes('x'));
+    if (next < 0) break;
+    n = settle(frames, n + next + 1);
+  }
+  return n;
+}
+
 function settle(frames: SequenceFrame[], k: number): number {
   let n = Math.min(k, frames.length);
   while (n < frames.length && n > 0 && frames[n - 1].san.includes('x') && frames[n].to === frames[n - 1].to && frames[n].san.includes('x')) n++;
@@ -386,6 +407,17 @@ function compareCore(input: CompareInput, cuts?: { a: number; b: number; materia
       break;
     }
     if (a >= prefFrames.length && b >= otherFrames.length) break;
+  }
+
+  // Material is told once the captures are over: if the line goes on capturing after the cut
+  // (Bxb7 Nd7, then Bxa8 Qxa8), explain from where they stop.
+  if (chosen?.reasons.some((r) => r.key === 'material')) {
+    const a = capturesOver(prefFrames, chosen.a);
+    const b = capturesOver(otherFrames, chosen.b);
+    if (a !== chosen.a || b !== chosen.b) {
+      const rs = cmp(a, b).filter(stable);
+      if (rs.some((r) => r.key === 'material' && r.favors === (evalPrefers ? 'preferred' : 'other'))) chosen = { a, b, reasons: rs };
+    }
   }
 
   // Within the "equally good" band the evaluations are noise: describe both the same way.

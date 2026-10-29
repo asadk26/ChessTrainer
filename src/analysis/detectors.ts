@@ -151,7 +151,11 @@ function detectMaterialLoss(ctx: DetectorContext, i: number): Finding[] {
   const cap = firstOpponentCapture(p.fenAfter, e.replyLineUci, ctx.userColor);
   // A pawn pushed to a square where it is simply taken, at a real cost.
   const hungPawn = p.piece === 'p' && !c?.ahead && cap?.index === 0 && cap.square === p.to && lost >= 1 && avoidable >= 1 && d >= 15;
-  if (!hungPawn && (lost < 2 || avoidable < 2 || d < threshold)) return [];
+  // Losing a whole minor piece's worth (3+) that the best move kept is a lesson as soon as the move
+  // is an inaccuracy on the app's own scale (gap 6): the win% curve is flat when one side is already
+  // clearly better, so the usual mistake bar (12) misses real piece losses there.
+  const pieceLost = lost >= 3 && avoidable >= 3 && d >= 6;
+  if (!hungPawn && !pieceLost && (lost < 2 || avoidable < 2 || d < threshold)) return [];
   const facts = {
     lost,
     replyLine: e.replyLineSan.slice(0, 5),
@@ -290,8 +294,9 @@ function detectMissedTactic(ctx: DetectorContext, i: number): Finding[] {
   // played lost something (16.Nxf6+ Qxf6 17.Qxf6 Nxf6 is a trade, not "winning the knight").
   const settledGain = e.materialAfterBest - e.materialBefore;
   if (quickGain < 2 || missed < 2 || settledGain < 2) return [];
-  // Missing a whole piece or more is a lesson even when you stay winning — if it cost clearly more
-  // than the near-best margin (the engine compresses scores when one side is already winning).
+  // Missing a whole piece or more is a lesson even when you stay winning, if the cost is more than
+  // engine noise could produce: one evaluation varies by up to ~37cp between runs (95th percentile,
+  // depth 12, measured on the truth games), and a loss is the difference of two, so 75cp.
   if (small && (missed < 3 || settledGain < 3 || e.cpBefore - e.cpAfter < 75)) return [];
 
   const first = playLine(p.fenBefore, best.pv, 1)[0];
