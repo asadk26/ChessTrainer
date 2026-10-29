@@ -57,6 +57,9 @@ function appLabel(f: Finding): string {
     stranded_piece: 'trapped_piece',
     development: 'development',
     king_safety: 'king_safety',
+    // "Moved an already-developed piece again" (v4 clean game: must not be taught on rushikeshdantakale).
+    inefficient_moves: 'moved_piece_twice',
+    premature_attack: 'moved_piece_twice',
   };
   if (byCategory[f.category]) return byCategory[f.category];
   // "Your X was already under attack, and your move didn't deal with it" (v2, sir-Deniy 17...Qb6+).
@@ -199,7 +202,11 @@ let cleanFails = 0;
 for (const c of truth.clean_games) {
   const g = coached.get(c.game)!;
   const taught = new Set<string>();
-  for (const m of g.moments.filter((x) => x.kind === 'mistake')) taught.add(labelAt(g, m.ply).label);
+  // Every finding behind a teaching moment, not only its primary one: each shapes what the moment says.
+  for (const m of g.moments.filter((x) => x.kind === 'mistake')) {
+    taught.add(labelAt(g, m.ply).label);
+    for (const f of g.findings.filter((x) => x.ply === m.ply && x.kind === 'weakness')) taught.add(appLabel(f));
+  }
   for (const f of g.findings.filter((x) => x.kind === 'weakness' && x.confidence !== 'low')) {
     if (g.report?.hurt.some((h) => h.plies?.includes(f.ply) && (!h.category || h.category === f.category))) taught.add(appLabel(f));
   }
