@@ -62,6 +62,18 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'pawn_fork', side: 'refutation' });
     expect(hit!.evidence).toBe('g4 attacks the rook on f3 and the knight on h3 at once');
   });
+  it('a free piece at the far end of a queen line is a missed free capture, named along its line', () => {
+    // Black played 1...h6 when Qxf4 took the undefended bishop along the 4th rank.
+    const hit = detectPattern('2k5/8/8/8/q4B2/8/6PP/6K1 b - - 0 1', 'h7h6', [], ['a4f4'], []);
+    expect(hit).toMatchObject({ tag: 'hanging_piece', side: 'better' });
+    expect(hit!.evidence).toBe('the bishop on f4 was undefended — your queen on a4 could take it along the 4th rank (Qxf4)');
+  });
+  it('taking a knight when a free rook was on offer is a bigger capture missed', () => {
+    // 1.Bxa6 took the knight; 1.Bxa8 took the undefended rook.
+    const hit = detectPattern('r5k1/1B6/n7/8/8/8/6PP/6K1 w - - 0 1', 'b7a6', [], ['b7a8'], []);
+    expect(hit).toMatchObject({ tag: 'bigger_capture', side: 'better' });
+    expect(hit!.evidence).toBe('you took the knight on a6, but Bxa8 won the rook on a8, which was undefended');
+  });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
     const hit = detectPattern(f, 'e1e2', ['e8d7'], ['b5c7', 'e8d7', 'c7a8'], []);

@@ -28,6 +28,7 @@ function appLabel(f: Finding): string {
       knight_fork: ['fork_allowed', 'fork_missed'],
       fork: ['fork_allowed', 'fork_missed'],
       pawn_fork: ['pawn_fork_allowed', 'pawn_fork_missed'],
+      bigger_capture: ['missed_bigger_capture', 'missed_bigger_capture'],
       discovered_attack: ['discovered_attack_allowed', 'discovered_attack_missed'],
       in_between_move: ['in_between_move', 'in_between_move_missed'],
       pin: ['pin_allowed', 'pin_exploit_missed'],

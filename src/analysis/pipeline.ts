@@ -58,11 +58,12 @@ export function annotatePatterns(findings: Finding[], patterns: NonNullable<Stor
   for (const f of findings) {
     const hit = patterns[f.ply];
     if (f.kind !== 'weakness' || !hit || isStateFinding(f)) continue;
-    if (hit.tag === 'hanging_piece') {
+    if (hit.tag === 'hanging_piece' && hit.side === 'refutation') {
       // Allowing mate is about the checks, not about the pawn the first check happens to take.
-      if (hit.side === 'refutation' && hit.hanging && !f.facts.mate) f.facts = { ...f.facts, hanging: hit.hanging };
+      if (hit.hanging && !f.facts.mate) f.facts = { ...f.facts, hanging: hit.hanging };
       continue;
     }
+    // A free piece you didn't take is a named chance like any other (below: missed wins only).
     // The opponent's tactic explains any mistake on that move except a missed win of your own;
     // a tactic in the better line only explains a missed win.
     if (hit.side === 'refutation' ? MISSED.includes(f.category) : !MISSED.includes(f.category)) continue;

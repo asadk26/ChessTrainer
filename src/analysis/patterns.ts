@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -22,6 +22,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   removed_defender: 'Removed defender',
   unblocked_queen: 'Line opened to your queen',
   pawn_fork: 'Pawn fork',
+  bigger_capture: 'Bigger capture',
 };
 
 /** One reusable rule per pattern. */
@@ -38,6 +39,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   removed_defender: 'Before you move a piece or pawn, ask what it was guarding — and whether that is still safe once it leaves.',
   unblocked_queen: 'If your queen sits on a line with an enemy bishop, rook or queen, check what blocks that line before you move the blocker.',
   pawn_fork: 'Before moving a piece, check whether an enemy pawn push could attack it and another piece at once.',
+  bigger_capture: 'Before you capture, list every capture you have and take the one that wins the most.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -54,11 +56,13 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   removed_defender: { refutation: 'took the guard away from one of your pieces', better: 'missed a chance to remove a defender' },
   unblocked_queen: { refutation: 'opened the line to your queen', better: 'missed a line opening onto their queen' },
   pawn_fork: { refutation: 'walked into a pawn fork', better: 'missed a pawn fork' },
+  bigger_capture: { refutation: 'took the smaller prize', better: 'took the smaller prize' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
 export const PATTERN_RULE_MISSED: Partial<Record<PatternTag, string>> = {
   pawn_fork: 'Look at every pawn push you have: one that attacks two pieces at once wins one of them.',
+  hanging_piece: 'After every move, trace your queen’s, rooks’ and bishops’ lines to the end: a piece sitting undefended at the far end is free.',
   knight_fork: 'Look at every square your knights can jump to: one that hits two valuable pieces (or king and piece) wins material.',
   fork: 'Look at every check and attack you have: one move that hits two things — often a check plus a loose piece — wins one of them.',
   pin: 'When an enemy piece stands in front of their king or queen, pin it — then pile up on it.',
@@ -363,9 +367,26 @@ export function detectPattern(fenBefore: string, playedUci: string, replyPv: str
     }
   }
   const best = better[0]?.move;
-  if (best?.captured && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to) && net(better, mover) >= (best.captured === 'p' ? 1 : 2))
-    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was hanging — ${best.san} takes it for free` };
+  if (best?.captured && hangingPieces(fenBefore, other(mover)).some((h) => h.square === best.to) && net(better, mover) >= (best.captured === 'p' ? 1 : 2)) {
+    // You did capture — just the smaller prize.
+    const took = refutation[0]?.move.captured as PieceType | undefined;
+    if (took && PIECE_VALUE[best.captured as PieceType] > PIECE_VALUE[took])
+      return { tag: 'bigger_capture', side: 'better', at: 0, evidence: `you took the ${sq(took, refutation[0].move.to)}, but ${best.san} won the ${sq(best.captured as PieceType, best.to)}, which was undefended` };
+    const line = lineName(best.from, best.to, best.piece as PieceType);
+    const how = line ? `your ${PIECE_NAME[best.piece as PieceType]} on ${best.from} could take it ${line} (${best.san})` : `${best.san} takes it for free`;
+    return { tag: 'hanging_piece', side: 'better', at: 0, evidence: `the ${sq(best.captured as PieceType, best.to)} was undefended — ${how}` };
+  }
   return undefined;
+}
+
+/** "along the 4th rank" — for a long-range piece taking from two or more squares away. */
+function lineName(from: string, to: string, piece: PieceType): string | undefined {
+  if (!['q', 'r', 'b'].includes(piece)) return;
+  const df = Math.abs(from.charCodeAt(0) - to.charCodeAt(0));
+  const dr = Math.abs(Number(from[1]) - Number(to[1]));
+  if (Math.max(df, dr) < 2) return;
+  const nth = (n: string) => `${n}${n === '1' ? 'st' : n === '2' ? 'nd' : n === '3' ? 'rd' : 'th'}`;
+  return dr === 0 ? `along the ${nth(to[1])} rank` : df === 0 ? `down the ${to[0]}-file` : 'along the diagonal';
 }
 
 /** Next-game focus for each pattern, when a pattern decided the game. */
@@ -382,6 +403,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
   back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  bigger_capture: { title: 'Before you capture, compare all your captures.', detail: 'When you can take something, there is often more than one capture on the board. List them all and take the one that wins the most — the first one you see is not always the best.' },
   pawn_fork: { title: 'Watch the pawn pushes that could hit two of your pieces.', detail: 'A pawn is the cheapest attacker on the board: when it attacks two pieces at once, one of them is lost. Before you put a piece on a square an enemy pawn could attack next to another one — and before a retreat to the edge — check every push and capture their pawns have.' },
   unblocked_queen: { title: 'Before you move a blocker, check the line it was blocking.', detail: 'When your queen sits on the same file, rank or diagonal as an enemy bishop, rook or queen, the piece or pawn in between is all that keeps it safe. Before you move that blocker — even to capture something — check what it uncovers.' },
   removed_defender: { title: 'Before you move a piece, ask what it was guarding.', detail: 'Every piece and pawn may be the only thing protecting something else. Before you move one, look at what it defends right now — if that piece or pawn would be left loose, keep the guard or protect it another way first.' },
