@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, isLoose, kingSquare, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -23,6 +23,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   unblocked_queen: 'Line opened to your queen',
   pawn_fork: 'Pawn fork',
   bigger_capture: 'Bigger capture',
+  skewer: 'Skewer',
 };
 
 /** One reusable rule per pattern. */
@@ -40,6 +41,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   unblocked_queen: 'If your queen sits on a line with an enemy bishop, rook or queen, check what blocks that line before you move the blocker.',
   pawn_fork: 'Before moving a piece, check whether an enemy pawn push could attack it and another piece at once.',
   bigger_capture: 'Before you capture, list every capture you have and take the one that wins the most.',
+  skewer: 'Keep your king off the line your queen or rook stands on: a check along it wins the piece behind the king.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -57,6 +59,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   unblocked_queen: { refutation: 'opened the line to your queen', better: 'missed a line opening onto their queen' },
   pawn_fork: { refutation: 'walked into a pawn fork', better: 'missed a pawn fork' },
   bigger_capture: { refutation: 'took the smaller prize', better: 'took the smaller prize' },
+  skewer: { refutation: 'walked into a skewer', better: 'missed a skewer' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -319,7 +322,35 @@ function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternH
   };
 }
 
-const DETECTORS = [backRank, knightFork, discovered, fork, pin, inBetween, trapped, openedLine];
+/** A check along a line with a valuable piece behind the king: the king steps away and the piece behind it falls. */
+function skewer(fs: Frame[]): PatternHit | undefined {
+  for (let i = 0; i < Math.min(fs.length, 5); i++) {
+    const { move, after } = fs[i];
+    if (!move.san.includes('+') || !['b', 'r', 'q'].includes(move.piece)) continue;
+    const me = move.color as Color;
+    const victim = other(me);
+    const k = kingSquare(after, victim);
+    const df = Math.sign(k.charCodeAt(0) - move.to.charCodeAt(0));
+    const dr = Math.sign(Number(k[1]) - Number(move.to[1]));
+    const fd = Math.abs(k.charCodeAt(0) - move.to.charCodeAt(0));
+    const rd = Math.abs(Number(k[1]) - Number(move.to[1]));
+    // A discovered check comes from another piece: the one that moved isn't on the king's line.
+    if (fd !== 0 && rd !== 0 && fd !== rd) continue;
+    let behind: { type: PieceType; square: string } | undefined;
+    for (let f = k.charCodeAt(0) + df, r = Number(k[1]) + dr; f >= 97 && f <= 104 && r >= 1 && r <= 8; f += df, r += dr) {
+      const s = `${String.fromCharCode(f)}${r}`;
+      const u = pieceAt(after, s);
+      if (!u) continue;
+      if (u.color === victim && PIECE_VALUE[u.type] >= 3) behind = { type: u.type, square: s };
+      break;
+    }
+    if (!behind) continue;
+    const taken = fs.slice(i + 1).some((f) => f.move.color === me && f.move.to === behind!.square);
+    if (taken && gainAfter(fs, i, me) >= 2) return { tag: 'skewer', side: 'refutation', at: i, evidence: `${move.san} checks the king, and the ${sq(behind.type, behind.square)} stands behind it on the same line` };
+  }
+}
+
+const DETECTORS = [backRank, knightFork, discovered, skewer, fork, pin, inBetween, trapped, openedLine];
 
 /**
  * The pattern behind a move: first in what punished it (the move played + the opponent's best
@@ -403,6 +434,7 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },
   back_rank: { title: 'Give your king an escape square before the back rank gets busy.', detail: 'When your king sits behind its own pawns with no way out, any rook or queen check on the back rank can be mate. A quiet pawn move (h3 or g3) early on removes the danger.' },
+  skewer: { title: 'Keep your king off the lines your other pieces stand on.', detail: 'A skewer is a check along a line with another of your pieces behind the king: the king has to step away, and the piece behind it is lost. Before every move — especially in the endgame — look at the ranks, files and diagonals your king shares with your queen and rooks, and at which enemy piece could check along them.' },
   bigger_capture: { title: 'Before you capture, compare all your captures.', detail: 'When you can take something, there is often more than one capture on the board. List them all and take the one that wins the most — the first one you see is not always the best.' },
   pawn_fork: { title: 'Watch the pawn pushes that could hit two of your pieces.', detail: 'A pawn is the cheapest attacker on the board: when it attacks two pieces at once, one of them is lost. Before you put a piece on a square an enemy pawn could attack next to another one — and before a retreat to the edge — check every push and capture their pawns have.' },
   unblocked_queen: { title: 'Before you move a blocker, check the line it was blocking.', detail: 'When your queen sits on the same file, rank or diagonal as an enemy bishop, rook or queen, the piece or pawn in between is all that keeps it safe. Before you move that blocker — even to capture something — check what it uncovers.' },

@@ -74,6 +74,12 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'bigger_capture', side: 'better' });
     expect(hit!.evidence).toBe('you took the knight on a6, but Bxa8 won the rook on a8, which was undefended');
   });
+  it('a check with a rook behind the king on the same line is a skewer', () => {
+    // 1...Kd6?? Ra6+ — the king steps off the 6th rank and Rxe6 takes the rook behind it.
+    const hit = detectPattern('R7/3k4/4r3/5K2/8/8/8/8 b - - 0 1', 'd7d6', ['a8a6', 'd6c5', 'a6e6'], [], []);
+    expect(hit).toMatchObject({ tag: 'skewer', side: 'refutation' });
+    expect(hit!.evidence).toBe('Ra6+ checks the king, and the rook on e6 stands behind it on the same line');
+  });
   it('finds a knight fork in the better line (king and rook)', () => {
     const f = 'r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1';
     const hit = detectPattern(f, 'e1e2', ['e8d7'], ['b5c7', 'e8d7', 'c7a8'], []);
