@@ -142,6 +142,21 @@ console.log(`\nGround truth v${truth.version} — the app vs hand-verified label
 splitSummary('tune');
 splitSummary('holdout');
 
+// Holdout per-label totals (labels with 3+ holdout moments only — no per-moment detail).
+{
+  const hold = results.filter((r) => r.m.split === 'holdout');
+  const byLabel = new Map<string, Scored[]>();
+  for (const r of hold) byLabel.set(r.m.primary_label, [...(byLabel.get(r.m.primary_label) ?? []), r]);
+  const rows = [...byLabel.entries()].filter(([, rs]) => rs.length >= 3).sort((a, b) => b[1].length - a[1].length);
+  console.log(`\nholdout by label (3+ moments)\n${pad('label', 28)} ${pad('n', 4)}${pad('exact', 7)}${pad('half', 6)}score`);
+  for (const [l, rs] of rows) {
+    const pts = rs.reduce((a, r) => a + r.score, 0);
+    console.log(`${pad(l, 28)} ${pad(String(rs.length), 4)}${pad(String(rs.filter((r) => r.score === 1).length), 7)}${pad(String(rs.filter((r) => r.score === 0.5).length), 6)}${pts.toFixed(1)}/${rs.length} = ${pct(pts, rs.length)}`);
+  }
+  const bad = hold.filter((r) => r.problem).length;
+  if (bad) console.log(`!! ${bad} holdout moment(s) don't match their game at the given ply (check the truth file)`);
+}
+
 // hanging_piece precision per split: the label the app falls back on, so it should rise as specific detectors take over.
 for (const split of ['tune', 'holdout'] as const) {
   const rs = results.filter((r) => r.m.split === split);
