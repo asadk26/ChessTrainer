@@ -3,6 +3,7 @@ import type { Square } from 'chess.js';
 import type { Arrow, StoredGame } from '../../domain/types';
 import { ARROW_COLORS } from './Board';
 import { moveLabel } from '../../chess/pgn';
+import { asGoodAsBest } from '../../analysis/moveQuality';
 
 export interface DiagramSpec {
   ply: number;
@@ -30,7 +31,9 @@ export function diagramFor(game: StoredGame, ply: number, kind: 'mistake' | 'goo
   }
   const finding = game.findings.find((f) => f.ply === ply && f.confidence !== 'low' && (kind === 'good' ? f.kind === 'strength' : f.kind === 'weakness'));
   const x = kind === 'mistake' ? game.explanations?.[ply] : undefined;
-  if (x) {
+  // A move as good as Stockfish's choice is never labelled a mistake or a missed chance here either
+  // (the same rule as the "Equally good" badge), unless the explanation is about a later move.
+  if (x && !(asGoodAsBest(e) && x.betterPly === ply)) {
     const label = x.kind === 'missed_opportunity' ? 'Missed chance' : 'Mistake';
     const why = x.better ? `${x.better}.` : undefined;
     const problem = x.problem ? `${x.problem.charAt(0).toUpperCase()}${x.problem.slice(1)}.` : undefined;

@@ -1,6 +1,7 @@
 // Deterministic, explainable detectors that turn engine facts + board geometry
 // into coaching findings. Each detector is small and conservative: it is
 // better to miss a pattern than to invent one.
+import { asGoodAsBest } from './moveQuality';
 import { Chess } from 'chess.js';
 import type { Color, Confidence, PieceType, Finding, MoveEval, PlyContext, PlyRecord, PositionEval } from '../domain/types';
 import {
@@ -1565,13 +1566,9 @@ function lessonFits(ctx: DetectorContext, f: Finding): boolean {
 /** Findings about the state of the game (attached to a move, but not about it). */
 const ABOUT_THE_GAME: string[] = ['development', 'time_management', 'passive_piece'];
 
-/** Within this many centipawns of Stockfish's choice, a move is as good as best. */
-export const NEAR_BEST_CP = 30;
+export { NEAR_BEST_CP } from './moveQuality';
 
-/** Stockfish's own move, or within 0.3 of it. With a forced mate on the board, only the best move counts. */
+/** As good as Stockfish's choice (one shared definition with the "Equally good" badge). */
 export function nearBest(e: MoveEval | undefined): boolean {
-  if (!e) return false;
-  if (e.isBest) return true;
-  if (Math.abs(e.cpBefore) >= MATE_CP - 1000 || Math.abs(e.cpAfter) >= MATE_CP - 1000) return false;
-  return e.cpBefore - e.cpAfter <= NEAR_BEST_CP;
+  return asGoodAsBest(e);
 }

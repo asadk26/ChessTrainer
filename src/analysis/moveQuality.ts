@@ -1,7 +1,7 @@
 // How good is a move compared with the engine's best, in practical bands —
 // so a move that's as good as Stockfish's #1 is never called wrong.
 import type { MoveEval, PositionEval } from '../domain/types';
-import { pd, scoreToCp, winPercent } from './evaluation';
+import { MATE_CP, pd, scoreToCp, winPercent } from './evaluation';
 
 export type Quality = 'best' | 'equal' | 'good' | 'inaccuracy' | 'mistake' | 'blunder';
 
@@ -16,6 +16,21 @@ export const QUALITY_LABEL: Record<Quality, string> = {
 
 /** Below this win% gap, two moves are "equally good" (engine noise at these depths is about this big). */
 export const EQUAL_BAND = 2.5;
+
+/** Within this many centipawns of Stockfish's choice, a move is as good as best. */
+export const NEAR_BEST_CP = 30;
+
+/**
+ * The one definition of "as good as Stockfish's choice", used by the badges ("Equally good") and
+ * by every lesson and summary item: no move that passes it is ever called a mistake or a missed
+ * chance. Stockfish's own move, within 30cp, or inside the equal band; a missed mate never is.
+ */
+export function asGoodAsBest(e: MoveEval | undefined): boolean {
+  if (!e) return false;
+  if (e.isBest) return true;
+  if (Math.abs(e.cpBefore) >= MATE_CP - 1000 || Math.abs(e.cpAfter) >= MATE_CP - 1000) return false;
+  return e.cpBefore - e.cpAfter <= NEAR_BEST_CP || pd(e) < EQUAL_BAND;
+}
 
 /**
  * Practical gap between the best move and another (both in centipawns from the
@@ -99,7 +114,9 @@ export const CLASS_ICON: Record<MoveClass, string> = {
  * Both are deliberately rare: a wrong "brilliant" is worse than none.
  */
 export function classifyMove(e: MoveEval, before?: PositionEval): MoveClass {
-  const q = qualityOfGap(pd(e), e.isBest);
+  const band = qualityOfGap(pd(e), e.isBest);
+  // Same rule as the lessons: as good as best is "Equally good"; otherwise never better than "Good".
+  const q: Quality = e.isBest ? 'best' : asGoodAsBest(e) ? 'equal' : band === 'equal' ? 'good' : band;
   if (q !== 'best' && q !== 'equal') return q;
   const sacrifice = e.materialAfterReply <= e.materialBefore - 2 && e.winAfter >= 50 && e.winBefore < 90;
   if (sacrifice) return 'brilliant';

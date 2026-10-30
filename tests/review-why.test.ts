@@ -20,9 +20,15 @@ const pos = (...cps: number[]): PositionEval => ({ fen: '', depth: 12, lines: cp
 
 describe('move badges', () => {
   it('uses the normal quality bands', () => {
-    expect(classifyMove(ev({ isBest: false, winDrop: 30, practicalDrop: 30 }))).toBe('blunder');
+    expect(classifyMove(ev({ isBest: false, cpAfter: -300, winDrop: 30, practicalDrop: 30 }))).toBe('blunder');
     expect(classifyMove(ev({ isBest: false, winDrop: 1, practicalDrop: 1 }))).toBe('equal');
     expect(classifyMove(ev({}), pos(50, 30))).toBe('best');
+  });
+  it('"Equally good" is the same rule the lessons use: within 0.3, or inside the equal band', () => {
+    // 25cp worse in a sharp position (3.5 win%): still as good as best, so never "Inaccuracy".
+    expect(classifyMove(ev({ isBest: false, cpBefore: 20, cpAfter: -5, winDrop: 3.5, practicalDrop: 3.5 }))).toBe('equal');
+    // A missed mate is never "Equally good", however small the win% gap.
+    expect(classifyMove(ev({ isBest: false, cpBefore: 9980, cpAfter: 900, winDrop: 1, practicalDrop: 1 }))).toBe('good');
   });
   it('Great: the only move — every alternative was clearly worse', () => {
     expect(classifyMove(ev({}), pos(40, -250))).toBe('great');
