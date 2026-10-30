@@ -28,7 +28,8 @@ describe('a convincing win with a mating finish', () => {
   });
 
   it('credits the queen-winning tactic', () => {
-    expect(r.didWell.some((d) => /23\.\.\.d3 wins the queen on c2/.test(d.text))).toBe(true);
+    // Credited to the set-up, with what the game showed: the pinned knight fell next move.
+    expect(r.didWell.some((d) => /23\.\.\.d3 attacked the knight on e2\. It couldn't get away: your queen on f2 pins the knight on e2 to the queen on c2\. 24\.\.\.dxe2\+ won it/.test(d.text))).toBe(true);
   });
 
   it("doesn't call Nxc7+ a fork when the queen could take the knight", () => {

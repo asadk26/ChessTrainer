@@ -24,7 +24,7 @@ export interface LineStep {
 const piece = (t: PieceType, s: string, whose: 'your' | 'their') => (t === 'p' ? `${whose} pawn on ${s}` : `${whose} ${PIECE_NAME[t]} on ${s}`);
 
 /** One line on what a move does, from `pov`'s side. */
-export function stepCaption(fenBefore: string, uci: string, pov: Color, prevTo?: string, pv?: string[]): string {
+export function stepCaption(fenBefore: string, uci: string, pov: Color, prevTo?: string, pv?: string[], prevCaptured = false): string {
   const c = new Chess(fenBefore);
   const mover = c.turn() as Color;
   const inCheck = c.inCheck();
@@ -39,7 +39,8 @@ export function stepCaption(fenBefore: string, uci: string, pov: Color, prevTo?:
   const whoseVictim = mine ? 'their' : 'your';
   const parts: string[] = [];
   if (mv.san.includes('#')) parts.push('checkmate');
-  if (mv.captured) parts.push(mv.to === prevTo ? `takes back on ${mv.to}` : `takes ${piece(mv.captured as PieceType, mv.to, whoseVictim)}`);
+  // "Takes back" only after a capture on that same square; taking a piece that just stepped there is a capture.
+  if (mv.captured) parts.push(prevCaptured && mv.to === prevTo ? `takes back on ${mv.to}` : `takes ${piece(mv.captured as PieceType, mv.to, whoseVictim)}`);
   if (mv.promotion) parts.push(`promotes to a ${PIECE_NAME[mv.promotion as PieceType]}`);
   if (mv.san.includes('+') && !mv.san.includes('#')) parts.push('gives check');
   // What else it does: the strongest board purpose that isn't already said.
@@ -67,6 +68,7 @@ export function lineSteps(fen: string, ucis: string[], pov: Color, max = 5): Lin
   const n = Math.min(max, Math.max(Math.min(3, ucis.length), point));
   const c = new Chess(fen);
   const out: LineStep[] = [];
+  let prevCaptured: string | undefined;
   for (let i = 0; i < Math.min(n, ucis.length); i++) {
     const before = c.fen();
     const uci = ucis[i];
@@ -76,7 +78,8 @@ export function lineSteps(fen: string, ucis: string[], pov: Color, max = 5): Lin
     } catch {
       break;
     }
-    out.push({ before, fen: c.fen(), uci, san: mv.san, from: mv.from, to: mv.to, color: mv.color as Color, caption: stepCaption(before, uci, pov, out[i - 1]?.to, ucis.slice(i)) });
+    out.push({ before, fen: c.fen(), uci, san: mv.san, from: mv.from, to: mv.to, color: mv.color as Color, caption: stepCaption(before, uci, pov, out[i - 1]?.to, ucis.slice(i), !!prevCaptured) });
+    prevCaptured = mv.captured;
   }
   return out;
 }

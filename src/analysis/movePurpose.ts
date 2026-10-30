@@ -162,7 +162,10 @@ export function describeMove(inp: DescribeInput): { san: string; purposes: Purpo
     for (let k = 0; k < Math.min(3, frames.length); k += 1) {
       const f = frames[k];
       const victim = pieceAt(fenK, f.to);
-      if (!target && k % 2 === 0 && victim && victim.color === opp && PIECE_VALUE[victim.type] >= 2) target = { type: victim.type, square: f.to, san: f.san, k };
+      // Only a piece that was already standing there once this move is played: one that steps in
+      // later in the line (...Nd4, then Nxd4) isn't won by this move.
+      const there = k === 0 || (pieceAt(frames[0].fen, f.to)?.type === victim?.type && pieceAt(frames[0].fen, f.to)?.color === opp);
+      if (!target && k % 2 === 0 && victim && victim.color === opp && PIECE_VALUE[victim.type] >= 2 && there) target = { type: victim.type, square: f.to, san: f.san, k };
       fenK = f.fen;
     }
     const exchange = target?.type === 'r' && gain < 4;
@@ -180,7 +183,10 @@ export function describeMove(inp: DescribeInput): { san: string; purposes: Purpo
         fenG = f.fen;
       }
     }
-    add({
+    // A big enough capture exists in the line but none of the victims was there yet: the gain comes
+    // later in the line, not from this move, so say nothing about it here.
+    const laterOnly = !target && frames.slice(0, 3).some((f, k) => k % 2 === 0 && k > 0 && f.san.includes('x'));
+    if (!laterOnly) add({
       id: 'win_material',
       text: !target
         ? 'wins material'

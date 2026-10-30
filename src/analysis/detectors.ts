@@ -2,6 +2,7 @@
 // into coaching findings. Each detector is small and conservative: it is
 // better to miss a pattern than to invent one.
 import { asGoodAsBest } from './moveQuality';
+import { pinsBy } from './boardFacts';
 import { Chess } from 'chess.js';
 import type { Color, Confidence, PieceType, Finding, MoveEval, PlyContext, PlyRecord, PositionEval } from '../domain/types';
 import {
@@ -1339,6 +1340,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
   const opp = other(user);
   const out: Finding[] = [];
   const free: number[] = [];
+  const setups: { setup: PlyRecord; capture: PlyRecord }[] = [];
   const simplified: number[] = [];
   const defended: number[] = [];
   let passed: { ply: number; square: string } | undefined;
@@ -1360,7 +1362,14 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       const now = materialBalance(p.fenAfter, user);
       const reply = ctx.plies[i + 1];
       const keptInGame = !reply || materialBalance(reply.fenAfter, user) >= now - 1;
-      if (now - base >= 2 && e.materialAfterReply >= now - 1 && keptInGame && !mated) free.push(p.ply);
+      if (now - base >= 2 && e.materialAfterReply >= now - 1 && keptInGame && !mated) {
+        // Won by the move before? The capturing piece got there on your previous move, the target was
+        // already standing there, and that move attacked it: the credit belongs to the set-up.
+        const setup = ctx.plies[i - 2];
+        const setUpHere = !!setup && setup.color === user && setup.to === p.from && pieceAt(setup.fenBefore, p.to)?.color === other(user) && attackersOf(setup.fenAfter, p.to, user).includes(p.from as never) && !attackersOf(setup.fenBefore, p.to, user).includes(setup.from as never);
+        if (setUpHere) setups.push({ setup, capture: p });
+        else free.push(p.ply);
+      }
     }
 
     // Simplifying when ahead: pieces come off over the next two plies, the lead stays.
@@ -1392,6 +1401,21 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
   }
 
   const lbl = (ply: number) => label(ctx.plies[ply - 1]);
+  for (const { setup, capture } of setups.slice(0, 2)) {
+    const target = pieceAt(setup.fenAfter, capture.to)!;
+    const pin = pinsBy(setup.fenAfter, user).find((x) => x.includes(`${PIECE_NAME[target.type]} on ${capture.to}`));
+    const pinText = pin ? ` It couldn't get away: ${pin.replace(/^the /, 'your ')}.` : ` It couldn't get away.`;
+    out.push({
+      kind: 'strength',
+      category: 'found_tactic',
+      ply: setup.ply,
+      severity: 2,
+      confidence: 'high',
+      relatedPlies: [capture.ply],
+      evidence: `${label(setup)} attacked the ${squareName(target.type, capture.to)}.${pinText} ${label(capture)} won it — a real tactic, and you found it.`,
+      facts: { san: setup.san, setupFor: capture.ply },
+    });
+  }
   if (free.length) {
     out.push({
       kind: 'strength',
@@ -1509,7 +1533,11 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   findings.push(...detectGameLevel(ctx, findings));
   // A move as good as Stockfish's never gets a mistake lesson, whatever followed it. A finding about
   // a pair of moves (a round trip) is judged on the move it blames for the cost.
+  // What the game showed beats the engine line's version of the same move: a set-up credit
+  // (attacked a pinned piece, won it next move) replaces the line-based praise for that move.
+  const setupPlies = new Set(findings.filter((f) => f.facts.setupFor !== undefined).map((f) => f.ply));
   const kept = findings.filter((f) => {
+    if (f.category === 'found_tactic' && f.facts.setupFor === undefined && setupPlies.has(f.ply)) return false;
     // No credit for a move after which you are being mated (taking a sacrificed queen, a "defence"…).
     if (f.kind === 'strength') return !(f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor && ctx.evals[f.ply - 1].cpAfter <= -(MATE_CP - 1000));
     if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;
