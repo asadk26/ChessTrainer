@@ -13,3 +13,19 @@ export function moveCardLine(c: { move: string; label: string; bestSan: string; 
 export function betterLine(bestSan: string, why?: string): string {
   return `${bestSan} was stronger${why ? `: ${why}` : ''}.`;
 }
+
+/** Plain words for how good a position is for one side, from that side's (positive) number. */
+function band(cp: number): string {
+  return cp >= 300 ? 'winning' : cp >= 120 ? 'clearly better' : 'slightly better';
+}
+
+/**
+ * An evaluation that names the side, with your number: "Black slightly better (you −0.5)".
+ * For lines about the opponent's moves, where "you're slightly worse" would be ambiguous.
+ */
+export function sideEvalText(cpForYou: number, you: 'w' | 'b'): string {
+  const mine = `you ${formatCp(cpForYou)}`;
+  if (Math.abs(cpForYou) < 40) return `about equal (${mine})`;
+  const better = cpForYou > 0 ? you : you === 'w' ? 'b' : 'w';
+  return `${better === 'w' ? 'White' : 'Black'} ${band(Math.abs(cpForYou))} (${mine})`;
+}

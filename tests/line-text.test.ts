@@ -31,3 +31,13 @@ describe('credit the move that set it up (vs T_Cel)', () => {
     expect(did).not.toMatch(/wins the queen on b6/);
   });
 });
+
+describe('line evals name the side', () => {
+  it('"Black slightly better (you −0.5)", with your number', async () => {
+    const { sideEvalText } = await import('../src/coach/moveCard');
+    expect(sideEvalText(-50, 'w')).toBe('Black slightly better (you -0.5)');
+    expect(sideEvalText(320, 'b')).toBe('Black winning (you +3.2)');
+    expect(sideEvalText(-150, 'b')).toBe('White clearly better (you -1.5)');
+    expect(sideEvalText(10, 'w')).toBe('about equal (you +0.1)');
+  });
+});

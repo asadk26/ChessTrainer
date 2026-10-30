@@ -899,3 +899,7 @@ a { color: var(--accent); }
 .gr-bubble .line-point { display: none; }
 .gr-dock-sheet .line-steps.at-end { display: none; }
 .ai-ask { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.4rem; }
+
+/* Best-move line: one comparison at the top; the step where material changes stands out. */
+.line-compare { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
+.line-steps li.material, .step-material { font-weight: 650; box-shadow: inset 3px 0 0 var(--accent); padding-left: 6px; }

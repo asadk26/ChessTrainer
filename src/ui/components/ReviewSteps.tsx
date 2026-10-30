@@ -1,7 +1,7 @@
 // Two short interactions for Guided Review:
 //  - "Find it first": stop before one of your mistakes/blunders, one try at a better move, then reveal.
 //  - "Show me": Stockfish's line, one tapped move at a time, each with an arrow and a one-line caption.
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Arrow, StoredGame } from '../../domain/types';
 import type { BoardProps } from './Board';
 import { Verdict, type Panels } from './reviewParts';
@@ -18,7 +18,9 @@ import { positionCp } from '../../analysis/evaluation';
 import { evalText } from '../../coach/momentContext';
 import { moveLabel } from '../../chess/pgn';
 import { uciToSan } from '../../chess/board';
-import { evaluateMove } from '../actions';
+import { analysePosition, evaluateMove } from '../actions';
+import { sideEvalText } from '../../coach/moveCard';
+import { COLOR_NAME, materialBalance } from '../../chess/board';
 
 const arrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
 
@@ -149,13 +151,41 @@ export function useLineView(game: StoredGame) {
       });
       if (c?.clear) compare = c.summary;
     }
+    // A line for the opponent's move names the side: "If Black had played Qa5: Black slightly better (you −0.5)".
+    const theirs = view.kind === 'better' && p.color !== game.userColor;
+    const evalLine = cp === undefined ? '' : theirs ? `If ${COLOR_NAME[p.color]} had played ${steps[0].san}: ${sideEvalText(cp, game.userColor)}.` : `Stockfish: ${bandText(cp)} (${evalText(cp)}).`;
     const parts = [
       material ? `${material.charAt(0).toUpperCase()}${material.slice(1)}.` : 'No material changes hands in these moves.',
-      cp !== undefined ? `Stockfish: ${bandText(cp)} (${evalText(cp)}).` : '',
+      evalLine,
       compare ?? '',
     ];
     return parts.filter(Boolean).join(' ');
   }, [game, view?.ply, view?.kind, steps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The eval bar follows the line: each step's position, from the shared engine (cached), White's view.
+  const [stepCp, setStepCp] = useState<Record<string, number>>({});
+  const stepFen = view && steps.length ? (view.idx >= 0 ? steps[view.idx].fen : undefined) : undefined;
+  useEffect(() => {
+    if (!stepFen || stepCp[stepFen] !== undefined) return;
+    let live = true;
+    void analysePosition(stepFen, 12).then((pos) => {
+      if (!live || !pos) return;
+      const white = stepFen.split(' ')[1] === 'w';
+      setStepCp((m) => ({ ...m, [stepFen]: white ? positionCp(pos) : -positionCp(pos) }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [stepFen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // One comparison at the top of the best line for your own move: "Your move: 24.Qh4 (+0.3) · Best line: Qc2 (+2.5)".
+  const compareTop = useMemo(() => {
+    if (!view || view.kind !== 'better' || !game.analysis) return undefined;
+    const p = game.plies[view.ply - 1];
+    const e = game.analysis.moves[view.ply - 1];
+    if (!e || p.color !== game.userColor || !e.bestSan || e.isBest) return undefined;
+    return `Your move: ${moveLabel(p)} (${evalText(e.cpAfter)}) · Best line: ${e.bestSan} (${evalText(e.cpBefore)})`;
+  }, [game, view?.ply, view?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const panels = ((): Panels | null => {
     if (!view || !steps.length) return null;
@@ -178,9 +208,10 @@ export function useLineView(game: StoredGame) {
           <p className="move-caption">
             <b>{title}</b> <span className="muted">· move {Math.max(0, view.idx + 1)} of {steps.length}</span>
           </p>
+          {compareTop && <p className="line-compare">{compareTop}</p>}
           <ol className={`line-steps ${last && point ? 'at-end' : ''}`}>
             {steps.map((x, i) => (
-              <li key={i} className={i === view.idx ? 'on' : i < view.idx ? 'done' : 'todo'}>
+              <li key={i} className={`${i === view.idx ? 'on' : i < view.idx ? 'done' : 'todo'}${i <= view.idx && materialBalance(x.before, 'w') !== materialBalance(x.fen, 'w') ? ' material' : ''}`}>
                 {i <= view.idx ? <CoachText text={x.caption} /> : <span className="muted">…</span>}
               </li>
             ))}
@@ -222,6 +253,10 @@ export function useLineView(game: StoredGame) {
     ? {
         title: view.kind === 'refutation' ? `What goes wrong after ${moveLabel(game.plies[view.ply - 1])}` : `The better line instead of ${moveLabel(game.plies[view.ply - 1])}`,
         caption: view.idx >= 0 ? steps[view.idx].caption : 'Tap Next to play the first move.',
+        compare: compareTop,
+        /** White's view, for the eval bar: the current step's position (undefined until the engine answers). */
+        whiteCp: view.idx >= 0 ? stepCp[steps[view.idx].fen] : undefined,
+        materialChange: view.idx >= 0 && materialBalance(steps[view.idx].before, 'w') !== materialBalance(steps[view.idx].fen, 'w'),
         point: view.idx >= steps.length - 1 ? point : undefined,
         idx: view.idx,
         total: steps.length,

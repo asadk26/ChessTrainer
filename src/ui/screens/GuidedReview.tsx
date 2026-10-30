@@ -730,7 +730,8 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
                     ? 'A sound sacrifice — Stockfish agrees.'
                     : '';
   const viewPly = active ? active.ply - 1 : steps ? ply : ply;
-  const evalHere = practice ? undefined : whites[viewPly];
+  // Stepping through a line: the bar follows the line's positions (until the engine answers, the game's).
+  const evalHere = practice ? undefined : steps?.whiteCp ?? whites[viewPly];
   const yourView = (w: number) => (game.userColor === 'w' ? w : -w);
   const browseHead =
     ply === 0 ? (
@@ -849,7 +850,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
               </>
             }
           >
-            <CoachText text={steps!.caption} />
+            <CoachText text={steps!.caption} className={steps!.materialChange ? 'step-material' : undefined} />
           </CoachBubble>
         ) : (
           <CoachBubble tall onMore={() => setSheet('more')}>
