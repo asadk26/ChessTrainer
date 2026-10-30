@@ -24,7 +24,7 @@ import { moveLabel } from '../../chess/pgn';
 import { COLOR_NAME, other, playLine } from '../../chess/board';
 import { formatCp } from '../../analysis/evaluation';
 import { engineNotes, verdictOf } from '../../analysis/engineReview';
-import { closeToBest, evaluateMove, markMomentDone } from '../actions';
+import { closeToBest, evaluateMove, markMomentDone, markReviewed } from '../actions';
 import { usesEngineReply } from '../../analysis/moments';
 import { seenBefore } from '../../coach/seenBefore';
 import { EVAL_LEGEND, betterLine, moveCardLine } from '../../coach/moveCard';
@@ -749,6 +749,11 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const goodOrWorse = !!cls && ['good', 'inaccuracy', 'mistake', 'blunder'].includes(cls);
   const canRefute = (game.analysis?.positions[ply]?.lines[0]?.pv.length ?? 0) > 0;
   const atEnd = ply >= game.plies.length;
+  // Reaching the end of the game in Guided Review finishes the review (it leaves "Most to learn").
+  const { refresh: refreshGames } = useApp();
+  useEffect(() => {
+    if (atEnd && mode === 'browse' && !game.reviewedAt) void markReviewed(game.id).then(() => refreshGames());
+  }, [atEnd, mode, game.id, game.reviewedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Try your own moves: instead of your move here, or — after your opponent's move — as your reply.
   const tryPly = ply > 0 && current?.color === game.userColor ? ply : game.plies[ply]?.color === game.userColor ? ply + 1 : undefined;
   const nextLabel = atEnd ? 'Drills' : upcoming && !doneIds.has(upcoming.id) ? 'Next: stop & think' : 'Next';

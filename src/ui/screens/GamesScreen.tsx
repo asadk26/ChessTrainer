@@ -6,6 +6,7 @@ import { userOutcome } from '../../chess/outcome';
 import { navigate, useApp } from '../store';
 import { analysisQueue, deleteGame, isAnalysisRunning, pendingAnalysis, runAnalysisQueue } from '../actions';
 import { ChessComSync } from '../components/ChessComSync';
+import { rankGames } from '../../coach/mostToLearn';
 import { Icon, ScreenHeader } from '../components/AppShell';
 
 const CHIPS: { id: GameFilter; label: string }[] = [
@@ -20,7 +21,14 @@ export function GamesScreen() {
   const { games } = useApp();
   const [on, setOn] = useState<Set<GameFilter>>(new Set());
   const [opening, setOpening] = useState('');
-  const shown = useMemo(() => filterGames(games, on, opening || undefined), [games, on, opening]);
+  const [sort, setSort] = useState<'date' | 'learn'>('date');
+  const filtered = useMemo(() => filterGames(games, on, opening || undefined), [games, on, opening]);
+  // "Most to learn": ranked games first (score), then the rest (reviewed, not analyzed yet) by date.
+  const shown = useMemo(() => {
+    if (sort === 'date') return filtered;
+    const rank = new Map(rankGames(games).map((r, i) => [r.game.id, i]));
+    return [...filtered].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+  }, [filtered, games, sort]);
   const openings = useMemo(() => openingCounts(games), [games]);
   const toggle = (id: GameFilter) => setOn((s) => (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set([...s, id])));
   const filtering = on.size > 0 || !!opening;
@@ -63,6 +71,16 @@ export function GamesScreen() {
               Clear
             </button>
           )}
+        </div>
+      )}
+      {games.length > 0 && (
+        <div className="seg sort-seg" role="group" aria-label="Sort games">
+          <button className={`seg-btn ${sort === 'date' ? 'on' : ''}`} aria-pressed={sort === 'date'} onClick={() => setSort('date')}>
+            Date
+          </button>
+          <button className={`seg-btn ${sort === 'learn' ? 'on' : ''}`} aria-pressed={sort === 'learn'} onClick={() => setSort('learn')}>
+            Most to learn
+          </button>
         </div>
       )}
 

@@ -10,6 +10,7 @@ import { chesscomFetch } from '../sync/chesscomClient';
 import { REPORT_VERSION } from '../coach/report';
 import { type ImportSummary } from '../storage/repository';
 import { repo } from '../storage/repo';
+import { gamesToAnalyzeNext } from '../coach/mostToLearn';
 import { createBrowserEngine, getBrowserEngine } from '../engine/browserEngine';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames, waitingForAnalysis } from '../analysis/pipeline';
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
@@ -154,6 +155,25 @@ export async function markMomentDone(gameId: string, momentId: string) {
   const game = await repo.getGame(gameId);
   if (!game || game.completedMomentIds.includes(momentId)) return;
   await repo.saveGame({ ...game, completedMomentIds: [...game.completedMomentIds, momentId] });
+}
+
+/** You finished Guided Review: the game leaves "Most to learn" (until you review it again). */
+export async function markReviewed(gameId: string) {
+  const game = await repo.getGame(gameId);
+  if (!game || game.reviewedAt) return;
+  await repo.saveGame({ ...game, reviewedAt: Date.now() });
+}
+
+/** "Review again": back into "Most to learn". */
+export async function reviewAgain(gameId: string) {
+  const game = await repo.getGame(gameId);
+  if (!game) return;
+  await repo.saveGame({ ...game, reviewedAt: undefined });
+}
+
+/** Fewer than 3 games ready to review: analyse up to 5 of the most recent waiting ones, losses first. */
+export function analyzeForReview(onGame?: () => void): Promise<void> {
+  return runAnalysisQueue(undefined, onGame, { pick: gamesToAnalyzeNext });
 }
 
 /** Mover's view of a candidate move (win% and centipawns), from the live engine. Undefined if unavailable. */
@@ -314,10 +334,12 @@ export const analysisQueue = {
  * Analyse up to `limit` waiting games (all when omitted). `onGame` runs after each one.
  * `newest`: take the most recent waiting games (still analysed oldest first among them).
  */
-export async function runAnalysisQueue(limit: number | undefined, onGame?: () => void, opts: { newest?: boolean } = {}): Promise<void> {
+export async function runAnalysisQueue(limit: number | undefined, onGame?: () => void, opts: { newest?: boolean; pick?: (games: StoredGame[]) => StoredGame[] } = {}): Promise<void> {
   if (queue.running) return;
-  const pending = pendingAnalysis(await repo.listGames());
-  const todo = limit === undefined ? pending : opts.newest ? pending.slice(-limit) : pending.slice(0, limit);
+  const all = await repo.listGames();
+  const pending = pendingAnalysis(all);
+  const picked = opts.pick ? opts.pick(all).filter((g) => pending.some((p) => p.id === g.id)) : undefined;
+  const todo = picked ?? (limit === undefined ? pending : opts.newest ? pending.slice(-limit) : pending.slice(0, limit));
   if (!todo.length) return;
   setQueue({ running: true, stopping: false, done: 0, total: todo.length, failed: 0, current: undefined });
   try {

@@ -903,3 +903,9 @@ a { color: var(--accent); }
 /* Best-move line: one comparison at the top; the step where material changes stands out. */
 .line-compare { margin: 0 0 0.2rem; font-size: 0.82rem; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
 .line-steps li.material, .step-material { font-weight: 650; box-shadow: inset 3px 0 0 var(--accent); padding-left: 6px; }
+
+/* "Up next to review" */
+.up-next-card .reason-chips { margin: 0.4rem 0 0.6rem; }
+.chip.static { cursor: default; pointer-events: none; }
+.up-next-done { margin: 0.2rem 0 0; }
+.sort-seg { margin: 0.2rem 0 0.6rem; max-width: 280px; }

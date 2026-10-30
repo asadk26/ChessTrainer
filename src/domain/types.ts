@@ -418,6 +418,8 @@ export interface StoredGame {
   report?: GameReport;
   drillIds: string[];
   completedMomentIds: string[];
+  /** When you finished Guided Review for this game (excluded from "Most to learn" until you review again). */
+  reviewedAt?: number;
   /** Where the game came from, when it was synced rather than pasted. */
   source?: { site: 'chesscom'; id: string; url: string; timeClass?: string };
   /** The player's own word on how the game ended, overriding the PGN result (which may be missing or copied wrong). */

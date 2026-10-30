@@ -5,7 +5,7 @@ import { useState } from 'react';
 import type { StoredGame } from '../../domain/types';
 import { OUTCOME_LABEL, userOutcome, type Outcome } from '../../chess/outcome';
 import { shortDate } from '../../analysis/gameList';
-import { setOutcome } from '../actions';
+import { reviewAgain, setOutcome } from '../actions';
 import { copyText } from '../clipboard';
 import { navigate, useApp } from '../store';
 import { Icon } from './AppShell';
@@ -32,6 +32,7 @@ export function GameHeader({ game, tab, showTabs, betaOn, llmState }: { game: St
         <span>{game.userColor === 'w' ? 'White' : 'Black'}</span>
         <span>{shortDate(game)}</span>
         <CopyPgn pgn={game.pgn} />
+        {game.reviewedAt && <ReviewAgain game={game} />}
         {status && <span>{status}</span>}
       </p>
       {showTabs && (
@@ -45,6 +46,19 @@ export function GameHeader({ game, tab, showTabs, betaOn, llmState }: { game: St
         </nav>
       )}
     </header>
+  );
+}
+
+/** Reviewed: say so, and offer to put the game back into "Most to learn". */
+function ReviewAgain({ game }: { game: StoredGame }) {
+  const { refresh } = useApp();
+  return (
+    <span>
+      Reviewed ✓{' '}
+      <button className="link small" onClick={() => void reviewAgain(game.id).then(() => (refresh(), navigate(`/game/${game.id}/review`)))}>
+        Review again
+      </button>
+    </span>
   );
 }
 

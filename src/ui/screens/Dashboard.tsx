@@ -1,11 +1,12 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { StoredGame } from '../../domain/types';
 import { THEMES } from '../../domain/categories';
 import { navigate, useApp } from '../store';
 import { SAMPLE_PGN } from '../../fixtures/sampleGame';
 import { parsePgn } from '../../chess/pgn';
 import { userOutcome } from '../../chess/outcome';
-import { analysisQueue, importGame, isAnalysisRunning, pendingAnalysis, runAnalysisQueue } from '../actions';
+import { analysisQueue, analyzeForReview, importGame, isAnalysisRunning, pendingAnalysis, runAnalysisQueue } from '../actions';
+import { gamesToAnalyzeNext, rankGames, reviewedToday } from '../../coach/mostToLearn';
 import { gamePlayedAt, isRealGame } from '../../analysis/pipeline';
 import { gameStats } from '../../analysis/engineReview';
 import { gameOpening, opponentRating, shortDate } from '../../analysis/gameList';
@@ -60,6 +61,7 @@ export function Dashboard() {
     <div className="narrow home">
       <ScreenHeader title="Chess Coach" actions={gear} />
       <FocusCard />
+      <UpNextCard />
       <LatestGameCard />
       <StatsStrip />
     </div>
@@ -86,6 +88,76 @@ function FocusCard() {
     </section>
   );
 }
+
+/**
+ * "Up next to review": the one game with the most to learn. After a review today, one game is
+ * plenty: the card says so (another is a tap away, never pushed). Never auto-advances.
+ */
+function UpNextCard() {
+  const { games, refresh } = useApp();
+  const q = useSyncExternalStore(analysisQueue.subscribe, analysisQueue.get);
+  const [another, setAnother] = useState(false);
+  const ranked = useMemo(() => rankGames(games), [games]);
+  const done = reviewedToday(games) && !another;
+  // Fewer than 3 games ready: analyse a few recent ones (losses first) in the background, once.
+  const queued = useRef(false);
+  useEffect(() => {
+    if (queued.current || q.running || !gamesToAnalyzeNext(games).length) return;
+    queued.current = true;
+    void analyzeForReview(() => void refresh()).then(() => refresh());
+  }, [games, q.running, refresh]);
+
+  const next = ranked[0];
+  return (
+    <section className="card up-next-card">
+      <span className="eyebrow">Up next to review</span>
+      {done ? (
+        <p className="up-next-done">
+          Done for today: one game is plenty.{' '}
+          {next && (
+            <button className="link small" onClick={() => setAnother(true)}>
+              Show another
+            </button>
+          )}
+        </p>
+      ) : next ? (
+        <>
+          <button className="latest-game" onClick={() => navigate(`/game/${next.game.id}/review`)}>
+            <span className={`result ${resultClass(next.game)[1]}`}>{resultClass(next.game)[0]}</span>
+            <span className="gr-main">
+              <span className="gr-top">
+                <span className={`side-dot ${next.game.userColor}`} aria-label={next.game.userColor === 'w' ? 'as White' : 'as Black'} />
+                <b className="gr-opp">{next.game.opponentName}</b>
+              </span>
+              <span className="muted small gr-sub">
+                {gameOpening(next.game).name} · {shortDate(next.game)}
+              </span>
+            </span>
+          </button>
+          {next.chips.length > 0 && (
+            <div className="chips reason-chips">
+              {next.chips.map((c) => (
+                <span key={c} className="chip static">
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+          <button className="btn primary" onClick={() => navigate(`/game/${next.game.id}/review`)}>
+            Start review
+          </button>
+        </>
+      ) : (
+        <p className="muted">{q.running ? 'Analyzing your recent games…' : 'Nothing waiting to review. Play a game, or sync your latest.'}</p>
+      )}
+    </section>
+  );
+}
+
+const resultClass = (g: StoredGame) => {
+  const o = userOutcome(g);
+  return o === 'win' ? ['W', 'won'] : o === 'loss' ? ['L', 'lost'] : o === 'draw' ? ['D', 'draw'] : ['?', 'draw'];
+};
 
 const firstSentence = (s?: string) => s?.match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? s;
 
