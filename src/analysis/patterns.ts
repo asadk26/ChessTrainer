@@ -312,6 +312,15 @@ function inBetween(fs: Frame[]): PatternHit | undefined {
   }
 }
 
+/**
+ * The move that "traps" a piece is itself a capture worth at least as much: the material it wins
+ * there is the point, and the trap is a side effect. No trap label then (the material-loss finding
+ * keeps its own label, or none). A pawn grab that traps a rook (Bxb2, then Bxa1) is still a trap.
+ */
+function sideEffectTrap(move: Move, trapped: PieceType): boolean {
+  return !!move.captured && PIECE_VALUE[move.captured as PieceType] >= PIECE_VALUE[trapped];
+}
+
 function trapped(fs: Frame[]): PatternHit | undefined {
   for (let i = 0; i < Math.min(fs.length, 4); i++) {
     const { move, after } = fs[i];
@@ -321,6 +330,7 @@ function trapped(fs: Frame[]): PatternHit | undefined {
     if (move.san.includes('+') || move.san.includes('#')) continue;
     for (const t of attackedEnemyPieces(after, move.to)) {
       if (t.type === 'k' || t.type === 'p' || PIECE_VALUE[t.type] < 3) continue;
+      if (sideEffectTrap(move, t.type)) continue;
       const c = new Chess(after);
       if (c.turn() !== opp) continue;
       const escapes = c.moves({ square: t.square as Square, verbose: true }).filter((m) => attackersOf(m.after, m.to, me).length === 0 || PIECE_VALUE[(m.captured as PieceType) ?? 'p'] >= PIECE_VALUE[t.type]);
@@ -399,6 +409,7 @@ function stuckDeep(fenBefore: string, fs: Frame[], mover: Color): PatternHit | u
   const opp = other(mover);
   for (const t of attackedEnemyPieces(hit.after, hit.move.to)) {
     if (t.type === 'k' || PIECE_VALUE[t.type] < 3 || t.square === played.to || relativeRank(t.square, mover) < 6) continue;
+    if (sideEffectTrap(hit.move, t.type)) continue;
     const c = new Chess(hit.after);
     if (c.turn() !== mover) continue;
     const safe = c.moves({ square: t.square as Square, verbose: true }).filter((m) => attackersOf(m.after, m.to, opp).length === 0);
