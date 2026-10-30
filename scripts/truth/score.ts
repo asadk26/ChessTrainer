@@ -198,6 +198,17 @@ for (const split of ['tune', 'holdout'] as const) {
   if (bad) console.log(`!! ${bad} holdout moment(s) don't match their game at the given ply (check the truth file)`);
 }
 
+// --holdout-wrong: for each holdout wrong label, only what the app said and which detector said it
+// (no position, game or truth mechanism).
+if (process.argv.includes('--holdout-wrong')) {
+  console.log('\nholdout wrong labels (app label · confidence · detector)');
+  for (const r of results.filter((x) => x.m.split === 'holdout' && x.score === 0 && !['unclassified', 'not_flagged'].includes(x.got.label))) {
+    const f = r.got.finding!;
+    const detector = f.facts.pattern ? `pattern ${f.facts.pattern} (${f.facts.patternSide}) on ${f.category}` : `category ${f.category}${f.facts.hanging ? ` (hanging: ${f.facts.hanging})` : ''}`;
+    console.log(`  ${pad(r.got.label, 26)} ${pad(f.confidence ?? 'unset', 7)} ${detector}`);
+  }
+}
+
 // hanging_piece precision per split: the label the app falls back on, so it should rise as specific detectors take over.
 for (const split of ['tune', 'holdout'] as const) {
   const rs = results.filter((r) => r.m.split === split);
