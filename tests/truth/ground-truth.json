@@ -1,6 +1,7 @@
 {
-  "version": 5,
+  "version": 6,
   "changelog": [
+    "v6 (2026-10-30): added the Oct 30 game vs T_Cel as a tune near-clean game with summary/explanation expectations.",
     "v5 (2026-10-29): added 6 tune moments for the weak holdout labels: queen-check forks, a queen double attack, a pawn fork, and two threat_ignored (one via a discovered attack). Holdout unchanged.",
     "v4 (2026-10-29): added rushikeshdantakale (Oct 29) as a tune game: 5.Qb3 moment, near-clean game, and summary expectations (no mid-exchange material claims; 11.Bg5 is best at depth 20).",
     "v3 (2026-10-29): unsealed RA_Recto 22...g6, akash-264 34.Qe2, maladly 18...a5 (now tune); added 26 fresh holdout moments from the 30-day export; new labels piece_to_rim (secondary only), mate_threat, queen_check_fork (secondary only).",
@@ -2008,6 +2009,16 @@
       ]
     },
     {
+      "game": "chunkmonkey420 vs T_Cel",
+      "my_color": "white",
+      "note": "Near-clean win. 8.Bg5 and 9.Bd2 were within ~0.3 of best (9.Bxf6 was top at depth 20, +0.3; Bh4 +0.1): no \"what hurt\" item or tempo lesson. The one real slip is 24.Qh4 (+2.5 -> +0.3; Qc2/Qd1 best): a positional loss of the queenside edge with no single tactic, so a vague-but-honest note or unclassified is fine; an invented tactic is not. Key positive: 26.a4! hitting the b5 bishop, winning it after 25...Bxb5.",
+      "must_not_lesson": [
+        "hanging_piece",
+        "development",
+        "moved_piece_twice"
+      ]
+    },
+    {
       "game": "chunkmonkey420 vs 20Jjpb23",
       "my_color": "white",
       "note": "Clean win: 9.Qa4+ forked king and the a6 knight.",
@@ -2466,6 +2477,23 @@
       "result": "1-0",
       "link": null,
       "movetext": "1. c4 e5 2. g3 Nf6 3. Bg2 Ng4 4. Nc3 Nxf2 5. Kxf2 Bc5+ 6. e3 Qf6+ 7. Nf3 c6 8. Ne4 Qe7 9. Nxc5 Qxc5 10. b3 Na6 11. d4 exd4 12. exd4 Qf5 13. Re1+ Kd8 14. Bb2 Nb4 15. Kg1 f6 16. Ba3 Nc2 17. Nh4 Qa5 18. Qxc2 Qxa3 19. Nf5 g6 20. Nh6 Rf8 21. Qe2 d5 22. c5 Bd7 23. Qe7+ Kc7 24. Qd6+ 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs T_Cel",
+      "my_color": "white",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. c4 e5 2. g3 Bc5 3. Bg2 Nf6 4. Nc3 O-O 5. Nf3 Nc6 6. O-O d6 7. d3 Rb8 8. Bg5 h6 9. Bd2 Bd7 10. a3 a6 11. b4 Ba7 12. Nd5 Nxd5 13. cxd5 Ne7 14. Qb3 c6 15. dxc6 bxc6 16. e3 c5 17. Rac1 a5 18. Bc3 Nc6 19. b5 Be6 20. Qa4 Ne7 21. Bxa5 Bb6 22. Bxb6 Qxb6 23. Rb1 Bd7 24. Qh4 Ng6 25. Qh5 Bxb5 26. a4 Qa6 27. axb5 Rxb5 28. Rxb5 Qxb5 29. d4 cxd4 30. exd4 Qe2 31. Re1 1-0",
+      "expected_summary": {
+        "story": [
+          "24.Qh4 gave back most of the edge (queen left the queenside)",
+          "25...Bxb5? 26.a4! won the bishop"
+        ],
+        "must_not_flag": [
+          "8.Bg5 / 9.Bd2 as a mistake or \"What hurt you\" item (both within ~0.3 of best)",
+          "any line explanation that credits a move with a capture that only happens later in the line (\"Bh4 wins the knight on d4\" when no knight is on d4)"
+        ]
+      }
     },
     {
       "game": "chunkmonkey420 vs 20Jjpb23",
