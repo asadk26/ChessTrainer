@@ -1,6 +1,7 @@
 {
-  "version": 6,
+  "version": 7,
   "changelog": [
+    "v7 (2026-11-04): Seannty91 game as tune (3 moments; Claude Code has analyzed it). 7 fresh holdout moments from Nov 1-4 games Claude Code has not seen (Enrikomat, dovanminhh15, bimmer_playground_ph, Ahmed-taimour).",
     "v6 (2026-10-30): added the Oct 30 game vs T_Cel as a tune near-clean game with summary/explanation expectations.",
     "v5 (2026-10-29): added 6 tune moments for the weak holdout labels: queen-check forks, a queen double attack, a pawn fork, and two threat_ignored (one via a discovered attack). Holdout unchanged.",
     "v4 (2026-10-29): added rushikeshdantakale (Oct 29) as a tune game: 5.Qb3 moment, near-clean game, and summary expectations (no mid-exchange material claims; 11.Bg5 is best at depth 20).",
@@ -1961,6 +1962,278 @@
       ],
       "confidence": "high",
       "split": "tune"
+    },
+    {
+      "id": "Seannty91-32b-Bf5",
+      "game": "Seannty91 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 32,
+      "played": "Bf5",
+      "ply": 64,
+      "fen_before": "r3r3/3k4/p1p1bp2/2Qp4/6q1/3R4/P5PP/4R2K b - - 10 32",
+      "kind": "mistake",
+      "primary_label": "removed_defender",
+      "secondary_labels": [
+        "sacrifice_allowed",
+        "king_safety"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 423,
+        "eval_after_cp_mover": -114,
+        "win_pct_drop": 42.9,
+        "best_move": "Qf4",
+        "opponent_best_reply": "Rxd5+"
+      },
+      "mechanism": "The e6 bishop was the second guard of d5. Bf5 took it away, so 33.Rxd5+ worked as a sacrifice that ripped open the black king (+3.5 -> -1.4). Bf7, Rac8 or Qf4 kept about +3.5.",
+      "expected_lesson": "Ask what the moving piece was guarding, especially squares next to your king.",
+      "must_not_label": [
+        "hanging_piece",
+        "allowed_counterplay"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "Seannty91-33b-cxd5",
+      "game": "Seannty91 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 33,
+      "played": "cxd5",
+      "ply": 66,
+      "fen_before": "r3r3/3k4/p1p2p2/2QR1b2/6q1/8/P5PP/4R2K b - - 0 33",
+      "kind": "mistake",
+      "primary_label": "mate_allowed",
+      "secondary_labels": [
+        "sacrifice_accepted"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -145,
+        "eval_after_cp_mover": -9940,
+        "win_pct_drop": 36.6,
+        "best_move": "Kc7",
+        "opponent_best_reply": "Qxd5+"
+      },
+      "mechanism": "Taking the rook opens the d-file and c-file for Qxd5+ and Rc1+, leading to mate. 33...Kc7 declined and stayed in the game.",
+      "expected_lesson": "When your king is exposed, check the opponent's checks before accepting a sacrifice.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
+    },
+    {
+      "id": "Seannty91-23b-Be6",
+      "game": "Seannty91 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 23,
+      "played": "Be6",
+      "ply": 46,
+      "fen_before": "r4rk1/5bpp/p1p2p2/3p1N2/3P4/5R1Q/P2q2PP/5RK1 b - - 3 23",
+      "kind": "mistake",
+      "primary_label": "discovered_attack_allowed",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 288,
+        "eval_after_cp_mover": 55,
+        "win_pct_drop": 19.2,
+        "best_move": "Rae8",
+        "opponent_best_reply": "Nh6+"
+      },
+      "mechanism": "Be6 put the bishop on the h3-queen's diagonal behind the f5 knight: 24.Nh6+ checks and uncovers Qh3 onto e6. White missed it.",
+      "expected_lesson": "Before placing a piece, check whether an enemy piece in front of a long-range attacker can move with check.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "medium",
+      "split": "tune"
+    },
+    {
+      "id": "Enrikomat-16-Bxb7",
+      "game": "chunkmonkey420 vs Enrikomat",
+      "my_color": "white",
+      "move_number": 16,
+      "played": "Bxb7",
+      "ply": 31,
+      "fen_before": "r2n1rk1/ppp3p1/7p/4pP1n/2P5/8/PP1BPPBP/R4RK1 w - - 0 16",
+      "kind": "mistake",
+      "primary_label": "defended_target_grab",
+      "secondary_labels": [],
+      "engine": {
+        "eval_before_cp_mover": 228,
+        "eval_after_cp_mover": -395,
+        "win_pct_drop": 50.9,
+        "best_move": "Bd5+",
+        "opponent_best_reply": "Nxb7"
+      },
+      "mechanism": "The b7 pawn was defended by the d8 knight: Bxb7 Nxb7 loses the bishop (+2.3 -> -4.0). 16.Bd5+ was best.",
+      "expected_lesson": "Count a target's defenders before capturing it.",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "dovanminhh15-12b-Qc7",
+      "game": "dovanminhh15 vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 12,
+      "played": "Qc7",
+      "ply": 24,
+      "fen_before": "r3kb1r/pp3ppp/1qn1p3/5b2/2QP4/2P1PN1P/P4PP1/1RB1KB1R b Kkq - 3 12",
+      "kind": "missed_opportunity",
+      "primary_label": "free_capture_missed",
+      "secondary_labels": [
+        "queen_line_file"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 697,
+        "eval_after_cp_mover": -204,
+        "win_pct_drop": 60.8,
+        "best_move": "Qxb1",
+        "opponent_best_reply": "Bd3"
+      },
+      "mechanism": "12.Rb1?? put the rook on the open b-file facing the b6 queen with no defender: 12...Qxb1 wins a rook.",
+      "expected_lesson": "After every opponent move, ask what it left undefended; trace your queen's lines to the end.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "bimmer_playground_ph-25b-Rxc8",
+      "game": "bimmer_playground_ph vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 25,
+      "played": "Rxc8",
+      "ply": 50,
+      "fen_before": "r1N2k2/pp3pp1/7p/1n3p2/3P3P/1PP3P1/P1KN1P2/1Qb5 b - - 0 25",
+      "kind": "missed_opportunity",
+      "primary_label": "fork_missed",
+      "secondary_labels": [
+        "in_between_move",
+        "knight_fork"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 201,
+        "eval_after_cp_mover": -391,
+        "win_pct_drop": 48.5,
+        "best_move": "Na3+",
+        "opponent_best_reply": "Kxc1"
+      },
+      "mechanism": "Instead of recapturing on c8, 25...Na3+! checks the king on c2 and attacks the queen on b1 (Kxc1 Nxb1 Kxb1 Rxc8 leaves Black a rook up). Rxc8 swung +2.0 to -3.9.",
+      "expected_lesson": "Before any recapture, ask: is there a check or a bigger threat first?",
+      "must_not_label": [
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "bimmer_playground_ph-15b-Nb4",
+      "game": "bimmer_playground_ph vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 15,
+      "played": "Nb4",
+      "ply": 30,
+      "fen_before": "r1q2rk1/pp3pp1/2nb1p1p/3p4/3P4/1PPQ2PP/P2NNP2/2KRR3 b - - 0 15",
+      "kind": "missed_opportunity",
+      "primary_label": "free_capture_missed",
+      "secondary_labels": [
+        "queen_line_diagonal"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 145,
+        "eval_after_cp_mover": -13,
+        "win_pct_drop": 14.2,
+        "best_move": "Qxh3",
+        "opponent_best_reply": "Qf3"
+      },
+      "mechanism": "15...Qxh3 took a free pawn down the c8-h3 diagonal.",
+      "expected_lesson": "After every move, trace your queen's lines to the end.",
+      "must_not_label": [],
+      "confidence": "medium",
+      "split": "holdout"
+    },
+    {
+      "id": "Ahmed-taimour-5b-Nd7",
+      "game": "Ahmed-taimour vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 5,
+      "played": "Nd7",
+      "ply": 10,
+      "fen_before": "rn1qkbnr/pp3ppp/2p1p3/3pPb2/3P3P/6P1/PPP2P2/RNBQKBNR b KQkq - 0 5",
+      "kind": "mistake",
+      "primary_label": "trapped_piece",
+      "secondary_labels": [
+        "no_retreat"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -6,
+        "eval_after_cp_mover": -329,
+        "win_pct_drop": 26.5,
+        "best_move": "h5",
+        "opponent_best_reply": "g4"
+      },
+      "mechanism": "Against 5.h4, the f5 bishop needs a retreat: after 6.g4 Be4 7.f3 it has no safe square and 7...Bxc2 only gets a pawn for it. 5...h5 stops g4.",
+      "expected_lesson": "Before placing a piece forward, check it has a way back; against early h4/g4 give the bishop a retreat.",
+      "must_not_label": [
+        "hanging_piece",
+        "development"
+      ],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Ahmed-taimour-44b-Ng5+",
+      "game": "Ahmed-taimour vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 44,
+      "played": "Ng5+",
+      "ply": 88,
+      "fen_before": "1r4k1/R4Np1/4n2p/4Pp1P/B5r1/1P1p1K2/3Nn3/7R b - - 6 44",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [
+        "time_pressure"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -68,
+        "eval_after_cp_mover": -324,
+        "win_pct_drop": 20.5,
+        "best_move": "N2d4+",
+        "opponent_best_reply": "Nxg5"
+      },
+      "mechanism": "The knight check lands on g5, where the f7 knight takes it (Nxg5). Played with about 40 seconds left.",
+      "expected_lesson": "A check is not safe just because it is a check: can anything take the checking piece?",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
+    },
+    {
+      "id": "Ahmed-taimour-48b-Rd8",
+      "game": "Ahmed-taimour vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 48,
+      "played": "Rd8",
+      "ply": 96,
+      "fen_before": "2r3k1/R4Np1/7p/4Pp1P/B1N5/1P1p2rn/4n3/4K2R b - - 14 48",
+      "kind": "mistake",
+      "primary_label": "hanging_piece",
+      "secondary_labels": [
+        "time_pressure"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -194,
+        "eval_after_cp_mover": -577,
+        "win_pct_drop": 22.2,
+        "best_move": "Nd4",
+        "opponent_best_reply": "Nxd8"
+      },
+      "mechanism": "The rook moves to d8, attacked by the f7 knight: Nxd8.",
+      "expected_lesson": "Before letting go, check if the destination square is attacked.",
+      "must_not_label": [],
+      "confidence": "high",
+      "split": "holdout"
     }
   ],
   "clean_games": [
@@ -2449,6 +2722,41 @@
       "result": "0-1",
       "link": "https://www.chess.com/game/live/185775356662",
       "movetext": "1. c4 b6 2. g3 Bb7 3. Nf3 g6 4. Bg2 Bg7 5. O-O Nc6 6. d4 Na5 7. b3 c5 8. Bb2 Nh6 9. e3 Nf5 10. Nbd2 Nc6 11. g4 Nh6 12. Bc3 Nxg4 13. Ng5 h5 14. Qf3 O-O 15. Qe4 Qc7 16. Ngf3 Nce5 17. dxe5 Bxe4 0-1"
+    },
+    {
+      "game": "Seannty91 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. Nf3 c6 2. e4 d5 3. exd5 cxd5 4. Nc3 Nc6 5. Bb5 e6 6. Ne5 Ne7 7. Qf3 f6 8. Nxc6 Nxc6 9. O-O a6 10. Bxc6+ bxc6 11. Ne2 Bd6 12. d4 O-O 13. Bf4 e5 14. Be3 e4 15. Qh5 Be6 16. Bf4 Bf7 17. Qh3 Bb8 18. Bxb8 Qxb8 19. f4 exf3 20. Rxf3 Qxb2 21. Raf1 Qxc2 22. Ng3 Qd2 23. Nf5 Be6 24. Ne7+ Kf7 25. Qxh7 Qxd4+ 26. Kh1 Kxe7 27. Qxg7+ Kd6 28. Qg3+ Kd7 29. Rd3 Qe4 30. Re1 Qg4 31. Qe3 Rfe8 32. Qc5 Bf5 33. Rxd5+ cxd5 34. Qxd5+ Kc7 35. Rc1+ Kb8 36. Qd6+ Ka7 37. Rc7+ Kb8 38. Qb6# 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs Enrikomat",
+      "my_color": "white",
+      "result": "0-1",
+      "link": null,
+      "movetext": "1. c4 e5 2. g3 Nc6 3. Bg2 Nf6 4. Nc3 Bb4 5. Nf3 Bxc3 6. dxc3 d5 7. cxd5 Nxd5 8. c4 Nf6 9. Qxd8+ Nxd8 10. Nxe5 h6 11. O-O O-O 12. Bf4 Nh5 13. Bd2 Bf5 14. g4 f6 15. gxf5 fxe5 16. Bxb7 Nxb7 17. Bb4 Rxf5 18. e4 Rf4 19. f3 Rd8 20. c5 a5 21. Ba3 c6 22. b4 Rd3 23. Bb2 axb4 24. Bxe5 Rfxf3 25. Rfb1 Nxc5 26. Rxb4 Rfe3 27. Rb8+ Kh7 28. Rf1 Rxe4 29. Bb2 Rg4+ 30. Kh1 Ne4 31. Be5 Nf2+ 32. Rxf2 Rd1+ 33. Rf1 Rxf1# 0-1"
+    },
+    {
+      "game": "dovanminhh15 vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. d4 c6 2. c4 d5 3. Nc3 Nf6 4. Nf3 Bg4 5. h3 Bf5 6. e3 Ne4 7. Qb3 Qb6 8. cxd5 Nxc3 9. bxc3 cxd5 10. Qxd5 e6 11. Qc4 Nc6 12. Rb1 Qc7 13. Bd3 Bxd3 14. Qxd3 Be7 15. O-O O-O 16. e4 e5 17. Qc4 a6 18. Nxe5 b5 19. Qxc6 1-0"
+    },
+    {
+      "game": "bimmer_playground_ph vs chunkmonkey420",
+      "my_color": "black",
+      "result": "0-1",
+      "link": null,
+      "movetext": "1. e4 c6 2. d4 d5 3. exd5 cxd5 4. c3 Nf6 5. Bg5 Qb6 6. b3 Bf5 7. h3 h6 8. Bxf6 exf6 9. Bd3 Qe6+ 10. Ne2 Bxd3 11. Qxd3 Bd6 12. Nd2 O-O 13. O-O-O Nc6 14. Rhe1 Qc8 15. g3 Nb4 16. Qb1 Re8 17. Kb2 Na6 18. h4 f5 19. Nf4 Rxe1 20. Rxe1 Nc7 21. Rc1 Nb5 22. Nxd5 Ba3+ 23. Kc2 Bxc1 24. Ne7+ Kf8 25. Nxc8 Rxc8 26. Qxc1 Rxc3+ 27. Kb2 Rxc1 28. Kxc1 Nxd4 29. Nc4 b5 30. Nb2 Ke7 31. a4 Nxb3+ 0-1"
+    },
+    {
+      "game": "Ahmed-taimour vs chunkmonkey420",
+      "my_color": "black",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. e4 c6 2. g3 d5 3. e5 Bf5 4. d4 e6 5. h4 Nd7 6. g4 Be4 7. f3 Bxc2 8. Qxc2 Bb4+ 9. Bd2 Qb6 10. Bxb4 Qxb4+ 11. Qc3 Qb6 12. Nd2 Ne7 13. h5 h6 14. b3 O-O 15. Ne2 Rac8 16. a4 c5 17. a5 Qd8 18. Qe3 b6 19. axb6 axb6 20. dxc5 bxc5 21. g5 d4 22. Qf4 Nd5 23. Qe4 Qxg5 24. f4 Qg4 25. Bg2 Ne3 26. Bf3 Qf5 27. Qxf5 exf5 28. Ra7 Nb6 29. Rb7 Na8 30. Rd7 Nb6 31. Rb7 Na8 32. Ra7 Nc7 33. Bc6 Nc2+ 34. Kf2 d3 35. Nc3 Rfd8 36. Ba4 Ne6 37. Kg3 Rd4 38. Nb5 Rxf4 39. Nd6 Rb8 40. Nxf7 c4 41. Nxc4 Ncd4 42. Nd2 Ne2+ 43. Kg2 Rg4+ 44. Kf3 Ng5+ 45. Ke3 Rg3+ 46. Kf2 Nh3+ 47. Ke1 Rc8 48. Nc4 Rd8 49. Nxd8 Nc3 50. Ne6 Nb1 51. Nd2 Re3+ 52. Kd1 Nf2+ 53. Kc1 Nxd2 54. Kxd2 Re2+ 55. Kc3 d2 56. Rxg7+ Kh8 57. Ra1 Ne4+ 58. Kd3 d1=Q+ 59. Rxd1 1-0"
     },
     {
       "game": "chunkmonkey420 vs RajinderSinghAP",
