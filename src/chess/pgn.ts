@@ -108,6 +108,7 @@ export function parsePgn(raw: string): ParsedGame {
     timeControl: tags.TimeControl,
     termination: tags.Termination,
     link: tags.Link,
+    playedAt: pgnStartTime(tags),
   };
 
   return { headers, startFen, plies, pgn };
@@ -116,4 +117,23 @@ export function parsePgn(raw: string): ParsedGame {
 /** Human-readable move label, e.g. "11.Nb5" or "11...Rb7". */
 export function moveLabel(p: Pick<PlyRecord, 'moveNumber' | 'color' | 'san'>): string {
   return p.color === 'w' ? `${p.moveNumber}.${p.san}` : `${p.moveNumber}...${p.san}`;
+}
+
+/**
+ * When the game started, from the PGN's UTC tags (Chess.com and Lichess include UTCDate and UTCTime).
+ * The plain Date tag has no time of day, so games played on the same day couldn't be ordered by it.
+ */
+export function pgnStartTime(tags: Record<string, string | undefined>): number | undefined {
+  const d = tags.UTCDate?.replace(/\./g, '-');
+  const t = tags.UTCTime;
+  if (!d || !t || d.includes('?') || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !/^\d{2}:\d{2}(:\d{2})?$/.test(t)) return undefined;
+  const ms = Date.parse(`${d}T${t}Z`);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+/** The UTC start time from a stored PGN's header tags (games imported before playedAt was kept). */
+export function pgnStartTimeFromText(pgn: string | undefined): number | undefined {
+  if (!pgn) return undefined;
+  const tag = (name: string) => new RegExp(`\\[${name}\\s+"([^"]*)"\\]`).exec(pgn)?.[1];
+  return pgnStartTime({ UTCDate: tag('UTCDate'), UTCTime: tag('UTCTime') });
 }

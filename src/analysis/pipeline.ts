@@ -11,13 +11,25 @@ import { buildReport } from '../coach/report';
 import { endingNote } from '../coach/ending';
 import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
-import { moveLabel } from '../chess/pgn';
+import { moveLabel, pgnStartTimeFromText } from '../chess/pgn';
 import { COLOR_NAME, PIECE_NAME, playLine } from '../chess/board';
 import { PATTERN_PHRASE, detectPattern, type PatternHit } from './patterns';
 import { verdictOf } from './engineReview';
 
-/** Chronological key: PGN date when available, import time otherwise. */
-export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'>): number {
+const startTimes = new Map<string, number | undefined>();
+
+/**
+ * Chronological key: when the game was played. The PGN's UTC start time when it has one (also
+ * read from the stored PGN of games imported before it was kept); otherwise the PGN date, with the
+ * import time of day as a tie-break; otherwise the import time.
+ */
+export function gamePlayedAt(g: Pick<StoredGame, 'headers' | 'importedAt'> & { pgn?: string }): number {
+  if (g.headers.playedAt) return g.headers.playedAt;
+  if (g.pgn) {
+    if (!startTimes.has(g.pgn)) startTimes.set(g.pgn, pgnStartTimeFromText(g.pgn));
+    const t = startTimes.get(g.pgn);
+    if (t) return t;
+  }
   const d = g.headers.date?.replace(/\./g, '-');
   const t = d ? Date.parse(d) : NaN;
   return Number.isFinite(t) ? t + (g.importedAt % 86_400_000) : g.importedAt;

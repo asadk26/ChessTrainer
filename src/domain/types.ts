@@ -17,6 +17,8 @@ export interface GameHeaders {
   termination?: string;
   /** Link to the game on the site it was played on (Chess.com and Lichess PGNs include it). */
   link?: string;
+  /** When the game started (ms, from the PGN's UTCDate + UTCTime), when the PGN says. */
+  playedAt?: number;
 }
 
 /** One half-move of a game, with the board before and after it. */

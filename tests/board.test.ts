@@ -109,3 +109,23 @@ describe('settled material and trapped pieces', () => {
     expect(trappedPiece(new Chess().fen(), 'b')).toBeUndefined();
   });
 });
+
+describe('game order uses when the game was played', () => {
+  const pgn = (date: string, time: string, moves = '1. e4 e5 *') => `[White "a"]\n[Black "b"]\n[Date "${date}"]\n[UTCDate "${date}"]\n[UTCTime "${time}"]\n[Result "*"]\n\n${moves}\n`;
+  it('orders same-day and late-night games by their UTC start time, not by import time', async () => {
+    const { gamePlayedAt } = await import('../src/analysis/pipeline');
+    const { parsePgn: parse } = await import('../src/chess/pgn');
+    const lateLastNight = parse(pgn('2026.11.05', '04:40:00'));
+    const today = parse(pgn('2026.11.05', '16:10:00'));
+    expect(today.headers.playedAt).toBe(Date.UTC(2026, 10, 5, 16, 10));
+    // Imported in the opposite order (the late-night game synced later in the day).
+    const a = gamePlayedAt({ headers: lateLastNight.headers, importedAt: Date.UTC(2026, 10, 5, 20) });
+    const b = gamePlayedAt({ headers: today.headers, importedAt: Date.UTC(2026, 10, 5, 17) });
+    expect(b).toBeGreaterThan(a);
+  });
+  it('reads the start time from the stored PGN of games imported before it was kept', async () => {
+    const { gamePlayedAt } = await import('../src/analysis/pipeline');
+    const text = pgn('2026.11.05', '16:10:00');
+    expect(gamePlayedAt({ headers: { white: 'a', black: 'b', result: '*', date: '2026.11.05' }, importedAt: Date.UTC(2026, 10, 5, 2), pgn: text })).toBe(Date.UTC(2026, 10, 5, 16, 10));
+  });
+});
