@@ -241,6 +241,10 @@ function diffs(a: Snap, b: Snap, ctx: DiffCtx): Reason[] {
           ? { key: 'material', favors: 'preferred', forOther: ctx.materialTextOther }
           : paid.some((g) => !/pawn/.test(g)) && won.length
           ? { key: 'material', favors: 'preferred', forPreferred: `wins ${joinAnd(won.map(a11))} for your ${joinAnd(paid)}`, forOther: `you're ${materialPhrase(dm)} worse off` }
+          : // The other line keeps material level: say what this line wins (and gives), not a point total
+            // ("wins a rook for a pawn", not "a piece and a pawn better off").
+            b.material === ctx.start.material && won.some((g) => !/pawn/.test(g))
+          ? { key: 'material', favors: 'preferred', forPreferred: `wins ${joinAnd(won.map(a11))}${paid.length ? ` for ${joinAnd(paid.map(a11))}` : ''}`, forOther: `you're ${materialPhrase(dm)} worse off` }
           : gave.length && !onlyPawns
           ? { key: 'material', favors: 'preferred', forOther: `you give up your ${joinAnd(gave)}${got.length ? ` for ${a11(joinAnd(got))}` : ''}` }
           : { key: 'material', favors: 'preferred', forPreferred: `leaves you ${materialPhrase(dm)} better off`, forOther: `you're ${materialPhrase(dm)} worse off` },
@@ -382,6 +386,22 @@ function compareCore(input: CompareInput, cuts?: { a: number; b: number; materia
     };
   }
 
+  // The move played walks into a forced mate (and the better one doesn't): that is the whole reason.
+  const mB = input.other.cp <= -(MATE_CP - 1000) ? Math.max(1, Math.round((MATE_CP + input.other.cp) / 10)) : 0;
+  if (mB && input.preferred.cp > -(MATE_CP - 1000)) {
+    const mateLine = otherFrames.slice(0, Math.min(otherFrames.length, mB * 2));
+    return {
+      preferredSan: prefSan,
+      otherSan,
+      preferredFrames: prefFrames.slice(0, Math.min(2, prefFrames.length)),
+      otherFrames: mateLine,
+      reasons: [{ key: 'mate', favors: 'preferred', forOther: 'allows a forced mate' }],
+      clear: true,
+      summary: `${otherSan} allows a forced mate (${lineSans(mateLine.slice(1))}); ${prefSan} keeps the game going.`,
+      why: `${otherSan} allows a forced mate`,
+    };
+  }
+
   // Feature differences at the end of everything we'd show: the reference for stability.
   const endA = settle(prefFrames, maxPlies);
   const endB = settle(otherFrames, maxPlies);
@@ -418,6 +438,13 @@ function compareCore(input: CompareInput, cuts?: { a: number; b: number; materia
       const rs = cmp(a, b).filter(stable);
       if (rs.some((r) => r.key === 'material' && r.favors === (evalPrefers ? 'preferred' : 'other'))) chosen = { a, b, reasons: rs };
     }
+  }
+
+  // A swing of an inaccuracy or more is never explained by a structural or activity detail (a passed
+  // pawn, an open file, development): only by what can cost that much, or not at all.
+  if (chosen && gapBetween(input.preferred.cp, input.other.cp) >= 6) {
+    const reasons = chosen.reasons.filter((r) => SWING_KEYS.includes(r.key));
+    chosen = reasons.some((r) => r.favors === (evalPrefers ? 'preferred' : 'other')) ? { ...chosen, reasons } : undefined;
   }
 
   // Within the "equally good" band the evaluations are noise: describe both the same way.
@@ -474,6 +501,9 @@ function compareCore(input: CompareInput, cuts?: { a: number; b: number; materia
     why: aClauses.length ? `it ${aClauses[0]}` : bClause ? `after ${otherSan} ${bClause}` : undefined,
   };
 }
+
+/** Reasons that can account for a swing of an inaccuracy or more. */
+const SWING_KEYS = ['material', 'mate', 'our_king', 'opp_king', 'our_hanging', 'opp_hanging', 'opp_queen', 'queens'];
 
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 

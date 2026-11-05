@@ -41,3 +41,37 @@ describe('line evals name the side', () => {
     expect(sideEvalText(10, 'w')).toBe('about equal (you +0.1)');
   });
 });
+
+describe('the card\'s why explains the swing (vs Seannty91)', () => {
+  const card = async (ply: number) => {
+    const { compareLines } = await import('../src/analysis/compareLines');
+    const { scoreToCp } = await import('../src/analysis/evaluation');
+    const g = loadTruth().games.find((x) => x.game.includes('Seannty91'))!;
+    const pos = cachedPositions(g.game)!;
+    const p = storedGame(g).plies[ply - 1];
+    return compareLines({ fen: p.fenBefore, mover: p.color, preferred: { ucis: pos[ply - 1].lines[0].pv, cp: scoreToCp(pos[ply - 1].lines[0].score) }, other: { ucis: [p.uci, ...pos[ply].lines[0].pv], cp: -scoreToCp(pos[ply].lines[0].score) } })!;
+  };
+  it('33...cxd5: the move allows mate, so that is the reason', async () => {
+    const c = await card(66);
+    expect(c.why).toBe('cxd5 allows a forced mate');
+    expect(c.summary).not.toMatch(/passed pawn/);
+  });
+  it('32...Bf5 and 23...Be6: no structural detail (a passed pawn) for a swing that size', async () => {
+    for (const ply of [64, 46]) {
+      const c = await card(ply);
+      expect(`${c.why} ${c.summary}`).not.toMatch(/passed pawn|open file|develop/);
+    }
+  });
+  it('30...Qg4: says what the better line wins, not a point total', async () => {
+    expect((await card(60)).why).toBe('it wins a rook for a pawn');
+  });
+});
+
+describe('king in the center at move 12', () => {
+  it('does not fire when move 12 is castling (12...O-O vs Seannty91)', () => {
+    const g = loadTruth().games.find((x) => x.game.includes('Seannty91'))!;
+    const game = coachFromPositions(storedGame(g), cachedPositions(g.game)!, []).game;
+    expect(game.findings.some((f) => f.category === 'king_safety' && f.facts.notCastled)).toBe(false);
+    expect(game.report!.hurt.some((h) => /still in the center/.test(h.text))).toBe(false);
+  });
+});

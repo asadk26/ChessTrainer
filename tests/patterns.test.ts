@@ -57,6 +57,16 @@ describe('pattern tags on real mistakes', () => {
     expect(hit).toMatchObject({ tag: 'removed_defender', side: 'refutation' });
     expect(hit!.evidence).toBe('the pawn on a4 was the only guard of the knight on b5; after a5, Rxb5 took it');
   });
+  it('a guard leaving a square next to your king, where the reply sacrifices with check, is a removed defender', () => {
+    // 1...Bf5?? — the e6 bishop guarded d5 with the c6 pawn; now Rxd5+ is a sacrifice that opens the king (cxd5 Qxd5+).
+    const hit = detectPattern('r3r3/3k4/p1p1bp2/2Qp4/6q1/3R4/P5PP/4R2K b - - 10 32', 'e6f5', ['d3d5', 'c6d5', 'c5d5'], [], []);
+    expect(hit).toMatchObject({ tag: 'removed_defender', side: 'refutation' });
+    expect(hit!.evidence).toBe('the bishop on e6 was one of the guards of the pawn on d5 next to your king; after Bf5, Rxd5+ sacrifices there and opens up your king');
+  });
+  it('the same sacrifice far from the king is not a removed defender', () => {
+    // King on h8 instead: d5 is nowhere near it, so the guard leaving is not the story.
+    expect(detectPattern('r3r2k/8/p1p1bp2/2Qp4/6q1/3R4/P5PP/4R2K b - - 10 32', 'e6f5', ['d3d5', 'c6d5', 'c5d5'], [], [])?.tag).not.toBe('removed_defender');
+  });
   it('a capture that abandons a guard is a grab, not a removed defender', () => {
     // 1.Qxa7 leaves the d5 knight to Rxd5: the lesson is the grab, so no removed-defender tag.
     const hit = detectPattern('3r2k1/p4ppp/8/3N4/8/8/3Q1PPP/6K1 w - - 0 1', 'd2a7', ['d8d5'], [], []);
@@ -282,7 +292,9 @@ describe('the takeaway comes from the tactic found (sample of chunkmonkey420 gam
     // 14...Qg5 was the queen's first move: the finding stays, with a lesson about the attack itself.
     const qg5 = g.findings.find((f) => f.ply === 28 && f.category === 'premature_attack')!;
     expect(qg5.facts.firstMove).toBe(true);
-    expect(g.report?.story).toMatch(/14\.\.\.Qg5 attacked the knight on e5, but it could simply move away/);
+    // It is a low-confidence finding: kept, but the story doesn't repeat guesses.
+    expect(qg5.confidence).toBe('low');
+    expect(g.report?.story).not.toMatch(/14\.\.\.Qg5/);
   });
   it('allowing mate in one is "allowed checkmate" with a checks lesson (vs Blundering32, 7...f5 Qf7#)', () => {
     const g = game('blundering-game');

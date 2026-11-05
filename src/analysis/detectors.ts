@@ -1260,7 +1260,8 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
     out.push({ kind: 'strength', category: 'castled_early', ply: castle.ply, severity: 2, confidence: 'high', evidence: `Castled on move ${castle.moveNumber}.`, facts: { san: castle.san, move: castle.moveNumber } });
   } else if (mine.length >= 14) {
     const at12 = mine.find((p) => p.moveNumber === 12);
-    if (at12 && kingInCenter(at12.fenBefore, user) && /[Qq]/.test(at12.fenBefore.split(' ')[0])) {
+    // Castling on move 12 itself isn't "still in the center at move 12".
+    if (at12 && !at12.san.startsWith('O-O') && kingInCenter(at12.fenBefore, user) && /[Qq]/.test(at12.fenBefore.split(' ')[0])) {
       const ahead = aheadAt(at12);
       // Did the central king actually cost something before castling (a checking tactic for the opponent)?
       const until = castle?.ply ?? Infinity;

@@ -201,7 +201,9 @@ export function rootCause(ctx: Ctx & { findings: Finding[]; termination?: string
     .sort((a, b) => b.winDrop - a.winDrop)[0];
   if (!decisiveEval) return undefined;
   const at = decisiveEval.ply;
-  const here = ctx.findings.filter((f) => f.kind === 'weakness' && f.ply === at);
+  // Low-confidence findings are guesses: the story never repeats them, as setup or as the decisive move.
+  const credible = ctx.findings.filter((f) => f.confidence !== 'low');
+  const here = credible.filter((f) => f.kind === 'weakness' && f.ply === at);
   // What explains it: a named tactic, a specific detector, then anything about that move.
   const rank = (f: Finding) => (f.facts.pattern && f.facts.patternSide !== 'better' ? 0 : f.category === 'defended_grab' ? 1 : f.facts.mate ? 2 : f.facts.hanging ? 3 : 4);
   const decisive = [...here].sort((a, b) => rank(a) - rank(b) || b.severity - a.severity)[0];
@@ -209,7 +211,7 @@ export function rootCause(ctx: Ctx & { findings: Finding[]; termination?: string
   // Setup: a set-up detector that mattered (king pawns, a piece on the rim…), or a move just before
   // where your chances were already clearly slipping. Two at most, in game order.
   const slipped = (f: Finding) => f.ply >= at - 6 && (ctx.evals[f.ply - 1]?.winDrop ?? 0) >= 10;
-  const setup = ctx.findings
+  const setup = credible
     .filter((f) => f.kind === 'weakness' && f.ply < at && f.ply >= at - 14 && f.severity >= 2 && (SETUP.includes(f.category) || slipped(f)))
     .filter((f, k, all) => all.findIndex((x) => x.ply === f.ply) === k) // one per move
     .sort((a, b) => b.severity - a.severity || b.ply - a.ply)

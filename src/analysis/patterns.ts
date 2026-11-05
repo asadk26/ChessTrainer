@@ -501,10 +501,24 @@ function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternH
   if (!guards.includes(played.from as never) || attackersOf(fs[0].after, x, mover).includes(played.to as never)) return;
   // Free = the exchange on that square wins material for them (cheapest attacker first, either side may stop).
   const free = (fen: string) => exchangeGain(fen, x, opp) > 0;
+  const what = played.piece === 'p' ? 'pawn' : PIECE_NAME[played.piece as PieceType];
+  // The guard leaves a square next to your king short of defenders, and the reply sacrifices there
+  // to get at the king (with check, or right beside it): the cost is the king, not the material.
+  const k = kingSquare(fs[0].after, mover);
+  const dist = Math.max(Math.abs(k.charCodeAt(0) - x.charCodeAt(0)), Math.abs(Number(k[1]) - Number(x[1])));
+  const reachesKing = dist <= 2 && (reply.san.includes('+') || dist <= 1);
+  const outnumbered = (fen: string) => attackersOf(fen, x, opp).length > attackersOf(fen, x, mover).length;
+  if (!free(fs[0].after) && reachesKing && !outnumbered(fenBefore) && outnumbered(fs[0].after)) {
+    return {
+      tag: 'removed_defender',
+      side: 'refutation',
+      at: 1,
+      evidence: `the ${what} on ${played.from} was one of the guards of the ${sq(unit.type as PieceType, x)} next to your king; after ${played.san}, ${reply.san} sacrifices there and opens up your king`,
+    };
+  }
   if (free(fenBefore) || !free(fs[0].after)) return;
   const net = materialBalance(fs[fs.length - 1].after, mover) - materialBalance(fenBefore, mover);
   if (net > -(unit.type === 'p' ? 1 : 2)) return;
-  const what = played.piece === 'p' ? 'pawn' : PIECE_NAME[played.piece as PieceType];
   return {
     tag: 'removed_defender',
     side: 'refutation',
