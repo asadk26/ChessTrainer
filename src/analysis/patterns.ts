@@ -513,6 +513,7 @@ function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternH
       tag: 'removed_defender',
       side: 'refutation',
       at: 1,
+      square: x,
       evidence: `the ${what} on ${played.from} was one of the guards of the ${sq(unit.type as PieceType, x)} next to your king; after ${played.san}, ${reply.san} sacrifices there and opens up your king`,
     };
   }
@@ -523,6 +524,7 @@ function removedDefender(fenBefore: string, fs: Frame[], mover: Color): PatternH
     tag: 'removed_defender',
     side: 'refutation',
     at: 1,
+    square: x,
     evidence: `the ${what} on ${played.from} was ${guards.length === 1 ? 'the only guard of' : 'needed to guard'} the ${sq(unit.type as PieceType, x)}; after ${played.san}, ${reply.san} took it`,
   };
 }

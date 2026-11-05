@@ -909,3 +909,6 @@ a { color: var(--accent); }
 .chip.static { cursor: default; pointer-events: none; }
 .up-next-done { margin: 0.2rem 0 0; }
 .sort-seg { margin: 0.2rem 0 0.6rem; max-width: 280px; }
+
+/* Lucky escapes: a light note, never a lesson. */
+.lucky-note { border-left: 3px solid var(--warn, #d9a400); padding-left: 8px; }

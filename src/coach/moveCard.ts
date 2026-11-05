@@ -1,5 +1,7 @@
 // The one-line card for a move of yours that Stockfish rates below its choice.
 import { formatCp } from '../analysis/evaluation';
+import { attackersOf, playLine } from '../chess/board';
+import type { Color } from '../domain/types';
 
 /** Evaluations everywhere in the review are from your side; this is said once, in a legend. */
 export const EVAL_LEGEND = 'Numbers are from your side: + means you’re better, − worse (1.0 ≈ a pawn).';
@@ -28,4 +30,15 @@ export function sideEvalText(cpForYou: number, you: 'w' | 'b'): string {
   if (Math.abs(cpForYou) < 40) return `about equal (${mine})`;
   const better = cpForYou > 0 ? you : you === 'w' ? 'b' : 'w';
   return `${better === 'w' ? 'White' : 'Black'} ${band(Math.abs(cpForYou))} (${mine})`;
+}
+
+/**
+ * When the move removed a guard (removed_defender on `square`) and Stockfish's move keeps that square
+ * at least as well guarded: "it keeps d5 guarded". Otherwise undefined (say nothing rather than guess).
+ */
+export function keepsGuardWhy(fenBefore: string, bestUci: string | undefined, square: string | undefined, mover: Color): string | undefined {
+  if (!bestUci || !square) return undefined;
+  const after = playLine(fenBefore, [bestUci], 1)[0]?.fen;
+  if (!after) return undefined;
+  return attackersOf(after, square, mover).length >= attackersOf(fenBefore, square, mover).length ? `it keeps ${square} guarded` : undefined;
 }

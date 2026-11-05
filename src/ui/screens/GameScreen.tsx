@@ -184,6 +184,23 @@ function Summary({ game }: { game: StoredGame }) {
         </p>
         {r.hurt.length ? <Items items={hurtItems} game={game} kind="mistake" where="hurt" /> : <p className="muted">No significant problems. Nice.</p>}
       </section>
+      {game.luckyEscapes && game.luckyEscapes.length > 0 && (
+        <section className="card subtle-card lucky-card">
+          <h3>Lucky escapes</h3>
+          <p className="muted small">Small slips that allowed a clear tactic your opponent didn't play. Worth a look, not a lesson.</p>
+          <ul className="report-list">
+            {game.luckyEscapes.map((l) => (
+              <li key={l.ply}>
+                <span className="muted small">After {l.after}: </span>
+                <CoachText text={l.text.replace(/^Lucky escape: /, '')} />
+                <button className="link small" onClick={() => navigate(`/game/${game.id}/review?ply=${l.ply}`)}>
+                  Show on the board →
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="card">
         <h3>Recurring pattern</h3>
         <p>{r.recurring}</p>

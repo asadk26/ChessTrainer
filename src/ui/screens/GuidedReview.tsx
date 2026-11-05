@@ -27,7 +27,7 @@ import { engineNotes, verdictOf } from '../../analysis/engineReview';
 import { closeToBest, evaluateMove, markMomentDone, markReviewed } from '../actions';
 import { usesEngineReply } from '../../analysis/moments';
 import { seenBefore } from '../../coach/seenBefore';
-import { EVAL_LEGEND, betterLine, moveCardLine } from '../../coach/moveCard';
+import { EVAL_LEGEND, betterLine, keepsGuardWhy, moveCardLine } from '../../coach/moveCard';
 import { navigate, useApp } from '../store';
 
 const uciArrow = (uci: string, color: Arrow['color']): Arrow => ({ from: uci.slice(0, 2), to: uci.slice(2, 4), color });
@@ -597,10 +597,15 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const verdict = evalAt ? verdictOf(evalAt) : undefined;
   const cls = ply > 0 ? classes[ply] : undefined;
   const mine = evalAt?.color === game.userColor;
+  // An inaccuracy that allowed a clear tactic the opponent didn't play: a light note, not a lesson.
+  const luckyHere = ply > 0 ? game.luckyEscapes?.find((l) => l.ply === ply) : undefined;
   // Your move rated below Stockfish's choice: one line, "5.Qb3 — Inaccuracy. Bxb7 was stronger: … (+2.5 vs +1.2)".
   const cardCls = mine && evalAt?.bestSan && !evalAt.isBest && (cls === 'inaccuracy' || cls === 'mistake' || cls === 'blunder') ? cls : undefined;
   const cardCmp = useMemo(() => (cardCls ? gameMoveComparison(game, ply) : undefined), [cardCls, game, ply]);
-  const cardWhy = cardCmp?.comparison?.why;
+  // A removed defender names the square the better move keeps guarded ("Bf7 was stronger: it keeps d5 guarded").
+  const guardFinding = cardCls ? game.findings.find((f) => f.ply === ply && f.facts.pattern === 'removed_defender' && f.facts.patternSide === 'refutation' && Number(f.facts.worsePly ?? ply) === ply) : undefined;
+  const guardWhy = guardFinding && current ? keepsGuardWhy(current.fenBefore, evalAt?.bestUci, guardFinding.facts.patternSquare as string | undefined, current.color) : undefined;
+  const cardWhy = guardWhy ?? cardCmp?.comparison?.why;
   const cardLine =
     cardCls && evalAt && current
       ? moveCardLine({ move: moveLabel(current), label: CLASS_LABEL[cardCls], bestSan: evalAt.bestSan!, why: cardWhy, bestCp: evalAt.cpBefore, playedCp: evalAt.cpAfter })
@@ -631,10 +636,13 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
           {noteCount ? ` ${noteCount} smaller point${noteCount === 1 ? '' : 's'} will show up as you pass ${noteCount === 1 ? 'it' : 'them'}.` : ''}
         </p>
       ) : cardLine ? (
-        <p className="move-caption move-card">
-          <CoachText text={cardLine} />
-          {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
-        </p>
+        <>
+          <div className="move-caption move-card">
+            <CoachText text={cardLine} />
+            {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
+          </div>
+          {luckyHere && <CoachText text={luckyHere.text} className="ply-note lucky-note" />}
+        </>
       ) : (
         <p className="move-caption">
           <b>{moveLabel(current!)}</b> {cls && <QualityBadge cls={cls} label />} <span className="muted">— {yours ? 'you played' : `${game.opponentName} played`}</span>

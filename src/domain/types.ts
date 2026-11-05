@@ -420,6 +420,8 @@ export interface StoredGame {
   report?: GameReport;
   drillIds: string[];
   completedMomentIds: string[];
+  /** Inaccuracies that allowed a clear tactic your opponent didn't play: light notes, never lessons. */
+  luckyEscapes?: { ply: number; tag: string; move: string; text: string; after: string }[];
   /** When you finished Guided Review for this game (excluded from "Most to learn" until you review again). */
   reviewedAt?: number;
   /** Where the game came from, when it was synced rather than pasted. */
@@ -433,7 +435,7 @@ export interface StoredGame {
    * lines — saved so patterns can be counted across games.
    */
   /** `lead`: the opponent's moves from their first reply up to the move the tactic is about (SAN). */
-  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string; hanging?: 'moved' | 'left' | 'already'; lead?: string[] }>;
+  patterns?: Record<number, { tag: import('../analysis/patterns').PatternTag; side: 'refutation' | 'better'; evidence: string; hanging?: 'moved' | 'left' | 'already'; lead?: string[]; square?: string }>;
   /** Set on games played against the Adaptive Coach: they record training, not real-game weaknesses. */
   adaptive?: { sessionId: string; skill: AdaptiveSkill };
   /** "This seems wrong" notes the player left on the coaching. */

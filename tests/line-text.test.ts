@@ -75,3 +75,32 @@ describe('king in the center at move 12', () => {
     expect(game.report!.hurt.some((h) => /still in the center/.test(h.text))).toBe(false);
   });
 });
+
+describe('lucky escapes (vs Seannty91)', () => {
+  const game = () => {
+    const g = loadTruth().games.find((x) => x.game.includes('Seannty91'))!;
+    return coachFromPositions(storedGame(g), cachedPositions(g.game)!, []).game;
+  };
+  it('23...Be6 allowed a discovered attack White didn\'t play: a note, not a lesson', () => {
+    const g = game();
+    expect(g.luckyEscapes).toEqual([expect.objectContaining({ ply: 46, tag: 'discovered_attack', text: "Lucky escape: 24.Nh6+ uncovers the queen on h3, which now attacks the bishop on e6. White didn't play it." })]);
+    // Never a lesson, the headline, the focus or a finding.
+    expect(g.moments.some((m) => m.ply === 46)).toBe(false);
+    expect(g.findings.some((f) => f.ply === 46)).toBe(false);
+    expect(`${g.report!.headline} ${g.report!.focus.title} ${g.report!.recurring}`).not.toMatch(/Be6|Nh6/);
+  });
+  it('no note when the opponent played something as strong (a mate is never an escape)', () => {
+    const g = loadTruth().games.find((x) => x.game.includes('CptVoyager'))!;
+    const cv = coachFromPositions(storedGame(g), cachedPositions(g.game)!, []).game;
+    expect(cv.luckyEscapes ?? []).toEqual([]);
+  });
+  it('the 32...Bf5 card names the square the better move keeps guarded', async () => {
+    const { keepsGuardWhy } = await import('../src/coach/moveCard');
+    const g = game();
+    const f = g.findings.find((x) => x.ply === 64 && x.facts.pattern === 'removed_defender')!;
+    expect(f.facts.patternSquare).toBe('d5');
+    expect(keepsGuardWhy(g.plies[63].fenBefore, g.analysis!.moves[63].bestUci, 'd5', 'b')).toBe('it keeps d5 guarded');
+    // A move that drops the guard doesn't get that line.
+    expect(keepsGuardWhy(g.plies[63].fenBefore, 'e6f5', 'd5', 'b')).toBeUndefined();
+  });
+});
