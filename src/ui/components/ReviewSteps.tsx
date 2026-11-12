@@ -116,7 +116,8 @@ export function useFindFirst(game: StoredGame, onContinue: (ply: number) => void
 
 export type LineKind = 'refutation' | 'better';
 
-export function useLineView(game: StoredGame) {
+/** `onExplore`: open Explore (free analysis) from the position on the board. */
+export function useLineView(game: StoredGame, onExplore?: (fen: string, label: string) => void) {
   const [view, setView] = useState<{ ply: number; kind: LineKind; idx: number } | null>(null);
   const steps = useMemo(() => {
     if (!view) return [];
@@ -237,6 +238,11 @@ export function useLineView(game: StoredGame) {
           ) : (
             <button className="btn primary next-btn" onClick={() => setView(null)}>
               Done
+            </button>
+          )}
+          {onExplore && (
+            <button className="btn ghost" onClick={() => onExplore(board.fen, s ? `after ${s.san} in this line` : view.kind === 'refutation' ? `after ${moveLabel(p)}` : `before ${moveLabel(p)}`)}>
+              Explore
             </button>
           )}
           <button className="btn ghost" onClick={() => setView(null)}>

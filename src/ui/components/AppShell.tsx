@@ -50,7 +50,7 @@ export function TabBar() {
   );
 }
 
-const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'forward' | 'trash' | 'why' | 'showme' | 'try' | 'best', ReactNode> = {
+const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'forward' | 'trash' | 'why' | 'showme' | 'try' | 'best' | 'explore', ReactNode> = {
   home: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />,
   games: (
     <>
@@ -95,6 +95,12 @@ const PATHS: Record<TabId | 'gear' | 'plus' | 'back' | 'forward' | 'trash' | 'wh
     </>
   ),
   try: <path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11m0-1.5a1.5 1.5 0 0 1 3 0V12m0-1a1.5 1.5 0 0 1 3 0v4.5a5.5 5.5 0 0 1-5.5 5.5h-.8a5.5 5.5 0 0 1-4.6-2.5L4.6 15a1.5 1.5 0 0 1 2.4-1.8L9 15" />,
+  explore: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z" />
+    </>
+  ),
   best: <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />,
 };
 

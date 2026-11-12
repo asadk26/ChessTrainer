@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 import type { EngineLine, PositionEval, Score } from '../domain/types';
-import type { AnalyseOptions, Engine } from './types';
+import type { AnalyseOptions, Engine, LiveOptions } from './types';
 
 /** Parse a UCI "info" line. Returns undefined for lines without a usable PV/score. */
 export function parseInfoLine(line: string): (EngineLine & { multipv: number }) | undefined {
@@ -78,10 +78,16 @@ export class UciEngine implements Engine {
     });
   }
 
-  analyse(fen: string, opts: AnalyseOptions): Promise<PositionEval> {
+  /**
+   * Evaluate one position. `live.signal` cancels it: a queued search is skipped and a running one
+   * is stopped (it resolves early with what it had, and `aborted: true`). `live.onUpdate` receives
+   * the lines so far each time the engine reports, for a display that deepens as it thinks.
+   */
+  analyse(fen: string, opts: AnalyseOptions, live: LiveOptions = {}): Promise<PositionEval> {
     const term = terminalEval(fen);
     if (term) return Promise.resolve(term);
     const job = this.queue.then(async () => {
+      if (live.signal?.aborted) return { fen, depth: 0, lines: [], aborted: true } satisfies PositionEval;
       await this.ready;
       if (this.currentMultiPv !== opts.multiPv) {
         this.send(`setoption name MultiPV value ${opts.multiPv}`);
@@ -89,19 +95,29 @@ export class UciEngine implements Engine {
         await this.waitFor('readyok', () => this.send('isready'));
       }
       const lines = new Map<number, EngineLine>();
-      await this.waitFor(
-        'bestmove',
-        () => {
-          this.send(`position fen ${fen}`);
-          this.send(`go depth ${opts.depth}`);
-        },
-        (l) => {
-          const info = parseInfoLine(l);
-          if (info) lines.set(info.multipv, { pv: info.pv, score: info.score, depth: info.depth });
-        },
-      );
-      const sorted = [...lines.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
-      return { fen, depth: opts.depth, lines: sorted } satisfies PositionEval;
+      const sorted = () => [...lines.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+      const stop = () => this.send('stop');
+      if (live.signal?.aborted) return { fen, depth: 0, lines: [], aborted: true } satisfies PositionEval;
+      live.signal?.addEventListener('abort', stop, { once: true });
+      try {
+        await this.waitFor(
+          'bestmove',
+          () => {
+            this.send(`position fen ${fen}`);
+            this.send(`go depth ${opts.depth}`);
+          },
+          (l) => {
+            const info = parseInfoLine(l);
+            if (!info) return;
+            lines.set(info.multipv, { pv: info.pv, score: info.score, depth: info.depth });
+            if (live.onUpdate && !live.signal?.aborted) live.onUpdate({ fen, depth: info.depth, lines: sorted() });
+          },
+        );
+      } finally {
+        live.signal?.removeEventListener('abort', stop);
+      }
+      if (live.signal?.aborted) return { fen, depth: 0, lines: sorted(), aborted: true } satisfies PositionEval;
+      return { fen, depth: opts.depth, lines: sorted() } satisfies PositionEval;
     });
     this.queue = job.catch(() => undefined);
     return job;

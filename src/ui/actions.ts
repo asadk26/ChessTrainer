@@ -12,6 +12,7 @@ import { type ImportSummary } from '../storage/repository';
 import { repo } from '../storage/repo';
 import { gamesToAnalyzeNext } from '../coach/mostToLearn';
 import { createBrowserEngine, getBrowserEngine } from '../engine/browserEngine';
+import type { LiveOptions } from '../engine/types';
 import { analyzeGame, coachFromPositions, gamePlayedAt, priorGames, waitingForAnalysis } from '../analysis/pipeline';
 import { isPlaceholderName, rememberUsername } from '../profile/identify';
 import { aggregateProfile } from '../profile/profile';
@@ -372,6 +373,21 @@ export function analysePosition(fen: string, depth: number, multiPv = 1): Promis
       .catch(() => undefined);
     liveCache.set(key, p);
   }
+  return p;
+}
+
+/**
+ * Live analysis for Explore: cancellable (`live.signal`) and streaming (`live.onUpdate`), on the
+ * shared engine. A finished result joins the same cache as analysePosition; a cancelled one doesn't.
+ */
+export function analyseLive(fen: string, depth: number, multiPv: number, live: LiveOptions): Promise<PositionEval | undefined> {
+  const key = `${fen}|${depth}|${multiPv}`;
+  const hit = liveCache.get(key);
+  if (hit) return hit;
+  const p = getBrowserEngine()
+    .then((engine) => (engine ? engine.analyse(fen, { depth, multiPv }, live) : undefined))
+    .catch(() => undefined);
+  void p.then((r) => r && !r.aborted && liveCache.set(key, Promise.resolve(r)));
   return p;
 }
 

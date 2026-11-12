@@ -41,4 +41,33 @@ describe('UCI handling', () => {
     const mate = await engine.analyse('rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3', { depth: 10, multiPv: 1 });
     expect(mate.terminal).toBe('checkmate');
   });
+
+  it('cancels: a running search is stopped, a queued one is skipped, progress streams in', async () => {
+    const sent: string[] = [];
+    let engine!: UciEngine;
+    engine = new UciEngine('slow', (cmd) => {
+      sent.push(cmd);
+      queueMicrotask(() => {
+        if (cmd === 'uci') engine.receive('uciok');
+        else if (cmd === 'isready') engine.receive('readyok');
+        else if (cmd.startsWith('go')) engine.receive('info depth 1 multipv 1 score cp 20 pv e2e4');
+        else if (cmd === 'stop') engine.receive('bestmove e2e4'); // only answers once told to stop
+      });
+    });
+    const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const first = new AbortController();
+    const second = new AbortController();
+    const updates: number[] = [];
+    const a = engine.analyse(START, { depth: 18, multiPv: 1 }, { signal: first.signal, onUpdate: (p) => updates.push(p.depth) });
+    const b = engine.analyse(START, { depth: 18, multiPv: 1 }, { signal: second.signal });
+    second.abort();
+    await new Promise((r) => setTimeout(r, 5));
+    first.abort();
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.aborted).toBe(true);
+    expect(ra.lines[0].pv[0]).toBe('e2e4');
+    expect(updates).toEqual([1]);
+    expect(rb.aborted).toBe(true);
+    expect(sent.filter((c) => c.startsWith('go'))).toHaveLength(1);
+  });
 });

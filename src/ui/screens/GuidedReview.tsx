@@ -17,6 +17,7 @@ import { ActionButton, BoardZone, BottomSheet, CoachBubble, DockSheet, EvalStrip
 import { Icon } from '../components/AppShell';
 import { evalText } from '../../coach/momentContext';
 import { useFindFirst, useLineView } from '../components/ReviewSteps';
+import { useExplore, type ExploreStart } from '../components/Explore';
 import { CoachText, HoverProvider } from '../components/CoachText';
 import { MoveStrip } from '../components/MoveStrip';
 import { categoryLabel } from '../../domain/categories';
@@ -497,7 +498,24 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   const [practicePly, setPracticePly] = useState<number | null>(exploring ? initialPly! : null);
   // Opened from the action bar: straight into "play your own moves".
   const [practiceTry, setPracticeTry] = useState(false);
-  const practice = usePracticeBoard(game, practicePly, () => (setPracticePly(null), setPracticeTry(false)), practiceTry ? 'try' : 'overview');
+  // Explore: free analysis from a position, moving both sides. Sits on top of whatever was open
+  // (the practice board, a line), which comes back when Explore closes.
+  const [exploreAt, setExploreAt] = useState<(ExploreStart & { fromPractice?: boolean; practicePly?: number }) | null>(null);
+  const openExplore = (fen: string, label: string, key: string, extra: { fromPractice?: boolean; practicePly?: number } = {}) => setExploreAt({ fen, label, key: `${key}:${Date.now()}`, ...extra });
+  const practice = usePracticeBoard(game, practicePly, () => (setPracticePly(null), setPracticeTry(false)), practiceTry ? 'try' : 'overview', (fen, label) =>
+    openExplore(fen, label, `practice:${practicePly}`, { fromPractice: true }),
+  );
+  const freeBoard = useExplore({
+    start: exploreAt,
+    orientation: game.userColor,
+    you: game.userColor,
+    onClose: () => setExploreAt(null),
+    onPractice: exploreAt?.fromPractice
+      ? () => setExploreAt(null)
+      : exploreAt?.practicePly !== undefined
+        ? () => (setPracticeTry(true), setPracticePly(exploreAt.practicePly!), setExploreAt(null))
+        : undefined,
+  });
   const topRef = useRef<HTMLDivElement>(null);
 
   const finish = (m: TeachingMoment, completed: boolean) => {
@@ -530,10 +548,11 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
   // "Find it first": before each of your mistakes/blunders that isn't already a lesson, one try at a better move.
   const [attempted, setAttempted] = useState<Set<number>>(() => new Set());
   const findFirst = useFindFirst(game, (p) => (setAttempted((s) => new Set(s).add(p)), setPly(p)));
-  const lineView = useLineView(game);
+  const lineView = useLineView(game, (fen, label) => openExplore(fen, label, 'line'));
   const findsFirst = (n: number) =>
     game.plies[n - 1]?.color === game.userColor && (classes[n] === 'mistake' || classes[n] === 'blunder') && !attempted.has(n) && !(momentAt.get(n) && momentAt.get(n)!.tier !== 'note'); // lessons have their own flow
   const next = () => {
+    if (freeBoard.active) return freeBoard.redo();
     if (active || findFirst.active) return;
     if (lineView.active) return void lineView.next();
     const n = ply + 1;
@@ -543,17 +562,24 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     else setPly((p) => Math.min(game.plies.length, p + 1));
   };
   const prev = () => {
+    if (freeBoard.active) return freeBoard.undo();
     if (lineView.active) return void lineView.prev();
     if (findFirst.active) return findFirst.cancel();
     if (active) setActive(undefined);
     else setPly((p) => Math.max(0, p - 1));
   };
-  const jump = (p: number) => (setPracticePly(null), setActive(undefined), findFirst.cancel(), lineView.close(), setPly(p));
+  const jump = (p: number) => (setExploreAt(null), setPracticePly(null), setActive(undefined), findFirst.cancel(), lineView.close(), setPly(p));
 
   const stateKey = lesson?.stateKey ?? runner?.stateKey ?? findFirst.panels?.stateKey ?? lineView.panels?.stateKey ?? `browse:${ply}`;
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
+      if (freeBoard.active) {
+        if (e.key === 'Escape') setExploreAt(null);
+        if (e.key === 'ArrowLeft') freeBoard.undo();
+        if (e.key === 'ArrowRight') freeBoard.redo();
+        return;
+      }
       if (practicePly !== null) {
         if (e.key === 'Escape') setPracticePly(null);
         return;
@@ -641,7 +667,14 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
             <CoachText text={cardLine} />
             {momentAt.has(ply) && doneIds.has(momentAt.get(ply)!.id) && <span className="muted"> · reviewed ✓</span>}
           </div>
-          {luckyHere && <CoachText text={luckyHere.text} className="ply-note lucky-note" />}
+          {luckyHere && (
+            <div className="ply-note lucky-note">
+              <CoachText text={luckyHere.text} />{' '}
+              <button className="btn ghost small" onClick={() => (setSheet(null), openExplore(current!.fenAfter, `after ${moveLabel(current!)}`, `lucky:${ply}`))}>
+                Explore it
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <p className="move-caption">
@@ -696,9 +729,9 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     </p>
   ) : null;
 
-  const focused = practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels;
+  const focused = freeBoard.panels ?? practice ?? lesson ?? runner ?? findFirst.panels ?? lineView.panels;
   const panels: Panels = focused ?? { board: browseBoard, prompt: browsePrompt, banner: null, details: browseDetails, stateKey };
-  const steps = !practice && !lesson && !runner && !findFirst.panels && lineView.active ? lineView.info : undefined;
+  const steps = !freeBoard.active && !practice && !lesson && !runner && !findFirst.panels && lineView.active ? lineView.info : undefined;
   const mode: 'browse' | 'focus' | 'steps' = !focused ? 'browse' : steps ? 'steps' : 'focus';
   const marks = Object.fromEntries(
     moments.map((x) => [x.ply, doneIds.has(x.id) ? ('done' as const) : x.kind === 'good_idea' ? ('good' as const) : x.tier === 'note' ? ('note' as const) : ('bad' as const)]),
@@ -739,7 +772,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
                     : '';
   const viewPly = active ? active.ply - 1 : steps ? ply : ply;
   // Stepping through a line: the bar follows the line's positions (until the engine answers, the game's).
-  const evalHere = practice ? undefined : steps?.whiteCp ?? whites[viewPly];
+  const evalHere = freeBoard.active ? freeBoard.whiteCp : practice ? undefined : steps?.whiteCp ?? whites[viewPly];
   const yourView = (w: number) => (game.userColor === 'w' ? w : -w);
   const browseHead =
     ply === 0 ? (
@@ -769,6 +802,11 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
     <div className="gr-actions">
       {goodOrWorse && <ActionButton icon={<Icon name="why" />} label="Why?" onClick={() => setSheet('why')} />}
       {(cls === 'mistake' || cls === 'blunder') && canRefute && <ActionButton icon={<Icon name="showme" />} label="Show me" onClick={() => lineView.open(ply, 'refutation')} />}
+      <ActionButton
+        icon={<Icon name="explore" />}
+        label="Explore"
+        onClick={() => openExplore(current ? current.fenAfter : game.plies[0].fenBefore, current ? `after ${moveLabel(current)}` : 'at the start', `browse:${ply}`, { practicePly: tryPly })}
+      />
       <ActionButton icon={<Icon name="try" />} label="Try moves" disabled={tryPly === undefined} onClick={() => (setPracticeTry(true), setPracticePly(tryPly!))} />
       {evalAt && !evalAt.isBest && evalAt.bestSan && <ActionButton icon={<Icon name="best" />} label="Best" onClick={() => lineView.open(ply, 'better')} />}
       <button className="btn primary gr-next" onClick={atEnd ? () => navigate(`/game/${game.id}/drills`) : next}>
@@ -846,7 +884,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
 
   return (
     <HoverProvider>
-      <div className={`gr mode-${mode}`} ref={topRef}>
+      <div className={`gr mode-${mode}${freeBoard.active ? ' exploring' : ''}`} ref={topRef}>
         <EvalStrip whiteCp={evalHere} userColor={game.userColor} />
         {mode === 'browse' ? (
           <CoachBubble head={browseHead} onMore={() => setSheet('more')} extra={moreExtra}>
@@ -866,7 +904,7 @@ export function GuidedReview({ game, initialPly, explore = false }: { game: Stor
             <CoachText text={steps!.caption} className={steps!.materialChange ? 'step-material' : undefined} />
           </CoachBubble>
         ) : (
-          <CoachBubble tall onMore={() => setSheet('more')}>
+          <CoachBubble tall onMore={freeBoard.active ? undefined : () => setSheet('more')}>
             {panels.prompt}
           </CoachBubble>
         )}

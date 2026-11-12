@@ -71,7 +71,14 @@ interface TryMove extends SequenceFrame {
 }
 
 /** `startIn: 'try'` opens straight on "play your own moves" (Guided Review's Try moves button). */
-export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: () => void, startIn: 'overview' | 'try' = 'overview'): Panels | null {
+/** `onExplore`: switch to Explore (move both sides freely) from the position on the board. */
+export function usePracticeBoard(
+  game: StoredGame,
+  ply: number | null,
+  onClose: () => void,
+  startIn: 'overview' | 'try' = 'overview',
+  onExplore?: (fen: string, label: string) => void,
+): Panels | null {
   const [mode, setMode] = useState<Mode>('overview');
   const [lineView, setLineView] = useState<'preferred' | 'other'>('preferred');
   const [lineStep, setLineStep] = useState(0);
@@ -237,6 +244,11 @@ export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: 
           <button className="btn primary next-btn" onClick={() => setLineStep(Math.min(frames.length, step + 1))} disabled={step >= frames.length}>
             Next ›
           </button>
+          {onExplore && (
+            <button className="btn ghost" onClick={() => onExplore(at ? at.fen : d.fen, at ? `after ${at.san} in this line` : `before ${moveLabel(d.played)}`)}>
+              Explore
+            </button>
+          )}
           {back}
         </div>
       ),
@@ -322,6 +334,16 @@ export function usePracticeBoard(game: StoredGame, ply: number | null, onClose: 
       ),
       banner: (
         <div className="actions practice-actions">
+            {onExplore && (
+              <div className="seg small-seg" role="group" aria-label="Board mode">
+                <button className="seg-btn on" aria-pressed="true">
+                  Practice
+                </button>
+                <button className="seg-btn" onClick={() => onExplore(current, tryMoves.length ? `after ${tryMoves.at(-1)!.san} in your try` : `before ${moveLabel(d.played)}`)}>
+                  Explore
+                </button>
+              </div>
+            )}
           {btn(`Compare with ${bestSan}`, () => (setMode('compare'), setCompareView('yours')), 'primary', !canCompare)}
           {btn('Reset', () => (setTryMoves([]), setTryEnd(null)), 'ghost', tryBusy)}
           {back}

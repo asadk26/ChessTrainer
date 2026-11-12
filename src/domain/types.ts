@@ -66,6 +66,8 @@ export interface PositionEval {
   lines: EngineLine[];
   /** Set for checkmate/stalemate positions so no engine call is needed. */
   terminal?: 'checkmate' | 'stalemate' | 'draw';
+  /** Live analysis only: the search was cancelled before it finished (lines are partial). */
+  aborted?: boolean;
 }
 
 // -------------------------------------------------------------- analysis ---
