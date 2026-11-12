@@ -912,3 +912,28 @@ a { color: var(--accent); }
 
 /* Lucky escapes: a light note, never a lesson. */
 .lucky-note { border-left: 3px solid var(--warn, #d9a400); padding-left: 8px; }
+
+/* ---- Board input: one layer takes every pointer (mouse, touch, pen) for drag and tap-tap ---- */
+.board-frame { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.board-frame.movable { touch-action: none; }
+.board-input {
+  position: absolute; left: 0; top: 0; width: 100%; aspect-ratio: 1; z-index: 11;
+  touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer;
+}
+.board-ghost {
+  position: absolute; left: 0; top: 0; z-index: 12; pointer-events: none; width: 12.5%; aspect-ratio: 1;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35)); will-change: transform;
+}
+.board-ghost > svg { width: 115%; height: 115%; margin: -7.5%; display: block; }
+.promo-picker {
+  position: absolute; z-index: 13; width: 12.5%; display: flex; flex-direction: column;
+  background: var(--card); border-radius: 6px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); overflow: hidden;
+}
+.promo-picker[style*='bottom'] { flex-direction: column-reverse; }
+.promo-btn {
+  aspect-ratio: 1; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer;
+  font-size: clamp(1.4rem, 7vw, 2.6rem); line-height: 1; touch-action: manipulation;
+}
+.promo-btn:hover, .promo-btn:focus-visible { background: rgba(60, 108, 196, 0.18); }
+.promo-w { color: #fff; text-shadow: 0 0 2px #000, 0 0 1px #000, 0 1px 2px rgba(0, 0, 0, 0.6); }
+.promo-b { color: #1d1d1d; }

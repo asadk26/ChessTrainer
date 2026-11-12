@@ -1,7 +1,5 @@
-import { Chessboard } from 'react-chessboard';
-import type { Square } from 'chess.js';
 import type { Arrow, StoredGame } from '../../domain/types';
-import { ARROW_COLORS } from './Board';
+import { Board } from './Board';
 import { moveLabel } from '../../chess/pgn';
 import { asGoodAsBest } from '../../analysis/moveQuality';
 
@@ -56,20 +54,7 @@ export function PositionDiagram({
   return (
     <figure className="diagram" style={{ width: size }}>
       <button className="diagram-board" onClick={onOpen} aria-label={`Open ${spec.title} on the board`}>
-        <Chessboard
-          id={`diagram-${spec.ply}-${size}`}
-          position={spec.fen}
-          boardWidth={size}
-          boardOrientation={orientation === 'w' ? 'white' : 'black'}
-          arePiecesDraggable={false}
-          areArrowsAllowed={false}
-          showBoardNotation={false}
-          animationDuration={0}
-          customArrows={spec.arrows.map((a) => [a.from as Square, a.to as Square, ARROW_COLORS[a.color]])}
-          customLightSquareStyle={{ backgroundColor: 'var(--sq-light)' }}
-          customDarkSquareStyle={{ backgroundColor: 'var(--sq-dark)' }}
-          customBoardStyle={{ borderRadius: 4 }}
-        />
+        <Board fen={spec.fen} orientation={orientation} arrows={spec.arrows} size={size} notation={false} />
       </button>
       <figcaption>
         {spec.kindLabel && <span className={`kind-label ${spec.kindLabel === 'Missed chance' ? 'missed' : ''}`}>{spec.kindLabel}</span>}

@@ -198,7 +198,7 @@ export interface Finding {
 export interface Arrow {
   from: string;
   to: string;
-  color: 'played' | 'best' | 'reply' | 'threat' | 'guess';
+  color: 'played' | 'best' | 'best2' | 'best3' | 'reply' | 'threat' | 'guess';
 }
 
 export interface BoardMarkup {

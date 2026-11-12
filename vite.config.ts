@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), coachApiPlugin(env)],
     test: {
       environment: 'node',
-      include: ['tests/**/*.test.ts'],
+      include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
       testTimeout: 120_000,
     },
   };
