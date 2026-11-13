@@ -13,7 +13,8 @@ import { resultFor, userOutcome } from '../chess/outcome';
 import { generateDrills } from '../drills/generate';
 import { moveLabel, pgnStartTimeFromText } from '../chess/pgn';
 import { COLOR_NAME, PIECE_NAME, playLine } from '../chess/board';
-import { PATTERN_PHRASE, detectPattern, type PatternHit } from './patterns';
+import { PATTERN_PHRASE, backRankStands, detectPattern, withLuft, type PatternHit } from './patterns';
+import { positionCp } from './evaluation';
 import { verdictOf } from './engineReview';
 import { findLuckyEscapes } from './luckyEscapes';
 
@@ -55,6 +56,11 @@ export function gamePatterns(game: Pick<StoredGame, 'plies' | 'userColor' | 'fin
     const cats = game.findings.filter((f) => f.ply === p.ply).map((f) => f.category as string);
     let hit = detectPattern(p.fenBefore, p.uci, a.positions[i + 1]?.lines[0]?.pv ?? [], a.positions[i]?.lines[0]?.pv ?? [], cats);
     if (hit?.tag === 'hanging_piece' && hit.side === 'better') hit = unfinishedTrade(game.plies, i, a.positions[i]?.lines[0]?.pv[0]) ?? hit;
+    // The luft counterfactual (from the engine pass): if an escape square wouldn't have saved the
+    // game, the back rank isn't why the move lost — look for the real mechanism instead.
+    const after = a.positions[i + 1];
+    if (hit?.tag === 'back_rank' && hit.side === 'refutation' && after?.luft && after.lines[0] && !backRankStands(positionCp(after), after.luft.cp))
+      hit = detectPattern(p.fenBefore, p.uci, after.lines[0].pv, a.positions[i]?.lines[0]?.pv ?? [], cats, ['back_rank']);
     // The reply moves before the one the tactic is about, so the reveal starts from the first reply.
     // While the line still follows the game, a move of yours in it that isn't what you played is
     // Stockfish's sample, and is said so (once the opponent's moves differ, it's all a different line).
@@ -280,7 +286,33 @@ export async function deepenCritical(
     const deepPositions = deep.map((p, i) => (p.depth >= DEEP_DEPTH ? i : -1)).filter((i) => i >= 0);
     result = coachFromPositions({ ...game, analysis: { ...(game.analysis ?? { depth: 0, engine: engine.name, analyzedAt: 0, positions: [], moves: [] }), deepPositions } }, deep, prior);
   }
+  if (await addLuftChecks(result.game, deep, engine)) {
+    const deepPositions = deep.map((p, i) => (p.depth >= DEEP_DEPTH ? i : -1)).filter((i) => i >= 0);
+    result = coachFromPositions({ ...game, analysis: { ...(game.analysis ?? { depth: 0, engine: engine.name, analyzedAt: 0, positions: [], moves: [] }), deepPositions } }, deep, prior);
+  }
   return result;
+}
+
+/**
+ * The luft counterfactual for every move the coach would teach as a back-rank attack: evaluate the
+ * position after it again with the mover's king given an escape square (one pawn pushed), and store
+ * that on the position (`luft`). Mutates `positions`; true if anything was added. Coaching again
+ * afterwards keeps the back-rank lesson only where luft would have changed the outcome.
+ */
+export async function addLuftChecks(coached: StoredGame, positions: PositionEval[], engine: Engine): Promise<boolean> {
+  let added = false;
+  for (const [ply, hit] of Object.entries(coached.patterns ?? {})) {
+    if (hit.tag !== 'back_rank' || hit.side !== 'refutation') continue;
+    const p = coached.plies[Number(ply) - 1];
+    const at = positions[Number(ply)];
+    if (!p || !at || at.luft || at.terminal) continue;
+    const fen = withLuft(at.fen, p.color);
+    if (!fen) continue;
+    const res = await engine.analyse(fen, { depth: DEEP_DEPTH, multiPv: 1 });
+    positions[Number(ply)] = { ...at, luft: { cp: positionCp(res), depth: DEEP_DEPTH } };
+    added = true;
+  }
+  return added;
 }
 
 export function describePly(game: StoredGame, ply: number): string {

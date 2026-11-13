@@ -7,7 +7,7 @@ import type { Color, PieceType } from '../domain/types';
 import { COLOR_NAME, PIECE_NAME, PIECE_VALUE, attackedEnemyPieces, attackersOf, exchangeGain, isLoose, kingSquare, materialAfterLine, materialBalance, other, pieceAt, underThreat } from '../chess/board';
 import { hangingPieces, pinsBy } from './boardFacts';
 
-export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange' | 'threat_ignored';
+export type PatternTag = 'in_between_move' | 'knight_fork' | 'fork' | 'hanging_piece' | 'pin' | 'discovered_attack' | 'trapped_piece' | 'opened_line' | 'back_rank' | 'removed_defender' | 'unblocked_queen' | 'pawn_fork' | 'bigger_capture' | 'skewer' | 'greedy_queen' | 'stuck_deep' | 'blocked_with_tempo' | 'incomplete_exchange' | 'threat_ignored' | 'capture_with_check';
 
 export const PATTERN_LABEL: Record<PatternTag, string> = {
   in_between_move: 'In-between move',
@@ -29,6 +29,7 @@ export const PATTERN_LABEL: Record<PatternTag, string> = {
   blocked_with_tempo: 'Check blocked with tempo',
   incomplete_exchange: 'Unfinished trade',
   threat_ignored: 'Threat ignored',
+  capture_with_check: 'Counter-threat captured with check',
 };
 
 /** One reusable rule per pattern. */
@@ -52,6 +53,7 @@ export const PATTERN_RULE: Record<PatternTag, string> = {
   blocked_with_tempo: 'Before giving a check, look at how it can be blocked: a block that also attacks your checking piece wins time.',
   incomplete_exchange: 'Finish a trade before starting a new idea: after captures and checks, recount the material and take back.',
   threat_ignored: 'After every opponent move, ask: what does that move attack? Deal with threats before following your own plan.',
+  capture_with_check: 'When your piece is attacked and you answer with a counter-threat, check whether they can capture your threat with check.',
 };
 
 /** What happened, said from the player's side: what the opponent's reply did, or what the better move had. */
@@ -75,6 +77,7 @@ export const PATTERN_PHRASE: Record<PatternTag, { refutation: string; better: st
   blocked_with_tempo: { refutation: 'gave a check that was blocked with tempo', better: 'missed a block with tempo' },
   incomplete_exchange: { refutation: 'left a trade unfinished', better: 'left a trade unfinished' },
   threat_ignored: { refutation: 'ignored a threat', better: 'ignored a threat' },
+  capture_with_check: { refutation: 'answered a threat with a counter-threat that could be captured with check', better: 'missed a capture with check' },
 };
 
 /** The rule for a tactic you missed (your own chance), where it differs from the defensive one. */
@@ -144,6 +147,39 @@ function frames(fen: string, ucis: string[], max = 6): Frame[] {
 /** Material swing for `pov` from frame `from` to the end of the line (pawns). */
 const gainAfter = (fs: Frame[], from: number, pov: Color) => (fs.length ? materialBalance(fs[fs.length - 1].after, pov) - materialBalance(fs[from].before, pov) : 0);
 
+/**
+ * The same position with an escape square for `victim`'s king: one pawn in front of it pushed a
+ * square (the one furthest from the centre first, like h3/h6). Undefined if no pawn can step up.
+ */
+export function withLuft(fen: string, victim: Color): string | undefined {
+  const k = kingSquare(fen, victim);
+  const ahead = victim === 'w' ? 2 : 7;
+  const step = victim === 'w' ? 1 : -1;
+  const files = [-1, 1, 0]
+    .map((d) => String.fromCharCode(k.charCodeAt(0) + d))
+    .filter((f) => f >= 'a' && f <= 'h')
+    .sort((a, b) => Math.abs(b.charCodeAt(0) - 100.5) - Math.abs(a.charCodeAt(0) - 100.5));
+  for (const f of files) {
+    const from = `${f}${ahead}`;
+    const to = `${f}${ahead + step}`;
+    const p = pieceAt(fen, from);
+    if (p?.color !== victim || p.type !== 'p' || pieceAt(fen, to)) continue;
+    const c = new Chess(fen);
+    c.remove(from as Square);
+    c.put({ type: 'p', color: victim }, to as Square);
+    try {
+      return new Chess(c.fen()).fen();
+    } catch {
+      continue;
+    }
+  }
+}
+
+/**
+ * A back-rank check: a rook or queen check on the king's home rank, the king boxed in by its own
+ * pawns. Whether the back rank is really why it works is checked with the engine (the luft
+ * counterfactual in the engine pass, see backRankStands): this is only the candidate.
+ */
 function backRank(fs: Frame[]): PatternHit | undefined {
   for (let i = 0; i < Math.min(fs.length, 5); i++) {
     const { move, after } = fs[i];
@@ -159,6 +195,46 @@ function backRank(fs: Frame[]): PatternHit | undefined {
     const boxed = files.every((f) => pieceAt(after, `${f}${ahead}`)?.color === victim);
     if (boxed) return { tag: 'back_rank', side: 'refutation', at: i, evidence: `${move.san} hits the king on its back rank, boxed in by its own pawns` };
   }
+}
+
+/**
+ * The luft counterfactual: does an escape square change the outcome? `realCp` is the engine's eval
+ * after your move (for your opponent, to move), `luftCp` the same position with luft. The back
+ * rank is the reason only if luft takes away most of what the opponent wins (at least 1.5 pawns,
+ * and at least a third of it); otherwise the material goes anyway and "make luft" is the wrong lesson.
+ */
+export function backRankStands(realCp: number, luftCp: number): boolean {
+  const saved = realCp - luftCp;
+  return saved >= 150 && saved >= Math.abs(realCp) / 3;
+}
+
+/**
+ * A counter-threat that fails to a capture with check: your piece was already attacked, your move
+ * attacked something of theirs instead of saving it, and they take your attacking piece WITH CHECK
+ * — so after you deal with the check, they still take the piece that was attacked (26...Red8: the
+ * queen on a3 was attacked by Ra1; Red8 hit the queen on d4, but Qxd8+ Rxd8 Rxa3).
+ */
+function captureWithCheck(fenBefore: string, fs: Frame[], mover: Color): PatternHit | undefined {
+  const [played, reply, answer, take] = fs.map((f) => f.move);
+  if (!played || !reply || !answer || !take || played.color !== mover) return;
+  if (!reply.captured || !reply.san.includes('+') || reply.to !== played.to) return;
+  // The piece taken afterwards was yours before the move, already attacked, and not the one you moved.
+  const x = take.to;
+  const unit = pieceAt(fenBefore, x);
+  if (!take.captured || take.color === mover || !unit || unit.color !== mover || unit.type === 'k' || x === played.from) return;
+  if (!(underThreat(fenBefore, x) || exchangeGain(fenBefore, x, other(mover)) > 0)) return;
+  // Your move made a counter-threat: it attacks a piece of theirs it didn't attack before.
+  const fresh = attackedEnemyPieces(fs[0].after, played.to).filter((t) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3);
+  if (!fresh.length) return;
+  const net = materialBalance(fs[3].after, mover) - materialBalance(fenBefore, mover);
+  if (net > -2) return;
+  return {
+    tag: 'capture_with_check',
+    side: 'refutation',
+    at: 1,
+    square: x,
+    evidence: `your ${sq(unit.type as PieceType, x)} was attacked; ${played.san} hit back at the ${sq(fresh[0].type, fresh[0].square)}, but ${reply.san} takes it with check, and after ${answer.san}, ${take.san} takes your ${PIECE_NAME[unit.type as PieceType]} anyway`,
+  };
 }
 
 function knightFork(fs: Frame[]): PatternHit | undefined {
@@ -564,14 +640,17 @@ const DETECTORS = [backRank, knightFork, discovered, skewer, fork, pin, inBetwee
  * line), then in what the better line had. Hanging pieces are checked last (the most common and
  * least specific).
  */
-export function detectPattern(fenBefore: string, playedUci: string, replyPv: string[], bestPv: string[], categories: string[] = []): PatternHit | undefined {
+export function detectPattern(fenBefore: string, playedUci: string, replyPv: string[], bestPv: string[], categories: string[] = [], skip: PatternTag[] = []): PatternHit | undefined {
   const mover = new Chess(fenBefore).turn() as Color;
   const refutation = frames(fenBefore, [playedUci, ...replyPv]);
   const better = frames(fenBefore, bestPv);
   const opp = other(mover);
   const block = blockedWithTempo(refutation, mover);
   if (block) return block;
+  const checkCapture = captureWithCheck(fenBefore, refutation, mover);
+  if (checkCapture) return checkCapture;
   for (const d of DETECTORS) {
+    if (d === backRank && skip.includes('back_rank')) continue;
     // The punishment must be the opponent's move; the missed idea must be yours.
     const r = refutation.length > 1 ? d(refutation.slice(1)) : undefined;
     if (r && refutation[r.at + 1]?.move.color === opp) {
@@ -656,6 +735,10 @@ export const PATTERN_FOCUS: Record<PatternTag, { title: string; detail: string }
   fork: { title: 'Before every move, look at the checks your opponent will have next.', detail: 'Most forks at this level are a queen (or bishop, rook or pawn) attacking two things at once — very often a check that also hits a loose piece. Before you move, list your opponent’s checks and ask whether any of them also attacks something undefended.' },
   knight_fork: { title: 'Check the squares their knights can jump to before you move.', detail: 'A knight on the right square attacks two pieces at once — often king and queen, or king and rook. Before every move, look at each enemy knight and the squares it can reach next.' },
   pin: { title: "Don't line your pieces up in front of your king or queen.", detail: 'A pinned piece can be attacked again and again because it can’t move away. Before putting a piece on a line with your king or queen behind it, check whether a bishop, rook or queen can pin it.' },
+  capture_with_check: {
+    title: 'Before answering a threat with a counter-threat, check whether they can take it with check.',
+    detail: 'When your piece is attacked, a counter-attack only works if your opponent has to deal with it. If they can capture your attacking piece with check, you must answer the check — and then they still take the piece that was attacked. Check their captures-with-check first, or simply save the piece.',
+  },
   in_between_move: { title: 'Before you recapture, look for a stronger in-between move.', detail: 'An in-between move — a check or a bigger threat played before the expected recapture — can change the whole exchange. Check for one, for both sides, whenever pieces are being traded.' },
   trapped_piece: { title: 'Before a piece goes deep, make sure it can get back.', detail: 'A piece that grabs material near the edge or in the enemy camp can run out of squares. Count its escape squares after the capture before you play it.' },
   opened_line: { title: 'Think twice before opening lines toward your own king.', detail: 'A pawn move or exchange that opens a file or diagonal toward your king lets enemy rooks, bishops and queens straight in. Open lines toward the king only when your pieces are ready to use them first.' },

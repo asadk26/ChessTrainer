@@ -37,6 +37,7 @@ function appLabel(f: Finding): string {
       incomplete_exchange: ['incomplete_exchange', 'incomplete_exchange'],
       discovered_attack: ['discovered_attack_allowed', 'discovered_attack_missed'],
       in_between_move: ['in_between_move', 'in_between_move_missed'],
+      capture_with_check: ['in_between_move', 'in_between_move_missed'],
       pin: ['pin_allowed', 'pin_exploit_missed'],
       trapped_piece: ['trapped_piece', 'trap_missed'],
       opened_line: ['opened_line_to_own_king', 'opened_line_missed'],
@@ -279,6 +280,28 @@ for (const g of truth.games.filter((x): x is TruthGame & { expected_summary: Non
   console.log(`    headline: ${r.headline}`);
 }
 
-const hardFails = results.filter((r) => r.hardFail).length + cleanFails;
+// Side attribution: the summary may say you allowed a mate or a back-rank attack only when one of
+// your own moves has that finding (a mate you delivered is never one you "allowed").
+console.log('\nSummary attribution (mate / back-rank claims need a finding on your own move):');
+let attributionFails = 0;
+for (const g of truth.games) {
+  const cg = coached.get(g.game)!;
+  const r = cg.report!;
+  const text = [r.headline, ...r.hurt.map((h) => h.text), r.focus.title, r.focus.detail, r.story ?? '', ...cg.moments.filter((m) => m.kind === 'mistake').map((m) => `${m.text.title} ${m.text.lesson}`)].join(' ');
+  const mine = cg.findings.filter((f) => f.kind === 'weakness' && f.ply > 0 && cg.plies[f.ply - 1]?.color === cg.userColor);
+  const claimsBackRank = /back[- ]rank|luft|king an escape square/i.test(text);
+  const claimsMate = /allowed (a )?(forced )?(check)?mate/i.test(text);
+  const bad = [
+    claimsBackRank && !mine.some((f) => f.facts.pattern === 'back_rank' && f.facts.patternSide !== 'better') ? 'back-rank' : '',
+    claimsMate && !mine.some((f) => f.facts.mate) ? 'allowed mate' : '',
+  ].filter(Boolean);
+  if (bad.length) {
+    attributionFails++;
+    console.log(`  ‼ ${g.game}: claims ${bad.join(' and ')} with no such finding on your moves`);
+  }
+}
+if (!attributionFails) console.log('  ✓ all games');
+
+const hardFails = results.filter((r) => r.hardFail).length + cleanFails + attributionFails;
 console.log(`\n${hardFails ? `${hardFails} hard fail(s)` : 'No hard fails'}.`);
 process.exit(hardFails ? 1 : 0);

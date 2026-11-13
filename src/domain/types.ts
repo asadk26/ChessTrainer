@@ -66,6 +66,12 @@ export interface PositionEval {
   lines: EngineLine[];
   /** Set for checkmate/stalemate positions so no engine call is needed. */
   terminal?: 'checkmate' | 'stalemate' | 'draw';
+  /**
+   * The luft counterfactual, stored on the position after a move that may have walked into a
+   * back-rank attack: the engine's eval (side to move) of this position with the mover's king given
+   * an escape square. Lets the coach tell a real back-rank lesson from one where luft changes nothing.
+   */
+  luft?: { cp: number; depth: number };
   /** Live analysis only: the search was cancelled before it finished (lines are partial). */
   aborted?: boolean;
 }

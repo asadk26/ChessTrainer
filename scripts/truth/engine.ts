@@ -4,7 +4,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createNodeEngine } from '../../server/nodeEngine.ts';
-import { analyzeGame } from '../../src/analysis/pipeline.ts';
+import { addLuftChecks, analyzeGame, coachFromPositions } from '../../src/analysis/pipeline.ts';
 import { cachedPositions, loadTruth, positionsPath, storedGame } from './data.ts';
 
 const force = process.argv.includes('--force');
@@ -33,3 +33,24 @@ await Promise.all(
     }
   }),
 );
+
+// The luft counterfactual for caches made before it existed: games whose coaching teaches a
+// back-rank attack get the luft eval added (a fresh engine per game, so the result is repeatable).
+let luft = 0;
+for (const g of loadTruth().games) {
+  const positions = cachedPositions(g.game);
+  if (!positions) continue;
+  const coached = coachFromPositions(storedGame(g), positions, []).game;
+  if (!Object.values(coached.patterns ?? {}).some((h) => h.tag === 'back_rank' && h.side === 'refutation')) continue;
+  const engine = createNodeEngine();
+  try {
+    if (await addLuftChecks(coached, positions, engine)) {
+      writeFileSync(positionsPath(g.game), JSON.stringify(positions));
+      luft++;
+      console.log(`  ${g.game}: luft check added`);
+    }
+  } finally {
+    engine.dispose();
+  }
+}
+console.log(`${luft} game(s) got a luft check`);
