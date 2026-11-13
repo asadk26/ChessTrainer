@@ -1,6 +1,7 @@
 {
-  "version": 7,
+  "version": 8,
   "changelog": [
+    "v8 (2026-11-12): JoeYoaGoGo game as tune: 26...Red8 labeled in_between_move (capture with check), with must_not back_rank_mate_allowed / mate_allowed; summary must not say I allowed a back-rank mate.",
     "v7 (2026-11-04): Seannty91 game as tune (3 moments; Claude Code has analyzed it). 7 fresh holdout moments from Nov 1-4 games Claude Code has not seen (Enrikomat, dovanminhh15, bimmer_playground_ph, Ahmed-taimour).",
     "v6 (2026-10-30): added the Oct 30 game vs T_Cel as a tune near-clean game with summary/explanation expectations.",
     "v5 (2026-10-29): added 6 tune moments for the weak holdout labels: queen-check forks, a queen double attack, a pawn fork, and two threat_ignored (one via a discovered attack). Holdout unchanged.",
@@ -2234,6 +2235,37 @@
       "must_not_label": [],
       "confidence": "high",
       "split": "holdout"
+    },
+    {
+      "id": "JoeYoaGoGo-26b-Red8",
+      "game": "JoeYoaGoGo vs chunkmonkey420",
+      "my_color": "black",
+      "move_number": 26,
+      "played": "Red8",
+      "ply": 52,
+      "fen_before": "2r1r1k1/p4ppp/2p1p3/2P5/1P1Q1P2/q7/5RPP/R5K1 b - - 1 26",
+      "kind": "mistake",
+      "primary_label": "in_between_move",
+      "secondary_labels": [
+        "threat_ignored",
+        "capture_with_check"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -3,
+        "eval_after_cp_mover": -525,
+        "win_pct_drop": 37.1,
+        "best_move": "Rcd8",
+        "opponent_best_reply": "Qxd8+"
+      },
+      "mechanism": "The black queen on a3 was attacked by the a1 rook. Red8 counterattacks the white queen, but it takes the e8 rook off the back rank, so 27.Qxd8+ captures WITH CHECK; after Rxd8, Rxa3 wins the queen anyway. 26...Rcd8 kept e8 guarded (Qxd8 would not be check) and was equal. Not a back-rank mate: no mate exists in the line.",
+      "expected_lesson": "When your piece is attacked and you answer with a counter-threat, check whether they can capture your threat with check.",
+      "must_not_label": [
+        "back_rank_mate_allowed",
+        "mate_allowed",
+        "hanging_piece"
+      ],
+      "confidence": "high",
+      "split": "tune"
     }
   ],
   "clean_games": [
@@ -2475,7 +2507,7 @@
           "king left exposed, mated"
         ],
         "must_not_flag": [
-          "12.f3 — this was the engine's top move; do NOT treat it as the root cause"
+          "12.f3 \u2014 this was the engine's top move; do NOT treat it as the root cause"
         ]
       }
     },
@@ -2757,6 +2789,22 @@
       "result": "1-0",
       "link": null,
       "movetext": "1. e4 c6 2. g3 d5 3. e5 Bf5 4. d4 e6 5. h4 Nd7 6. g4 Be4 7. f3 Bxc2 8. Qxc2 Bb4+ 9. Bd2 Qb6 10. Bxb4 Qxb4+ 11. Qc3 Qb6 12. Nd2 Ne7 13. h5 h6 14. b3 O-O 15. Ne2 Rac8 16. a4 c5 17. a5 Qd8 18. Qe3 b6 19. axb6 axb6 20. dxc5 bxc5 21. g5 d4 22. Qf4 Nd5 23. Qe4 Qxg5 24. f4 Qg4 25. Bg2 Ne3 26. Bf3 Qf5 27. Qxf5 exf5 28. Ra7 Nb6 29. Rb7 Na8 30. Rd7 Nb6 31. Rb7 Na8 32. Ra7 Nc7 33. Bc6 Nc2+ 34. Kf2 d3 35. Nc3 Rfd8 36. Ba4 Ne6 37. Kg3 Rd4 38. Nb5 Rxf4 39. Nd6 Rb8 40. Nxf7 c4 41. Nxc4 Ncd4 42. Nd2 Ne2+ 43. Kg2 Rg4+ 44. Kf3 Ng5+ 45. Ke3 Rg3+ 46. Kf2 Nh3+ 47. Ke1 Rc8 48. Nc4 Rd8 49. Nxd8 Nc3 50. Ne6 Nb1 51. Nd2 Re3+ 52. Kd1 Nf2+ 53. Kc1 Nxd2 54. Kxd2 Re2+ 55. Kc3 d2 56. Rxg7+ Kh8 57. Ra1 Ne4+ 58. Kd3 d1=Q+ 59. Rxd1 1-0"
+    },
+    {
+      "game": "JoeYoaGoGo vs chunkmonkey420",
+      "my_color": "black",
+      "result": "0-1",
+      "link": null,
+      "movetext": "1. e4 c6 2. d4 d5 3. Nc3 Nf6 4. exd5 cxd5 5. Nf3 Bg4 6. Be2 Nc6 7. O-O e6 8. Ne5 Bxe2 9. Nxc6 bxc6 10. Qxe2 Bd6 11. f4 O-O 12. Be3 Qb6 13. b3 Qb4 14. Na4 Ne4 15. Qd3 Rac8 16. a3 Qa5 17. c4 Rfe8 18. Nc5 Nxc5 19. dxc5 Bxc5 20. b4 Bxe3+ 21. Qxe3 Qa6 22. c5 Qc4 23. Rac1 Qa2 24. Rf2 d4 25. Qxd4 Qxa3 26. Ra1 Red8 27. Qe4 Qxa1+ 28. Rf1 Rd1 29. Qxc6 Rxf1# 0-1",
+      "expected_summary": {
+        "story": [
+          "26...Red8?? allowed 27.Qxd8+ (capture with check) then Rxa3, winning the queen; White missed it",
+          "27.Qe4?? Qxa1+ and Black (me) delivered the back-rank mate 29...Rxf1#"
+        ],
+        "must_not_flag": [
+          "any claim that I allowed a back-rank mate (no mate exists after 26...Red8; the back-rank mate was mine, against White)"
+        ]
+      }
     },
     {
       "game": "chunkmonkey420 vs RajinderSinghAP",

@@ -1,15 +1,15 @@
-# Ground truth: chunkmonkey420 key moments (v7)
+# Ground truth: chunkmonkey420 key moments (v8)
 
 `ground-truth.json` is a hand-verified test set for Passed Pawn's move analysis.
 Each moment was found by Stockfish (depth 14) and its *mechanism* (why the move lost or what was missed) was checked with deeper lines (depth 18+).
 These are real games from chunkmonkey420, so treat the labels as a regression suite, not training data.
 
 ## What's in it
-- `moments[]`: 81 labeled moves from 67 games, each with:
+- `moments[]`: 82 labeled moves from 68 games, each with:
   - the FEN before the move, the move played, the engine's best move, and the opponent's best reply;
   - a `kind` (mistake or missed opportunity), a `primary_label`, `secondary_labels`, and a `mechanism` written in plain words;
   - an `expected_lesson`, a `must_not_label` list (wrong generic labels), and a `confidence`;
-  - a `split`: `tune` (38) or `holdout` (43).
+  - a `split`: `tune` (39) or `holdout` (43).
 - `clean_games[]`: 7 games with no real mistakes. The app must not invent a "you hang pieces" or "develop faster" lesson for these.
 - `games[]`: the full movetext and result for every game referenced, plus `expected_summary` for Drearydoc and Atayan48.
 - `label_definitions`: the taxonomy. Add labels only when a new mechanism truly doesn't fit one of these.
@@ -30,6 +30,7 @@ These are real games from chunkmonkey420, so treat the labels as a regression su
 - Engine numbers will differ slightly from the app's engine depth. Match on ply/SAN, not on exact centipawns.
 - `Sparrrowfalls 27.Qxb5` only shows up as a mistake at depth ≥ 18. If the app runs shallower, it's allowed to miss it (score 0, not a fail).
 - **Correction:** in Drearydoc, **12.f3 was Stockfish's top move**. The root cause is 13.Nh3 (pawn fork after ...exf3 Rxf3 g4), then 16.Bxg4. Any earlier regression test that blamed 12.f3 for "loosening the kingside" is wrong and should be replaced by `expected_summary` here.
+- **v8:** JoeYoaGoGo (Nov 12) as tune: 26...Red8 is `in_between_move` (Qxd8+ captures with check, then Rxa3), never a back-rank mate. Counts: 82 moments (39 tune, 43 holdout), 68 games, 7 clean games.
 - **v7:** Seannty91 (tune: 32...Bf5 removed_defender, 33...cxd5 mate_allowed, 23...Be6 discovered_attack_allowed) and 7 fresh holdout moments from games you have not seen. Counts: 81 moments (38 tune, 43 holdout), 67 games, 7 clean games.
 - **v6:** Added the Oct 30 game vs T_Cel as a tune near-clean game (no new moments). Counts: 71 moments (35 tune, 36 holdout), 62 games, 7 clean games.
 - **v5:** 6 new tune moments for the labels that score worst on holdout (queen-check forks, a queen double attack, a pawn fork, and threat_ignored, including one where the threat came from a discovered attack). Holdout is unchanged. Counts are now 71 moments (35 tune, 36 holdout), 61 games, 6 clean games.
