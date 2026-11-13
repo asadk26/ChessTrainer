@@ -1335,6 +1335,98 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
   return out;
 }
 
+/** The pawn that moved on ply index `i` is still on the board `plies` half-moves later (or the game ended first). */
+function pawnSurvives(ctx: DetectorContext, i: number, plies: number): boolean {
+  let at = ctx.plies[i].to;
+  const me = ctx.plies[i].color;
+  for (let k = i + 1; k <= i + plies && k < ctx.plies.length; k++) {
+    const q = ctx.plies[k];
+    if (q.color === me && q.from === at) at = q.to;
+    else if (q.color !== me && pieceAt(q.fenAfter, at)?.color !== me) return false;
+  }
+  return true;
+}
+
+/**
+ * Credit for material won from the opponent's mistake: their move cost at least a pawn's worth on
+ * the engine's scale, and within your next two moves you were really up material (at least a pawn,
+ * still there two half-moves later), without a mistake of your own on the way. "18.Nc5 dropped a
+ * pawn, and you collected it: 18...Nxc5 19.dxc5 Bxc5." Moves already credited as free material are skipped.
+ */
+function punishedMistakes(ctx: DetectorContext, credited: Set<number>): Finding[] {
+  const user = ctx.userColor;
+  const out: Finding[] = [];
+  for (let j = 0; j < ctx.plies.length && out.length < 2; j++) {
+    const q = ctx.plies[j];
+    const e = ctx.evals[j];
+    if (q.color === user || e.isBest || e.cpBefore - e.cpAfter < 100 || e.cpAfter > -80) continue;
+    const base = materialBalance(q.fenBefore, user);
+    // Your next two moves (and their reply in between): where did the material settle?
+    const window = ctx.plies.slice(j + 1, j + 4);
+    const mine = window.filter((x) => x.color === user);
+    if (mine.length < 1 || mine.some((x) => pd(ctx.evals[x.ply - 1]) > 5)) continue;
+    if (window.some((x) => x.san.includes('#'))) continue; // a mate is the point, not the material
+    if (!mine[0].captured) continue; // collected at once, not won later by other means
+    const lastCapture = [...window].reverse().find((x) => x.color === user && x.captured);
+    if (!lastCapture || credited.has(lastCapture.ply)) continue;
+    const gain = materialBalance(lastCapture.fenAfter, user) - base;
+    const held = ctx.plies.slice(lastCapture.ply, lastCapture.ply + 4).every((x) => materialBalance(x.fenAfter, user) - base >= gain);
+    if (gain < 1 || !held) continue;
+    if (out.some((f) => Math.abs(f.ply - lastCapture.ply) <= 4)) continue;
+    const seq = ctx.plies.slice(j + 1, lastCapture.ply);
+    const text = seq.map((x, k) => (k === 0 || x.color === 'w' ? label(x) : x.san)).join(' ');
+    out.push({
+      kind: 'strength',
+      category: 'punished_mistake',
+      ply: lastCapture.ply,
+      severity: 2,
+      confidence: 'high',
+      relatedPlies: [q.ply, ...seq.map((x) => x.ply).filter((x) => x !== lastCapture.ply)],
+      evidence: `${label(q)} dropped ${materialPhrase(gain)}, and you collected it: ${text}.`,
+      facts: { mistake: q.san, gain, moves: seq.map((x) => x.san) },
+    });
+    j = lastCapture.ply - 1;
+  }
+  return out;
+}
+
+/**
+ * A clear edge let slip without losing anything outright: you were better by a pawn's worth or
+ * more, the move wasn't Stockfish's (or as good), and afterwards the game was about level. A small
+ * note, not a lesson (no tactic explains it); said honestly when you stayed material up.
+ */
+function detectEdgeSlip(ctx: DetectorContext, i: number, already: Finding[]): Finding[] {
+  const p = ctx.plies[i];
+  const e = ctx.evals[i];
+  if (p.color !== ctx.userColor || already.some((f) => f.kind === 'weakness') || nearBest(e)) return [];
+  if (p.moveNumber < 12 || e.cpBefore < 100 || e.cpAfter > 40 || e.cpBefore - e.cpAfter < 80) return [];
+  // Only an edge built on extra material: that's the lead you can see slipping away.
+  const before = materialBalance(p.fenBefore, ctx.userColor);
+  if (before < 1) return [];
+  const later = ctx.plies[Math.min(ctx.plies.length - 1, i + 4)];
+  const after = materialBalance(later.fenAfter, ctx.userColor);
+  const seq = ctx.plies.slice(i + 1, i + 5).map((x, k) => (k === 0 || x.color === 'w' ? label(x) : x.san)).join(' ');
+  const level = Math.abs(e.cpAfter) <= 50 ? 'the position was level' : 'the edge was mostly gone';
+  const how =
+    before >= 1 && after >= before
+      ? `you stayed ${materialPhrase(before)} up, but after ${seq} ${level}`
+      : before >= 1
+        ? `after ${seq} your extra material was gone`
+        : `after ${seq} ${level}`;
+  const fmt = (cp: number) => `${cp > 0 ? '+' : ''}${(cp / 100).toFixed(1)}`;
+  return [
+    {
+      kind: 'weakness',
+      category: 'let_edge_slip',
+      ply: p.ply,
+      severity: 1,
+      confidence: 'medium',
+      evidence: `${label(p)} let your edge slip (${fmt(e.cpBefore)} → ${fmt(e.cpAfter)}): ${how}.${e.bestSan ? ` ${e.bestSan} kept it.` : ''}`,
+      facts: { bestSan: e.bestSan, materialBefore: before, stillAhead: after >= before && before >= 1 },
+    },
+  ];
+}
+
 /** Credit good practical decisions — not just the absence of mistakes. */
 function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
   const user = ctx.userColor;
@@ -1389,8 +1481,9 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       if (gap >= 12 && forcing && e.isBest && !mated) defended.push(p.ply);
     }
 
-    // Creating a dangerous passed pawn.
-    if (!passed && p.piece === 'p' && p.moveNumber >= 15 && d <= 5 && relativeRank(p.to, user) >= 5 && passedPawns(p.fenAfter, user).includes(p.to)) {
+    // Creating a dangerous passed pawn — one that lives: still on the board two full moves later
+    // (24...d4 25.Qxd4 was a pawn given up, not a passed pawn to praise).
+    if (!passed && p.piece === 'p' && p.moveNumber >= 15 && d <= 5 && relativeRank(p.to, user) >= 5 && passedPawns(p.fenAfter, user).includes(p.to) && pawnSurvives(ctx, i, 4)) {
       passed = { ply: p.ply, square: p.to };
     }
 
@@ -1402,8 +1495,26 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
   }
 
   const lbl = (ply: number) => label(ctx.plies[ply - 1]);
+  out.push(...punishedMistakes(ctx, new Set([...free, ...setups.map((x) => x.capture.ply)])));
   for (const { setup, capture } of setups.slice(0, 2)) {
     const target = pieceAt(setup.fenAfter, capture.to)!;
+    // The capture it set up was checkmate: the point was the mate, not the piece.
+    if (capture.san.includes('#')) {
+      const between = ctx.plies[capture.ply - 2];
+      const k = kingSquare(capture.fenAfter, opp);
+      const backRank = k[1] === (opp === 'w' ? '1' : '8') && capture.to[1] === k[1];
+      out.push({
+        kind: 'strength',
+        category: 'found_tactic',
+        ply: setup.ply,
+        severity: 2,
+        confidence: 'high',
+        relatedPlies: [capture.ply],
+        evidence: `${label(setup)} threatened mate${backRank ? ' on the back rank' : ''} (${capture.san}).${between && between.color === opp ? ` ${label(between)} didn't stop it, and` : ''} ${label(capture)} was checkmate — a real tactic, and you found it.`,
+        facts: { san: setup.san, setupFor: capture.ply, mateThreat: true },
+      });
+      continue;
+    }
     const pin = pinsBy(setup.fenAfter, user).find((x) => x.includes(`${PIECE_NAME[target.type]} on ${capture.to}`));
     const pinText = pin ? ` It couldn't get away: ${pin.replace(/^the /, 'your ')}.` : ` It couldn't get away.`;
     out.push({
@@ -1522,6 +1633,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     here.push(...detectCaptureDecisions(ctx, i, seen()));
     here.push(...detectPawnStructure(ctx, i, seen()));
     here.push(...detectCatchAll(ctx, i, here));
+    here.push(...detectEdgeSlip(ctx, i, here));
     findings.push(...here);
   }
   findings.push(...detectPawnStorm(ctx, findings));
@@ -1537,8 +1649,19 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   // What the game showed beats the engine line's version of the same move: a set-up credit
   // (attacked a pinned piece, won it next move) replaces the line-based praise for that move.
   const setupPlies = new Set(findings.filter((f) => f.facts.setupFor !== undefined).map((f) => f.ply));
+  // One credit per episode: material won from a slip is already in a tactic or free-material credit.
+  const creditedPlies = new Set(findings.filter((f) => f.category === 'found_tactic' || f.category === 'won_free_material').flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]));
+  const firstSlip = findings.find((f) => f.category === 'let_edge_slip');
   const kept = findings.filter((f) => {
     if (f.category === 'found_tactic' && f.facts.setupFor === undefined && setupPlies.has(f.ply)) return false;
+    if (f.category === 'punished_mistake') {
+      // Same episode: a tactic or free-material credit on these moves or within two moves after.
+      const ps = [f.ply, ...(f.relatedPlies ?? [])];
+      const from = Math.min(...ps);
+      const to = Math.max(...ps) + 4;
+      if ([...creditedPlies].some((x) => x >= from && x <= to)) return false;
+    }
+    if (f.category === 'let_edge_slip' && f !== firstSlip) return false;
     // No credit for a move after which you are being mated (taking a sacrificed queen, a "defence"…).
     if (f.kind === 'strength') return !(f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor && ctx.evals[f.ply - 1].cpAfter <= -(MATE_CP - 1000));
     if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;

@@ -15,6 +15,7 @@ import { moveLabel, pgnStartTimeFromText } from '../chess/pgn';
 import { COLOR_NAME, PIECE_NAME, playLine } from '../chess/board';
 import { PATTERN_PHRASE, backRankStands, detectPattern, withLuft, type PatternHit } from './patterns';
 import { positionCp } from './evaluation';
+import { missedLine, unpunished } from '../coach/turningPoints';
 import { verdictOf } from './engineReview';
 import { findLuckyEscapes } from './luckyEscapes';
 
@@ -201,7 +202,14 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   // Inaccuracies that allowed a clear tactic the opponent missed: notes only (not findings).
   const taughtPlies = new Set(findings.filter((f) => f.kind === 'weakness' && f.confidence !== 'low' && f.ply > 0).map((f) => f.ply));
   const luckyEscapes = findLuckyEscapes(game.plies, moves, positions, game.userColor, taughtPlies);
-  const moments = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
+  const built = buildMoments({ gameId: game.id, plies: game.plies, evals: moves, positions, findings, userColor: game.userColor, prior, explanations });
+  // A blunder the opponent didn't punish says so, after the reveal.
+  const moments = built.map((m) => {
+    const esc = m.kind === 'mistake' ? unpunished(game.plies, moves, m.ply) : undefined;
+    if (!esc) return m;
+    const missed = missedLine(esc);
+    return { ...m, text: { ...m.text, missed, reveal: `${m.text.reveal} In the game, ${missed}` } };
+  });
   const report = buildReport({ plies: game.plies, findings, userColor: game.userColor, prior, contexts, ending: endingNote(game, positions), won: userOutcome(game) === 'win', lost: userOutcome(game) === 'loss', evals: moves, termination: game.headers.termination });
   const drills = generateDrills(game.id, moments);
   return {

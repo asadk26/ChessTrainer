@@ -28,6 +28,7 @@ export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   missed_king_attack: { label: 'Missed chances against an exposed king', weight: 0.6, theme: 'tactics' },
   failure_to_simplify: { label: 'Not trading down when ahead', weight: 0.6, theme: 'conversion' },
   gave_back_material: { label: 'Giving material back when ahead', weight: 0.85, theme: 'conversion' },
+  let_edge_slip: { label: 'Letting an edge slip', weight: 0.4, theme: 'conversion' },
   unnecessary_complications: { label: 'Unnecessary complications when ahead', weight: 0.6, theme: 'conversion' },
   hunting_material: { label: 'Hunting material instead of consolidating', weight: 0.6, theme: 'conversion' },
   allowed_counterplay: { label: 'Allowing avoidable counterplay', weight: 0.85, theme: 'conversion' },

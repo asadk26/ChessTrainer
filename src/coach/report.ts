@@ -8,6 +8,7 @@ import { COLOR_NAME, materialPhrase, other } from '../chess/board';
 import { moveLabel } from '../chess/pgn';
 import type { PriorGameFindings } from '../analysis/moments';
 import { summarizePhases } from '../analysis/context';
+import { turningPoints, winArc, winStory } from './turningPoints';
 
 export interface ReportInput {
   plies: PlyRecord[];
@@ -35,7 +36,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 29;
+export const REPORT_VERSION = 30;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -263,13 +264,13 @@ function didWellItems(findings: Finding[], plies: PlyRecord[], userColor: Color)
   }
 
   for (const f of strengths.filter((x) => x.category === 'found_tactic')) push(f, (x) => x.evidence);
+  push(has('punished_mistake'), (f) => `${f.evidence} When your opponent slipped, you noticed.`);
   push(has('won_free_material'), (f) => `${f.evidence} When your opponent left something hanging, you noticed.`);
   push(has('passed_pawn'), (f) => `${f.evidence} In the endgame that pawn was worth more than any piece.`);
   push(has('neutralized_counterplay'), (f) => (f.facts.captured ? f.evidence : `${f.evidence} Trading off the attackers was exactly right.`));
   push(has('opened_vs_king'), (f) => `${plyLabel(plies, f.ply)} was a good idea: ${opp}'s king was still on ${f.facts.oppKing}, and you started opening lines toward it.`);
   push(has('defensive_resource'), (f) => f.evidence);
   push(has('simplified_when_ahead'), (f) => `${f.evidence} Trades make a material lead easier to convert.`);
-  push(has('punished_mistake'), (f) => `${f.evidence} When your opponent slipped, you noticed.`);
   if (has('no_hanging')) items.push({ text: "You didn't leave any pieces hanging — that's the most important habit at this level.", category: 'no_hanging' });
   if (items.length < 2 && opening.length === 1) items.push({ text: STRENGTHS[opening[0].category as StrengthId].phrase, category: opening[0].category as StrengthId });
   if (items.length < 2 && has('converted_advantage')) items.push({ text: STRENGTHS.converted_advantage.phrase, category: 'converted_advantage' });
@@ -286,6 +287,7 @@ const SOFT_NOTES: Partial<Record<CategoryId, (f: Finding) => string>> = {
   unnecessary_complications: (f) => `${f.evidence} It didn't cost much, but simple is safer.`,
   hunting_material: (f) => f.evidence,
   gave_back_material: (f) => f.evidence,
+  let_edge_slip: (f) => f.evidence,
   development: (f) => `${f.evidence} It didn't cost anything this game, but it's a habit worth watching.`,
 };
 
@@ -541,7 +543,12 @@ export function buildReport(input: ReportInput): GameReport {
   const lead = strongGroups[0];
   // Real mistakes that didn't add up to a strong theme still aren't a "clean game".
   const slips = findings.filter((f) => leadsSummary(f) && !isStateFinding(f));
-  if (rc && decisiveLesson) {
+  // A win with a blunder the opponent didn't punish: the headline tells that arc, not just the blunder.
+  const tp = input.won ? turningPoints(plies, input.evals, findings, userColor) : undefined;
+  const arc = tp ? winArc(tp, plies) : undefined;
+  if (arc) {
+    headline = `You won, but not cleanly: you ${arc}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+  } else if (rc && decisiveLesson) {
     const centre = rc.setup.some((f) => f.category === 'king_safety' && f.facts.notCastled);
     const setup = rc.setup
       .filter((f) => SETUP_CATEGORIES.includes(f.category) && !(f.category === 'king_safety' && f.facts.notCastled))
@@ -583,10 +590,18 @@ export function buildReport(input: ReportInput): GameReport {
       ...(chosen || decisiveLesson ? {} : { generic: true }),
     },
     minorNotes,
-    story: (rc ? [rc.story, input.ending] : [input.ending, gameStory(plies, contexts)]).filter(Boolean).join(' ') || undefined,
+    story: (rc ? [rc.story, input.ending] : [input.ending, winOrGameStory(tp, plies, userColor, contexts)]).filter(Boolean).join(' ') || undefined,
     voice: 'template',
     version: REPORT_VERSION,
   };
+}
+
+/** A won game with a blunder the opponent missed gets the turning-point story (keeping "you were up … from move …"). */
+function winOrGameStory(tp: ReturnType<typeof turningPoints> | undefined, plies: PlyRecord[], userColor: Color, contexts: Map<number, PlyContext> | undefined): string | undefined {
+  const general = gameStory(plies, contexts);
+  if (!tp?.escapes.length) return general;
+  const ahead = general?.match(/You were (?:up|materially ahead)[^.]*\./)?.[0];
+  return winStory(tp, plies, userColor, ahead) ?? general;
 }
 
 /** The lesson of the move that decided a game: its named tactic or specific detector first. */

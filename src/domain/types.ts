@@ -106,7 +106,8 @@ export type CategoryId =
   | 'allowed_counterplay'
   | 'pawn_structure'
   | 'passive_piece'
-  | 'stranded_piece';
+  | 'stranded_piece'
+  | 'let_edge_slip';
 
 export type StrengthId =
   | 'castled_early'
@@ -317,6 +318,8 @@ export interface MomentText {
   lesson: string;
   /** Why the better move is better, in plain words (when it can be said reliably). */
   why?: string;
+  /** The opponent didn't punish it in the game: "White missed it: 27.Qe4 instead of 27.Qxd8+." */
+  missed?: string;
 }
 
 // ---------------------------------------------------------------- report ---
