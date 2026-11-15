@@ -1,6 +1,7 @@
 {
-  "version": 8,
+  "version": 9,
   "changelog": [
+    "v9 (2026-11-14): Rajib557 game (Nov 14) as tune: 22.Qd2 discovered_attack_allowed (deep, 8 half-moves), plus summary expectations (no king-safety lesson on 20.f3; credit settled material; passed pawn credited to 39.Rxc7).",
     "v8 (2026-11-12): JoeYoaGoGo game as tune: 26...Red8 labeled in_between_move (capture with check), with must_not back_rank_mate_allowed / mate_allowed; summary must not say I allowed a back-rank mate.",
     "v7 (2026-11-04): Seannty91 game as tune (3 moments; Claude Code has analyzed it). 7 fresh holdout moments from Nov 1-4 games Claude Code has not seen (Enrikomat, dovanminhh15, bimmer_playground_ph, Ahmed-taimour).",
     "v6 (2026-10-30): added the Oct 30 game vs T_Cel as a tune near-clean game with summary/explanation expectations.",
@@ -2266,6 +2267,36 @@
       ],
       "confidence": "high",
       "split": "tune"
+    },
+    {
+      "id": "Rajib557-22-Qd2",
+      "game": "chunkmonkey420 vs Rajib557",
+      "my_color": "white",
+      "move_number": 22,
+      "played": "Qd2",
+      "ply": 43,
+      "fen_before": "r3r3/p1p2pbk/1pPpqnpp/1Pn5/2P1p3/2N1BPPP/P3P1B1/R1Q2RK1 w - - 1 22",
+      "kind": "mistake",
+      "primary_label": "discovered_attack_allowed",
+      "secondary_labels": [
+        "fork_allowed",
+        "double_attack"
+      ],
+      "engine": {
+        "eval_before_cp_mover": -99,
+        "eval_after_cp_mover": -330,
+        "win_pct_drop": 18.1,
+        "best_move": "Kh2",
+        "opponent_best_reply": "exf3"
+      },
+      "mechanism": "22...exf3 23.Rxf3 Nfe4! 24.Nxe4 Nxe4: when the c3 knight recaptures it leaves the long diagonal, so the g7 bishop hits the a1 rook while ...Nxe4 hits the queen on d2, and White loses the exchange (-0.8 -> -2.8). The material only falls 8 half-moves into the line. Black missed it (23...Qxc4). 22.Kh2 was best.",
+      "expected_lesson": "Before putting your queen on a square, check which enemy pieces can attack it with tempo, and what your own recapture uncovers.",
+      "must_not_label": [
+        "king_safety",
+        "hanging_piece"
+      ],
+      "confidence": "medium",
+      "split": "tune"
     }
   ],
   "clean_games": [
@@ -2803,6 +2834,25 @@
         ],
         "must_not_flag": [
           "any claim that I allowed a back-rank mate (no mate exists after 26...Red8; the back-rank mate was mine, against White)"
+        ]
+      }
+    },
+    {
+      "game": "chunkmonkey420 vs Rajib557",
+      "my_color": "white",
+      "result": "1-0",
+      "link": null,
+      "movetext": "1. c4 Nf6 2. g3 g6 3. Bg2 d6 4. Nc3 Bg7 5. Nf3 O-O 6. O-O Nc6 7. d4 e5 8. d5 Na5 9. b3 Ng4 10. Bd2 b6 11. h3 Nf6 12. Bg5 h6 13. Bd2 Nb7 14. Qc1 Kh7 15. b4 e4 16. Nd4 Re8 17. Nc6 Qd7 18. b5 Nc5 19. Be3 Bb7 20. f3 Bxc6 21. dxc6 Qe6 22. Qd2 exf3 23. Rxf3 Qxc4 24. Rc1 Nce4 25. Nxe4 Nxe4 26. Rxc4 Nxd2 27. Bxd2 Rxe2 28. Bc3 f5 29. Bxg7 Kxg7 30. Kf1 Rxa2 31. Re3 Kf7 32. Rh4 h5 33. Bd5+ Kf6 34. Bxa2 a6 35. Re6+ Kf7 36. Rxd6+ Kg7 37. Rd7+ Kh6 38. Ra4 a5 39. Rxc7 Rd8 40. Rb7 Rd1+ 41. Ke2 Rg1 42. c7 Rg2+ 43. Kf3 Rh2 44. c8=Q Rxh3 45. Qh8+ Kg5 46. Qd8+ Kh6 47. Qxb6 Rh1 48. Kg2 Rd1 49. Qe3+ g5 50. Qe6# 1-0",
+      "expected_summary": {
+        "story": [
+          "22.Qd2 walked into a double attack (...exf3, ...Nfe4) that Black missed",
+          "24...Nce4? 25...Nxe4?? 26.Rxc4 won the queen: a piece up once trades settle",
+          "33.Bd5+ (check that also hit the a2 rook) decided it; the c-pawn became passed with 39.Rxc7 and queened; mate 50.Qe6#"
+        ],
+        "must_not_flag": [
+          "20.f3 as a king-safety mistake (the engine line opens the e-file, the king was never attacked)",
+          "\"king under pressure\" around move 41 while +7",
+          "42.c7 as the move that created the passed pawn (it was 39.Rxc7)"
         ]
       }
     },
