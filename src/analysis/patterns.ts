@@ -129,7 +129,16 @@ interface Frame {
 
 const sq = (t: PieceType, s: string) => (t === 'p' ? `pawn on ${s}` : `${PIECE_NAME[t]} on ${s}`);
 
-function frames(fen: string, ucis: string[], max = 6): Frame[] {
+/**
+ * How far along an engine line the tactic detectors look (the move played plus the reply line).
+ * 6 half-moves first; only when that finds nothing, 8: some tactics only collect after a trade or
+ * two (22.Qd2 exf3 Rxf3 Nfe4 Nxe4 Nxe4 Qd1 Bxa1). Not 8 for everything: a longer line also picks
+ * up later, unrelated trades that cancel a real gain (21.f4 Qb6+ Kh1 Qxb4 f5 … fxe6).
+ */
+export const LINE_PLIES = 6;
+export const LONG_LINE_PLIES = 8;
+
+function frames(fen: string, ucis: string[], max = LINE_PLIES): Frame[] {
   const c = new Chess(fen);
   const out: Frame[] = [];
   for (const uci of ucis.slice(0, max)) {
@@ -247,7 +256,22 @@ function knightFork(fs: Frame[]): PatternHit | undefined {
       ...attackedEnemyPieces(after, move.to).filter((t) => t.type !== 'k' && PIECE_VALUE[t.type] >= 3),
     ];
     const heavy = targets.filter((t) => t.type === 'k' || t.type === 'q' || t.type === 'r');
-    if (targets.length >= 2 && heavy.length >= 1 && gainAfter(fs, i, move.color as Color) >= 2)
+    // A fork is collected by the knight: it later takes one of the pieces it hit (or what stands
+    // there by then). When something else collects (a bishop down a line the trade opened), the
+    // knight's double attack isn't the reason.
+    let at = move.to;
+    const hit = new Set(targets.filter((t) => t.type !== 'k').map((t) => t.square));
+    let collects = false;
+    for (const f of fs.slice(i + 1)) {
+      if (f.move.color !== move.color) {
+        if (f.move.to === at) break; // the knight was taken
+        continue;
+      }
+      if (f.move.from !== at) continue;
+      if (f.move.captured && (hit.has(f.move.to) || f.move.captured === 'q' || f.move.captured === 'r')) collects = true;
+      at = f.move.to;
+    }
+    if (targets.length >= 2 && heavy.length >= 1 && collects && gainAfter(fs, i, move.color as Color) >= 2)
       return { tag: 'knight_fork', side: 'refutation', at: i, evidence: `${move.san} forks the ${targets.slice(0, 2).map((t) => (t.type === 'k' ? 'king' : sq(t.type, t.square))).join(' and the ')}` };
   }
 }
@@ -343,6 +367,19 @@ function fork(fs: Frame[]): PatternHit | undefined {
   }
 }
 
+/** `sq` lies on the line from `from` through `target`, at `target` or beyond it (c3, then a1 behind it). */
+function onRayBeyond(from: string, target: string, sq: string): boolean {
+  const d = (a: string, b: string) => [b.charCodeAt(0) - a.charCodeAt(0), Number(b[1]) - Number(a[1])];
+  const [tf, tr] = d(from, target);
+  const [sf, sr] = d(from, sq);
+  const stf = Math.sign(tf), str = Math.sign(tr);
+  if (Math.sign(sf) !== stf || Math.sign(sr) !== str) return false;
+  if (tf !== 0 && tr !== 0 && Math.abs(tf) !== Math.abs(tr)) return false;
+  if (sf !== 0 && sr !== 0 && Math.abs(sf) !== Math.abs(sr)) return false;
+  if ((tf === 0) !== (sf === 0) || (tr === 0) !== (sr === 0)) return false;
+  return Math.max(Math.abs(sf), Math.abs(sr)) >= Math.max(Math.abs(tf), Math.abs(tr));
+}
+
 function discovered(fs: Frame[]): PatternHit | undefined {
   for (let i = 0; i < Math.min(fs.length, 4); i++) {
     const { before, move, after } = fs[i];
@@ -356,7 +393,16 @@ function discovered(fs: Frame[]): PatternHit | undefined {
         // A discovered check: this piece, not the one that moved, now attacks the king.
         const k = kingSquare(after, other(me));
         if (attackersOf(after, k, me).includes(p.square as never) && !attackersOf(before, k, me).includes(p.square as never)) fresh.unshift({ square: k, type: 'k' });
-        if (fresh.length && (move.san.includes('+') || gainAfter(fs, i, me) >= 2)) {
+        // Collected by what the discovery set loose: the uncovered piece captures later in the line,
+        // or the piece that moved takes what it attacked. A check needs no collector.
+        const ownSquares = new Set(attackedEnemyPieces(after, move.to).map((t) => t.square));
+        const collects = fs.slice(i + 1).some(
+          (f) =>
+            f.move.color === me &&
+            !!f.move.captured &&
+            ((f.move.from === p.square && fresh.some((t) => onRayBeyond(p.square, t.square, f.move.to))) || (f.move.from === move.to && ownSquares.has(f.move.to))),
+        );
+        if (fresh.length && (move.san.includes('+') || (gainAfter(fs, i, me) >= 2 && collects))) {
           // Usually the moving piece makes its own threat at the same time: that's what makes it work.
           const own = attackedEnemyPieces(after, move.to).filter((t) => t.type === 'q' || t.type === 'r' || PIECE_VALUE[t.type] > PIECE_VALUE[move.piece as PieceType]);
           const hits = own.length ? `attacks the ${sq(own[0].type, own[0].square)} and ` : '';
@@ -641,9 +687,13 @@ const DETECTORS = [backRank, knightFork, discovered, skewer, fork, pin, inBetwee
  * least specific).
  */
 export function detectPattern(fenBefore: string, playedUci: string, replyPv: string[], bestPv: string[], categories: string[] = [], skip: PatternTag[] = []): PatternHit | undefined {
+  return detectPatternWithin(LINE_PLIES, fenBefore, playedUci, replyPv, bestPv, categories, skip) ?? detectPatternWithin(LONG_LINE_PLIES, fenBefore, playedUci, replyPv, bestPv, categories, skip);
+}
+
+function detectPatternWithin(plies: number, fenBefore: string, playedUci: string, replyPv: string[], bestPv: string[], categories: string[], skip: PatternTag[]): PatternHit | undefined {
   const mover = new Chess(fenBefore).turn() as Color;
-  const refutation = frames(fenBefore, [playedUci, ...replyPv]);
-  const better = frames(fenBefore, bestPv);
+  const refutation = frames(fenBefore, [playedUci, ...replyPv], plies);
+  const better = frames(fenBefore, bestPv, plies);
   const opp = other(mover);
   const block = blockedWithTempo(refutation, mover);
   if (block) return block;

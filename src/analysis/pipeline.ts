@@ -1,5 +1,5 @@
 // Orchestrates: engine facts -> findings -> teaching moments -> report -> drills.
-import type { Drill, Finding, MoveEval, PieceType, PlyRecord, PositionEval, StoredGame } from '../domain/types';
+import type { Color, Drill, Finding, MoveEval, PieceType, PlyRecord, PositionEval, StoredGame } from '../domain/types';
 import type { Engine } from '../engine/types';
 import { analyzeWithEngine, buildMoveEvals } from './analyzeGame';
 import { detectFindings } from './detectors';
@@ -127,6 +127,43 @@ export function annotatePatterns(findings: Finding[], patterns: NonNullable<Stor
 }
 
 /**
+ * A mistake whose only explanation is a tactic in the opponent's line (no detector saw material
+ * go within the short look): the tactic becomes its finding, at medium confidence. 22.Qd2 exf3
+ * Rxf3 Nfe4 Nxe4 Nxe4: the material only falls on the 8th half-move, so nothing else flagged it.
+ */
+function patternOnlyFindings(findings: Finding[], patterns: NonNullable<StoredGame['patterns']>, plies: PlyRecord[], moves: MoveEval[], userColor: Color): Finding[] {
+  const out: Finding[] = [];
+  for (const [k, hit] of Object.entries(patterns)) {
+    const ply = Number(k);
+    const p = plies[ply - 1];
+    const e = moves[ply - 1];
+    if (!p || !e || p.color !== userColor || hit.side !== 'refutation' || hit.tag === 'hanging_piece' || hit.tag === 'threat_ignored') continue;
+    if (findings.some((f) => f.ply === ply && f.kind === 'weakness' && !isStateFinding(f))) continue;
+    const v = verdictOf(e);
+    if (v !== 'mistake' && v !== 'blunder') continue;
+    out.push({
+      kind: 'weakness',
+      category: 'calculation',
+      ply,
+      severity: v === 'blunder' ? 3 : 2,
+      confidence: 'medium',
+      evidence: `${moveLabel(p)} ${PATTERN_PHRASE[hit.tag].refutation}: ${hit.lead ? `after ${hit.lead.join(' ')}, ` : ''}${hit.evidence}.`,
+      facts: {
+        pattern: hit.tag,
+        patternSide: hit.side,
+        patternEvidence: hit.evidence,
+        ...(hit.lead ? { patternLead: hit.lead } : {}),
+        ...(hit.square ? { patternSquare: hit.square } : {}),
+        tacticForOpponent: true,
+        replyLine: e.replyLineSan.slice(0, 8),
+        bestSan: e.bestSan,
+      },
+    });
+  }
+  return out;
+}
+
+/**
  * Tempo, structure and style reasons: plausible for a small slip, but not checked on the board.
  * A move that loses a mistake's worth or more needs a concrete reason (a tactic, a lost piece);
  * one of these on its own would be a guess, and a wrong lesson is worse than none.
@@ -185,6 +222,7 @@ export function coachFromPositions(game: StoredGame, positions: PositionEval[], 
   // attack, a fork…), the finding says so instead of the generic "left unprotected".
   const patterns = gamePatterns({ ...game, findings, analysis: { positions, moves } as StoredGame['analysis'] });
   annotatePatterns(findings, patterns, game.plies);
+  findings.push(...patternOnlyFindings(findings, patterns, game.plies, moves, game.userColor));
   markUnexplained(findings, moves);
   // Three-part explanations for every credible mistake / missed chance of the user.
   const explanations: Record<number, MoveExplanation> = {};
