@@ -504,9 +504,9 @@ function detectHuntingMaterial(ctx: DetectorContext, i: number): Finding[] {
   // Both warning signs at once (pieces at home AND king in the center) are strong evidence by themselves.
   const bothSigns = undeveloped.length >= 2 && kingStuck;
   const confidence: Confidence = d >= 5 && (undeveloped.length >= 2 || kingStuck) ? 'high' : d >= 3 || bothSigns ? 'medium' : 'low';
-  const homework = [undeveloped.length ? `${undeveloped.join(' and ')} still at home` : '', kingStuck ? 'your king still in the center' : '']
-    .filter(Boolean)
-    .join(' and ');
+  const homework =
+    [undeveloped.length ? `${undeveloped.join(' and ')} still at home` : '', kingStuck ? 'your king still in the center' : ''].filter(Boolean).join(' and ') ||
+    (c.kingPressure ? 'your king under pressure' : '');
   return [
     {
       kind: 'weakness',
@@ -514,7 +514,7 @@ function detectHuntingMaterial(ctx: DetectorContext, i: number): Finding[] {
       ply: p.ply,
       severity: d >= 5 || (bothSigns && d >= 2) ? 2 : 1,
       confidence,
-      evidence: `${label(p)} grabbed another pawn while you were already up ${materialPhrase(c.material)}, with ${homework}. Consolidating (${e.bestSan}) was the priority.`,
+      evidence: `${label(p)} grabbed another pawn while you were already up ${materialPhrase(c.material)}${homework ? `, with ${homework}` : ''}.${e.bestSan ? ` Consolidating (${e.bestSan}) was the priority.` : ''}`,
       facts: { bestSan: e.bestSan, undeveloped, kingStuck, material: c.material, context: tags(c) },
     },
   ];
@@ -779,6 +779,24 @@ function detectMissedKingAttack(ctx: DetectorContext, i: number, already: Findin
   ];
 }
 
+/** The opponent's line (up to 8 half-moves) gives check or brings a piece or pawn next to `me`'s king. */
+function lineAttacksKing(fen: string, ucis: string[], me: Color): boolean {
+  const c = new Chess(fen);
+  for (const uci of ucis.slice(0, 8)) {
+    let m;
+    try {
+      m = c.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? 'q' });
+    } catch {
+      return false;
+    }
+    if (m.color === me) continue;
+    if (m.san.includes('+') || m.san.includes('#')) return true;
+    const k = kingSquare(c.fen(), me);
+    if (Math.max(Math.abs(k.charCodeAt(0) - m.to.charCodeAt(0)), Math.abs(Number(k[1]) - Number(m.to[1]))) <= 1) return true;
+  }
+  return false;
+}
+
 function detectKingShelter(ctx: DetectorContext, i: number, already: Finding[]): Finding[] {
   const p = ctx.plies[i];
   const e = ctx.evals[i];
@@ -795,13 +813,17 @@ function detectKingShelter(ctx: DetectorContext, i: number, already: Finding[]):
     .filter((x) => x && x.type === 'p' && x.color === opp && shelterFiles.includes(x.square[0]) && relativeRank(x.square, opp) >= 4)
     .map((x) => x!.square);
   if (pd(e) < 10 && storm.length < 2) return [];
+  // Teach king safety only when the punishment goes for the king (a check, or a piece or pawn
+  // arriving next to it); otherwise the loosened pawns are a guess at the reason (20.f3 exf3 Rxf3
+  // Nfe4: the e-file opened, the king was never touched), so the finding makes no claim.
+  const attacked = storm.length >= 2 || lineAttacksKing(p.fenAfter, e.replyLineUci, ctx.userColor);
   return [
     {
       kind: 'weakness',
       category: 'king_safety',
       ply: p.ply,
       severity: 2,
-      confidence: pd(e) >= 15 ? 'high' : 'medium',
+      confidence: !attacked ? 'low' : pd(e) >= 15 ? 'high' : 'medium',
       evidence: storm.length >= 2
         ? `${label(p)} pushed a pawn in front of your own king on ${king} while ${COLOR_NAME[opp]}'s pawns (${storm.join(', ')}) were storming toward it — that opens lines for the attack.`
         : `${label(p)} loosened the pawns in front of your king on ${king}.`,
@@ -1336,8 +1358,8 @@ function detectGameLevel(ctx: DetectorContext, moveFindings: Finding[]): Finding
 }
 
 /** The pawn that moved on ply index `i` is still on the board `plies` half-moves later (or the game ended first). */
-function pawnSurvives(ctx: DetectorContext, i: number, plies: number): boolean {
-  let at = ctx.plies[i].to;
+function pawnSurvives(ctx: DetectorContext, i: number, plies: number, square = ctx.plies[i].to): boolean {
+  let at = square;
   const me = ctx.plies[i].color;
   for (let k = i + 1; k <= i + plies && k < ctx.plies.length; k++) {
     const q = ctx.plies[k];
@@ -1369,11 +1391,20 @@ function punishedMistakes(ctx: DetectorContext, credited: Set<number>): Finding[
     if (!mine[0].captured) continue; // collected at once, not won later by other means
     const lastCapture = [...window].reverse().find((x) => x.color === user && x.captured);
     if (!lastCapture || credited.has(lastCapture.ply)) continue;
-    const gain = materialBalance(lastCapture.fenAfter, user) - base;
-    const held = ctx.plies.slice(lastCapture.ply, lastCapture.ply + 4).every((x) => materialBalance(x.fenAfter, user) - base >= gain);
+    // Counted once the trades settle: the recaptures that follow in the game (26.Rxc4 Nxd2 27.Bxd2:
+    // a piece, not a queen), and what's left two half-moves after that.
+    let settled = lastCapture.ply; // index of the first ply after the exchange
+    const next = ctx.plies[settled];
+    if (next?.captured) {
+      settled++;
+      const back = ctx.plies[settled];
+      if (back?.captured && back.to === next.to) settled++;
+    }
+    const gain = materialBalance(ctx.plies[settled - 1].fenAfter, user) - base;
+    const held = ctx.plies.slice(settled, settled + 2).every((x) => materialBalance(x.fenAfter, user) - base >= gain - 1);
     if (gain < 1 || !held) continue;
     if (out.some((f) => Math.abs(f.ply - lastCapture.ply) <= 4)) continue;
-    const seq = ctx.plies.slice(j + 1, lastCapture.ply);
+    const seq = ctx.plies.slice(j + 1, settled);
     const text = seq.map((x, k) => (k === 0 || x.color === 'w' ? label(x) : x.san)).join(' ');
     out.push({
       kind: 'strength',
@@ -1382,10 +1413,10 @@ function punishedMistakes(ctx: DetectorContext, credited: Set<number>): Finding[
       severity: 2,
       confidence: 'high',
       relatedPlies: [q.ply, ...seq.map((x) => x.ply).filter((x) => x !== lastCapture.ply)],
-      evidence: `${label(q)} dropped ${materialPhrase(gain)}, and you collected it: ${text}.`,
+      evidence: `${label(q)} dropped ${materialPhrase(gain)}, and you collected it: ${text}${settled > lastCapture.ply ? ` — ${materialPhrase(gain)} up once the trades settled` : ''}.`,
       facts: { mistake: q.san, gain, moves: seq.map((x) => x.san) },
     });
-    j = lastCapture.ply - 1;
+    j = settled - 1;
   }
   return out;
 }
@@ -1436,7 +1467,7 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
   const setups: { setup: PlyRecord; capture: PlyRecord }[] = [];
   const simplified: number[] = [];
   const defended: number[] = [];
-  let passed: { ply: number; square: string } | undefined;
+  let passed: { ply: number; square: string; pushed?: boolean } | undefined;
   let neutralized: number | undefined;
 
   for (let i = 0; i < ctx.plies.length; i++) {
@@ -1481,10 +1512,17 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       if (gap >= 12 && forcing && e.isBest && !mated) defended.push(p.ply);
     }
 
-    // Creating a dangerous passed pawn — one that lives: still on the board two full moves later
-    // (24...d4 25.Qxd4 was a pawn given up, not a passed pawn to praise).
-    if (!passed && p.piece === 'p' && p.moveNumber >= 15 && d <= 5 && relativeRank(p.to, user) >= 5 && passedPawns(p.fenAfter, user).includes(p.to) && pawnSurvives(ctx, i, 4)) {
-      passed = { ply: p.ply, square: p.to };
+    // A dangerous passed pawn, credited to the move that made it passed (a push, or a capture that
+    // removed the last pawn in its way: 39.Rxc7, not the later 42.c7) — and one that lives: still on
+    // the board two full moves later (24...d4 25.Qxd4 was a pawn given up, not a passed pawn).
+    if (!passed && p.moveNumber >= 15 && d <= 5) {
+      const before = new Set(passedPawns(p.fenBefore, user));
+      const fresh = passedPawns(p.fenAfter, user).filter((sq) => !before.has(sq) && !(p.piece === 'p' && p.to === sq && before.has(p.from)));
+      const sq = fresh.find((x) => relativeRank(x, user) >= 5 && pawnSurvives(ctx, i, 4, x));
+      if (sq) passed = { ply: p.ply, square: sq };
+      // A pawn passed since earlier (made passed by a move not worth crediting, or early on),
+      // pushed into their half: credit the push, said as such.
+      else if (p.piece === 'p' && before.has(p.from) && relativeRank(p.to, user) >= 5 && pawnSurvives(ctx, i, 4)) passed = { ply: p.ply, square: p.to, pushed: true };
     }
 
     // Neutralising counterplay: under pressure before, safe two plies later, via a trade/check/capture.
@@ -1516,7 +1554,11 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       continue;
     }
     const pin = pinsBy(setup.fenAfter, user).find((x) => x.includes(`${PIECE_NAME[target.type]} on ${capture.to}`));
-    const pinText = pin ? ` It couldn't get away: ${pin.replace(/^the /, 'your ')}.` : ` It couldn't get away.`;
+    const pinText = pin
+      ? ` It couldn't get away: ${pin.replace(/^the /, 'your ')}.`
+      : setup.san.includes('+')
+        ? ` It came with check, so the ${PIECE_NAME[target.type]} couldn't get away.`
+        : ` It couldn't get away.`;
     out.push({
       kind: 'strength',
       category: 'found_tactic',
@@ -1573,7 +1615,13 @@ function detectPracticalStrengths(ctx: DetectorContext): Finding[] {
       severity: 2,
       confidence: 'high',
       relatedPlies: promo ? [promo.ply] : undefined,
-      evidence: `${lbl(passed.ply)} created a dangerous passed pawn${promo ? `, and you pushed it all the way to promotion (${lbl(promo.ply)})` : ''}.`,
+      evidence: `${lbl(passed.ply)} ${
+        passed.pushed
+          ? `pushed your passed ${passed.square[0]}-pawn into their half`
+          : ctx.plies[passed.ply - 1].piece === 'p' && ctx.plies[passed.ply - 1].to === passed.square
+            ? 'created a dangerous passed pawn'
+            : `made your ${passed.square[0]}-pawn a passed pawn`
+      }${promo ? `, and ${passed.pushed ? 'it went' : 'you pushed it'} all the way to promotion (${lbl(promo.ply)})` : ''}.`,
       facts: { square: passed.square, promoted: !!promo },
     });
   }

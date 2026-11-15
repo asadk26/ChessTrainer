@@ -36,7 +36,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 30;
+export const REPORT_VERSION = 31;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -497,7 +497,9 @@ export function gameStory(plies: PlyRecord[], contexts: Map<number, PlyContext> 
   const userColor = list[0] ? plies[list[0].ply - 1]?.color : undefined;
   const mated = last?.san.endsWith('#') ? last : undefined;
   if (mated && mated.color === userColor) parts.push(`You finished it with checkmate: ${moveLabel(mated)}.`);
-  if (phases.kingPressurePlies.length >= 3) parts.push(`Your king came under pressure around move ${mv(phases.kingPressurePlies[0])}.`);
+  // Spite checks while you're far ahead (+5 or more) aren't pressure on your king.
+  const pressured = phases.kingPressurePlies.filter((ply) => (contexts.get(ply)?.cp ?? 0) < 500);
+  if (pressured.length >= 3) parts.push(`Your king came under pressure around move ${mv(pressured[0])}.`);
   const raceCtx = phases.raceFrom ? list.find((c) => c.ply >= phases.raceFrom!) : undefined;
   if (phases.raceFrom && raceCtx && Math.abs(raceCtx.material) < 5) parts.push(`From move ${mv(phases.raceFrom)} it was a race between passed pawns.`);
   else if (!phases.raceFrom && phases.endgameFrom && phases.endgameFrom < plies.length - 6) parts.push(`The game reached an endgame around move ${mv(phases.endgameFrom)}.`);
