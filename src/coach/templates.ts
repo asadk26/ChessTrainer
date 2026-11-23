@@ -61,7 +61,7 @@ export function momentTitle(f: Finding, played: PlyRecord): string {
       if (f.facts.hanging === 'already') return `${mv} — a piece already under attack`;
       return f.facts.victimPiece === 'pawn' ? `${mv} — a pawn that could just be taken` : `${mv} — a piece left unprotected`;
     case 'missed_threat':
-      return `${mv} — what was your opponent threatening?`;
+      return f.facts.grab ? `${mv} — grabbing while your ${s(f.facts.victimPiece) || 'piece'} was attacked` : `${mv} — what was your opponent threatening?`;
     case 'defended_grab':
       return `${mv} — that pawn was defended`;
     case 'piece_to_rim':
@@ -330,6 +330,18 @@ function buildCategoryText(input: MomentTextInput): MomentText {
         lesson: 'When a pawn chases a knight or bishop, bring it back toward the centre, not to the edge — on the rim it has few squares and gets trapped or exchanged.',
       };
     case 'missed_threat':
+      if (facts.grab)
+        return {
+          ...base,
+          intent: `Your ${s(facts.victimPiece)} on ${s(facts.victimSquare)} was already attacked. You played ${played.san}, grabbing material instead.`,
+          question: `After ${played.san}, what can ${opp} take back? Play it on the board.`,
+          predictCorrect: `Yes — ${s(facts.captureSan)} wins it back.`,
+          predictOther: `${s(facts.captureSan)} wins it back: your ${s(facts.victimPiece)} on ${s(facts.victimSquare)} was already attacked.`,
+          reveal: `Your ${s(facts.victimPiece)} on ${s(facts.victimSquare)} was already under attack, and ${s(facts.captureSan)} takes it.`,
+          betterPrompt: `Find a move that deals with the attacked ${s(facts.victimPiece)} first.`,
+          betterCorrect: 'Good — nothing of yours is left hanging.',
+          lesson: 'Before grabbing a pawn, check what of yours is already attacked.',
+        };
       return {
         ...base,
         intent: `${opp}'s last move${facts.threatMove ? `, ${s(facts.threatMove)},` : ''} created a threat. You played ${played.san}, ${doing}.`,

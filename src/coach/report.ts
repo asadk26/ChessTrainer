@@ -9,6 +9,7 @@ import { moveLabel } from '../chess/pgn';
 import type { PriorGameFindings } from '../analysis/moments';
 import { summarizePhases } from '../analysis/context';
 import { turningPoints, winArc, winStory } from './turningPoints';
+import { verdictOf } from '../analysis/engineReview';
 
 export interface ReportInput {
   plies: PlyRecord[];
@@ -36,7 +37,7 @@ export interface ThemeGroup {
 }
 
 const RECENT = 5;
-export const REPORT_VERSION = 31;
+export const REPORT_VERSION = 32;
 
 /** Positions to draw for a theme: each episode's move, plus the retreat in a round trip. Max 4. */
 function keyPliesOf(group: ThemeGroup, plies: PlyRecord[]): number[] {
@@ -519,6 +520,11 @@ export function buildReport(input: ReportInput): GameReport {
     keyPlies: keyPliesOf(g, plies),
     category: g.findings[0].category,
   }));
+  // A costly move nothing explains (no finding, or only a low-confidence guess) is still named, as
+  // unexplained, rather than vanishing: "10.dxc3 cost about 1.6 pawns: Stockfish preferred 10.Qxc3".
+  // At most one, and only when "What hurt you" has room for it (fewer than two explained items).
+  const unexplained = hurt.length < 2 ? unexplainedMoves(plies, input.evals, findings, userColor).slice(0, 1) : [];
+  hurt.push(...unexplained.map((u) => ({ text: u.text, plies: [u.ply], keyPlies: [u.ply] })));
   const minorNotes: ReportItem[] = findings
     .filter((f) => f.kind === 'weakness' && f.severity === 1 && isCredible(f) && SOFT_NOTES[f.category as CategoryId])
     .slice(0, 2)
@@ -557,8 +563,10 @@ export function buildReport(input: ReportInput): GameReport {
       .map((f) => setupClause(f, userColor))
       .filter(Boolean);
     headline = `${capitalise(decisiveLesson.clause)}${setup.length ? `, after ${setup.join(' and ')}` : ''}${centre ? ', with your king still in the centre' : ''}. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
-  } else if (!lead && slips.length) {
-    headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${new Set(slips.map((f) => f.ply)).size === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
+  } else if (!lead && (slips.length || unexplained.length)) {
+    // Same count as "What hurt you" shows, so the two never disagree.
+    const n = new Set([...slips.map((f) => f.ply), ...unexplained.map((u) => u.ply)]).size;
+    headline = `${solidOpening ? 'Your opening fundamentals were mostly solid. ' : ''}No single habit stood out strongly enough to call it a pattern, but ${n === 1 ? 'one mistake is' : 'a few mistakes are'} worth reviewing. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead && input.lost) {
     headline = `No single mistake decided this game — it slipped away a little at a time. The key lesson from this game: ${lowerFirst(focusMeta.focusTitle)}`;
   } else if (!lead) {
@@ -596,6 +604,31 @@ export function buildReport(input: ReportInput): GameReport {
     voice: 'template',
     version: REPORT_VERSION,
   };
+}
+
+/**
+ * Your mistakes (by the engine's verdict, a pawn or more) that no credible finding explains: named
+ * with Stockfish's choice and the numbers, without guessing why. The two costliest.
+ */
+function unexplainedMoves(plies: PlyRecord[], evals: MoveEval[] | undefined, findings: Finding[], userColor: Color): { ply: number; text: string }[] {
+  if (!evals) return [];
+  const fmt = (cp: number) => `${cp > 0 ? '+' : cp < 0 ? '−' : ''}${(Math.abs(cp) / 100).toFixed(1)}`;
+  return evals
+    .map((e, i) => ({ e, p: plies[i] }))
+    .filter(({ e, p }) => {
+      if (!p || p.color !== userColor || !e.bestSan || e.isBest) return false;
+      const v = verdictOf(e);
+      if ((v !== 'mistake' && v !== 'blunder') || e.cpBefore - e.cpAfter < 100 || Math.abs(e.cpAfter) >= 900) return false;
+      // Only when it took you to level or worse; still better afterwards is a slip, not "what hurt you".
+      if (e.cpAfter >= 50) return false;
+      return !findings.some((f) => f.kind === 'weakness' && f.ply === p.ply && f.confidence !== 'low');
+    })
+    .sort((a, b) => b.e.cpBefore - b.e.cpAfter - (a.e.cpBefore - a.e.cpAfter))
+    .slice(0, 2)
+    .map(({ e, p }) => ({
+      ply: p.ply,
+      text: `${moveLabel(p)} cost about ${((e.cpBefore - e.cpAfter) / 100).toFixed(1)} pawns: Stockfish preferred ${p.moveNumber}${p.color === 'w' ? '.' : '...'}${e.bestSan} (${fmt(e.cpBefore)} instead of ${fmt(e.cpAfter)}). No tactic I can name explains it, so it's worth playing through.`,
+    }));
 }
 
 /** A won game with a blunder the opponent missed gets the turning-point story (keeping "you were up … from move …"). */

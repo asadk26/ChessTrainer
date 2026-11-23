@@ -62,6 +62,8 @@ function appLabel(f: Finding): string {
     // "Moved an already-developed piece again" (v4 clean game: must not be taught on rushikeshdantakale).
     inefficient_moves: 'moved_piece_twice',
     premature_attack: 'moved_piece_twice',
+    // "Your rook had almost no squares" (v10 clean game: must not be taught on aa12359).
+    passive_piece: 'passive_piece',
   };
   if (byCategory[f.category]) return byCategory[f.category];
   // "Your X was already under attack, and your move didn't deal with it" (v2, sir-Deniy 17...Qb6+).

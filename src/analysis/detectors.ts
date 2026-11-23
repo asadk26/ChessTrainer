@@ -489,6 +489,49 @@ function detectAttackWithoutFollowup(ctx: DetectorContext, i: number, already: F
   ];
 }
 
+/**
+ * A grab while something of yours was already attacked: your move captured, and the reply takes a
+ * unit of yours that was under attack before the move (and not the piece that captured). Even when
+ * the material count evens out, the threat was the thing to deal with (20.Bxa7 Rxb2: the b8 rook
+ * already hit b2; 20.b4 kept it).
+ */
+function detectGrabIgnoringThreat(ctx: DetectorContext, i: number): Finding[] {
+  const p = ctx.plies[i];
+  const e = ctx.evals[i];
+  if (p.color !== ctx.userColor || !p.captured || nearBest(e) || pd(e) < 5) return [];
+  const reply = playLine(p.fenAfter, e.replyLineUci, 1)[0];
+  if (!reply?.san.includes('x')) return [];
+  const victim = pieceAt(p.fenBefore, reply.to);
+  if (!victim || victim.color !== ctx.userColor || victim.type === 'k' || reply.to === p.from || reply.to === p.to) return [];
+  if (!underThreat(p.fenBefore, reply.to)) return [];
+  // A grab worth more than what it costs is good business (28...Rxh5 for the c5 pawn); and a grab
+  // with check forces the reply, so the take-back isn't an ignored threat.
+  if (PIECE_VALUE[p.captured] > PIECE_VALUE[victim.type] || p.san.includes('+')) return [];
+  const attacker = attackersOf(p.fenBefore, reply.to, other(ctx.userColor))
+    .map((s) => ({ s, x: pieceAt(p.fenBefore, s) }))
+    .find((a) => a.s === reply.from);
+  const by = attacker?.x ? ` by the ${squareName(attacker.x.type, attacker.s)}` : '';
+  const best = e.bestSan ? ` ${labelAt(p, e.bestSan)} kept it.` : '';
+  return [
+    {
+      kind: 'weakness',
+      category: 'missed_threat',
+      ply: p.ply,
+      severity: 2,
+      confidence: 'medium',
+      evidence: `Your ${squareName(victim.type, reply.to)} was already attacked${by}; ${label(p)} grabbed the ${PIECE_NAME[p.captured]} on ${p.to} instead, and ${labelAt(p, reply.san, true)} won it back.${best}`,
+      facts: { threatFrom: reply.from, grab: true, captureSan: reply.san, victimSquare: reply.to, victimPiece: PIECE_NAME[victim.type], bestSan: e.bestSan, replyLine: e.replyLineSan.slice(0, 4), hanging: 'already' },
+    },
+  ];
+}
+
+/** "20.b4" for your alternative on this move, or "20...Rxb2" for the reply (`next`: the move after `p`). */
+function labelAt(p: PlyRecord, san: string, next = false): string {
+  const color = next ? other(p.color) : p.color;
+  const n = next && p.color === 'b' ? p.moveNumber + 1 : p.moveNumber;
+  return `${n}${color === 'w' ? '.' : '...'}${san}`;
+}
+
 // ------------------------------------------------------ when you're ahead
 
 /** Pawn-grabbing with the queen (or a lone piece) while already well ahead and not yet consolidated. */
@@ -968,6 +1011,8 @@ function detectPassivePieces(ctx: DetectorContext): Finding[] {
       let len = 0;
       let wanted = 0;
       let wantedSan: string | undefined;
+      // Where the engine wanted it activated, and what not doing so cost there (centipawns).
+      const asks: { ply: number; cost: number; san?: string }[] = [];
       for (let b = a; b < mine.length; b++) {
         const { p, i } = mine[b];
         const here = pieceAt(p.fenBefore, sqr);
@@ -978,20 +1023,27 @@ function detectPassivePieces(ctx: DetectorContext): Finding[] {
         if (bestUci?.startsWith(sqr) && p.uci !== bestUci) {
           wanted++;
           wantedSan ??= ctx.evals[i].bestSan;
+          asks.push({ ply: p.ply, cost: ctx.evals[i].cpBefore - ctx.evals[i].cpAfter, san: ctx.evals[i].bestSan });
         }
         if (p.from === sqr) break;
       }
-      if (len >= 5 && wanted >= 2) {
+      // Only a lesson when leaving it there really cost something: the engine preferred activating
+      // it by half a pawn or more at least once (a rook on f1 until move 16 in a fianchetto
+      // opening, ~0.1 behind Rd1, isn't what hurt you).
+      const worst = [...asks].sort((x, y) => y.cost - x.cost);
+      if (len >= 5 && wanted >= 2 && (worst[0]?.cost ?? 0) >= 50) {
         reported.add(sqr);
         const name = PIECE_NAME[piece!.type as keyof typeof PIECE_NAME];
+        wantedSan = worst[0].san ?? wantedSan;
         out.push({
           kind: 'weakness',
           category: 'passive_piece',
-          ply: start.p.ply,
+          // Anchored to the move where bringing it in was best (most costly to skip).
+          ply: worst[0].ply,
           severity: 2,
           confidence: 'medium',
           evidence: `Your ${name} on ${sqr} had almost no squares for ${len} moves (from move ${start.p.moveNumber}); bringing it into play${wantedSan ? ` (e.g. ${wantedSan})` : ''} was overdue.`,
-          facts: { square: sqr, piece: name, moves: len, bestSan: wantedSan },
+          facts: { square: sqr, piece: name, moves: len, bestSan: wantedSan, startPly: start.p.ply, askPlies: worst.filter((x) => x.cost >= 50).map((x) => String(x.ply)) },
         });
       }
     }
@@ -1073,7 +1125,10 @@ function detectTacticFound(ctx: DetectorContext): Finding[] {
       const pv = line?.pv ?? [];
       const why = detectPattern(p.fenBefore, p.uci, [], pv);
       const takeBack = why && why.side === 'better' && why.tag !== 'hanging_piece' && why.at >= 2 ? playLine(p.fenBefore, pv, 2)[1] : undefined;
-      if (why && takeBack && takeBack.san.includes('x') && pv[1]?.slice(2, 4) === p.to) {
+      // …and the line where they take back really ends with you ahead (not just a trade: 8.Nxd4 exd4
+      // Na4 Re8 Nxc5 dxc5 is level).
+      const endGain = materialAfterLine(p.fenBefore, pv, ctx.userColor, pv.length, pv.length) - materialBalance(p.fenBefore, ctx.userColor);
+      if (why && takeBack && takeBack.san.includes('x') && pv[1]?.slice(2, 4) === p.to && endGain >= 2) {
         defendedTake = true;
         hit = { id: 'win_material', plies: 2, text: `took the ${PIECE_NAME[p.captured]} on ${p.to}: it looked defended, but if ${takeBack.san}, ${why.evidence}` };
       }
@@ -1660,6 +1715,7 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     // (count the defenders), whichever piece recaptures — so it comes before the generic material loss.
     if (!here.length && !ctx.evals[i].mateThreatAgainst) here.push(...detectDefendedGrab(ctx, i));
     if (!here.length) here.push(...detectMaterialLoss(ctx, i));
+    if (!here.some((f) => f.kind === 'weakness')) here.push(...detectGrabIgnoringThreat(ctx, i));
     if (!here.length) here.push(...detectMissedFork(ctx, i));
     here.push(...detectMissedTactic(ctx, i));
     here.push(...detectAllowedCounterplay(ctx, i, here));
@@ -1679,7 +1735,8 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
     if (!here.some((f) => f.category === 'king_safety')) here.push(...detectKingPawns(ctx, i));
     here.push(...detectPieceToRim(ctx, i));
     here.push(...detectCaptureDecisions(ctx, i, seen()));
-    here.push(...detectPawnStructure(ctx, i, seen()));
+    // A structure note is a guess; a concrete reason found for the same move comes first.
+    if (!here.some((f) => f.kind === 'weakness' && f.category === 'missed_threat')) here.push(...detectPawnStructure(ctx, i, seen()));
     here.push(...detectCatchAll(ctx, i, here));
     here.push(...detectEdgeSlip(ctx, i, here));
     findings.push(...here);
@@ -1700,6 +1757,12 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
   // One credit per episode: material won from a slip is already in a tactic or free-material credit.
   const creditedPlies = new Set(findings.filter((f) => f.category === 'found_tactic' || f.category === 'won_free_material').flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]));
   const firstSlip = findings.find((f) => f.category === 'let_edge_slip');
+  const praised = new Set(findings.filter((f) => f.kind === 'strength' && f.ply > 0).flatMap((f) => [f.ply, ...(f.relatedPlies ?? [])]));
+  for (const f of findings.filter((x) => x.category === 'passive_piece' && praised.has(x.ply))) {
+    const alt = ((f.facts.askPlies as string[] | undefined) ?? []).map(Number).find((x) => !praised.has(x));
+    if (alt) f.ply = alt;
+    else f.facts = { ...f.facts, dropped: true };
+  }
   const kept = findings.filter((f) => {
     if (f.category === 'found_tactic' && f.facts.setupFor === undefined && setupPlies.has(f.ply)) return false;
     if (f.category === 'punished_mistake') {
@@ -1710,6 +1773,9 @@ export function detectFindings(ctx: DetectorContext, timeControl?: string): Find
       if ([...creditedPlies].some((x) => x >= from && x <= to)) return false;
     }
     if (f.category === 'let_edge_slip' && f !== firstSlip) return false;
+    if (f.category === 'passive_piece' && f.facts.dropped) return false;
+    // A grab note is only the reason when no named tactic explains the same move (25...Rxc8 missed a fork).
+    if (f.facts.grab && findings.some((x) => x !== f && x.kind === 'weakness' && x.ply === f.ply && x.facts.pattern)) return false;
     // No credit for a move after which you are being mated (taking a sacrificed queen, a "defence"…).
     if (f.kind === 'strength') return !(f.ply > 0 && ctx.plies[f.ply - 1]?.color === ctx.userColor && ctx.evals[f.ply - 1].cpAfter <= -(MATE_CP - 1000));
     if (f.kind !== 'weakness' || f.ply <= 0 || ctx.plies[f.ply - 1]?.color !== ctx.userColor) return true;

@@ -18,7 +18,9 @@ describe('Rajib557', () => {
   });
   it('makes no king-safety claim about 20.f3, and no "king under pressure" while far ahead', () => {
     expect(game.findings.find((x) => x.ply === 39 && x.category === 'king_safety')?.confidence).toBe('low');
-    expect(all).not.toMatch(/20\.f3|king came under pressure/);
+    expect(all).not.toMatch(/20\.f3 loosened|pawns in front of your king|king came under pressure/);
+    // A real 1.4-pawn mistake nothing explains is named as such (v10 rule), without a guess at why.
+    expect(r.hurt.some((h) => /^20\.f3 cost about/.test(h.text))).toBe(true);
   });
   it('counts the queen blunder as a piece won once the trades settle', () => {
     expect(game.findings.find((x) => x.category === 'punished_mistake')?.evidence).toBe(

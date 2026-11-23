@@ -65,8 +65,8 @@ describe('golden: chunkmonkey420 vs Atayan48 — a discovered attack with tempo 
 
 describe('golden: king2008abhi vs chunkmonkey420 — a clean 12-move win', () => {
   const { game: g } = coach('abhi-game');
-  it('credits 9...Qxg5 (if Qxg5, Nf3+ forks king and queen)', () => {
-    expect(g.report?.didWell.some((d) => d.text.startsWith('9...Qxg5 took the knight on g5: it looked defended, but if Qxg5, Nf3+ forks the king and the queen on g5'))).toBe(true);
+  it('no "looked defended" credit for 9...Qxg5: if Qxg5, Nf3+ Ke2 Nxg5 Bxg5 is a level trade (v10 rule)', () => {
+    expect(g.report?.didWell.some((d) => d.text.startsWith('9...Qxg5 took the knight on g5: it looked defended'))).toBe(false);
   });
   it('has no development lesson anywhere', () => {
     const r = g.report!;
