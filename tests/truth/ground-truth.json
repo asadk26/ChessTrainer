@@ -1,6 +1,7 @@
 {
-  "version": 9,
+  "version": 10,
   "changelog": [
+    "v10 (2026-11-23): aa12359 game (Nov 23) as tune: 20.Bxa7 threat_ignored, plus summary expectations (no passive-rook item, no false 8.Nxd4 trap credit, headline consistent with What hurt you, name 10.dxc3).",
     "v9 (2026-11-14): Rajib557 game (Nov 14) as tune: 22.Qd2 discovered_attack_allowed (deep, 8 half-moves), plus summary expectations (no king-safety lesson on 20.f3; credit settled material; passed pawn credited to 39.Rxc7).",
     "v8 (2026-11-12): JoeYoaGoGo game as tune: 26...Red8 labeled in_between_move (capture with check), with must_not back_rank_mate_allowed / mate_allowed; summary must not say I allowed a back-rank mate.",
     "v7 (2026-11-04): Seannty91 game as tune (3 moments; Claude Code has analyzed it). 7 fresh holdout moments from Nov 1-4 games Claude Code has not seen (Enrikomat, dovanminhh15, bimmer_playground_ph, Ahmed-taimour).",
@@ -2297,6 +2298,35 @@
       ],
       "confidence": "medium",
       "split": "tune"
+    },
+    {
+      "id": "aa12359-20-Bxa7",
+      "game": "chunkmonkey420 vs aa12359",
+      "my_color": "white",
+      "move_number": 20,
+      "played": "Bxa7",
+      "ply": 39,
+      "fen_before": "1r3rk1/p2b1pp1/3R1n1p/4p3/4P3/2P1B1PP/PP3PB1/R5K1 w - - 1 20",
+      "kind": "mistake",
+      "primary_label": "threat_ignored",
+      "secondary_labels": [
+        "hanging_piece"
+      ],
+      "engine": {
+        "eval_before_cp_mover": 479,
+        "eval_after_cp_mover": 332,
+        "win_pct_drop": 8.1,
+        "best_move": "b4",
+        "opponent_best_reply": "Rxb2"
+      },
+      "mechanism": "The b2 pawn was already attacked by the b8 rook. 20.Bxa7 grabbed a7 instead of dealing with it, so 20...Rxb2 won the pawn back and activated the rook (+3.7 -> +2.2 at depth 20). 20.b4 kept everything. Still winning.",
+      "expected_lesson": "Before grabbing a pawn, check what of yours is already attacked.",
+      "must_not_label": [
+        "isolated_pawn",
+        "pawn_structure"
+      ],
+      "confidence": "medium",
+      "split": "tune"
     }
   ],
   "clean_games": [
@@ -2360,6 +2390,15 @@
       "note": "Clean win: 9.Qa4+ forked king and the a6 knight.",
       "must_not_lesson": [
         "hanging_piece"
+      ]
+    },
+    {
+      "game": "chunkmonkey420 vs aa12359",
+      "my_color": "white",
+      "note": "Near-clean win (~91% accuracy). Real slips: 10.dxc3 and 20.Bxa7. The f1 rook was not a problem.",
+      "must_not_lesson": [
+        "passive_piece",
+        "development"
       ]
     }
   ],
@@ -2907,6 +2946,26 @@
       "result": "1-0",
       "link": null,
       "movetext": "1. c4 b6 2. g3 Bb7 3. Nf3 g5 4. Bh3 h5 5. Bg2 g4 6. Nh4 Bxg2 7. Nxg2 d6 8. O-O Na6 9. Qa4+ Qd7 10. Qxa6 Qc6 11. d3 Bg7 12. Qa3 Bd4 13. Nc3 Bc5 14. Qa4 a5 15. Qxc6+ Kf8 16. Qxa8+ Kg7 17. Qb7 Nf6 18. Qxc7 Re8 19. Na4 Bd4 20. Nxb6 Bxb6 21. Qxb6 d5 22. b3 dxc4 23. bxc4 Kg8 24. Bb2 Nd7 25. Qb5 Rd8 26. Qg5+ Kh7 27. Qg7# 1-0"
+    },
+    {
+      "game": "chunkmonkey420 vs aa12359",
+      "my_color": "white",
+      "result": "1-0",
+      "link": "https://www.chess.com/game/live/187812233276",
+      "movetext": "1. c4 e5 2. g3 Nc6 3. Bg2 Nf6 4. Nc3 Bc5 5. Nf3 O-O 6. O-O d6 7. Qb3 Nd4 8. Nxd4 Bxd4 9. e3 Bxc3 10. dxc3 c6 11. e4 Ng4 12. h3 Nf6 13. Bg5 h6 14. Be3 Be6 15. Qxb7 Bxc4 16. Rfd1 Rb8 17. Qxc6 Bb5 18. Qxd6 Qxd6 19. Rxd6 Bd7 20. Bxa7 Rxb2 21. Bc5 Rc8 22. Ba3 Rc2 23. Bb4 Bb5 24. a4 Bc4 25. a5 Ra8 26. a6 Ne8 27. Rc6 Bb5 28. Rb6 Nc7 29. a7 Rd8 30. Rb8 Rxb8 1-0",
+      "expected_summary": {
+        "story": [
+          "10.dxc3? (10.Qxc3 was right) gave Black ...e4 and a comfortable game; name it even if unexplained",
+          "Black gave it back (10...c6, 11...Ng4); 16...Rb8? dropped two pawns (17.Qxc6, 18.Qxd6)",
+          "20.Bxa7 let 20...Rxb2 win the b-pawn back; the passed a-pawn decided it (30.Rb8 deflection)"
+        ],
+        "must_not_flag": [
+          "a passive-rook \"What hurt you\" item for the f1 rook (cost ~0.1; 16.Rfd1 was top)",
+          "8.Nxd4 credited as a trap (8...exd4 was fine for Black: ...Re8, Nxc5 dxc5 is an equal trade)",
+          "\"no serious mistakes\" headline together with a \"What hurt you\" item",
+          "\"isolated pawn\" as the explanation of 20.Bxa7"
+        ]
+      }
     }
   ]
 }
